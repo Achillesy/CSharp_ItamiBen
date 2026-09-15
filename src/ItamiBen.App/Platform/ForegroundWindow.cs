@@ -37,10 +37,15 @@ public static class ForegroundWindow
     public static bool TitlePermissionGranted
         => !OperatingSystem.IsMacOS() || Mac.AxTrusted(prompt: false);
 
-    /// <summary>弹一次系统授权框（只有 macOS 有意义）。用户点了「打开系统设置」之后仍要手动勾选。</summary>
+    /// <summary>
+    /// 请求读标题的权限（只有 macOS 有意义）：弹一次系统授权框，**并且**直接把系统设置里
+    /// 那一页打开——弹框只出现一次而且很容易被忽略，两条一起来才靠谱。用户仍要手动勾选。
+    /// </summary>
     public static void RequestTitlePermission()
     {
-        if (OperatingSystem.IsMacOS()) Mac.AxTrusted(prompt: true);
+        if (!OperatingSystem.IsMacOS()) return;
+        Mac.AxTrusted(prompt: true);
+        Mac.OpenAccessibilitySettings();
     }
 
     // ── macOS ───────────────────────────────────────────────────────────────
@@ -151,19 +156,67 @@ public static class ForegroundWindow
             _ => $"AXError {rc}",
         };
 
+        /// <summary>某个全局常量**变量**的值（dlsym 给的是变量地址，要再解一次）。</summary>
+        private static IntPtr GlobalValue(string symbol)
+        {
+            var addr = dlsym(RtldDefault, symbol);
+            return addr == IntPtr.Zero ? IntPtr.Zero : Marshal.ReadIntPtr(addr);
+        }
+
+        /// <summary>某个全局常量**结构体**的地址（CF 的回调表要的就是地址，**不能**再解一次）。</summary>
+        private static IntPtr GlobalAddress(string symbol) => dlsym(RtldDefault, symbol);
+
+        /// <summary>
+        /// 弹一次系统授权框。
+        ///
+        /// ⚠️ **2026-09-15 这里崩过一次，两个坑都很隐蔽，别再踩**：
+        ///
+        /// <list type="number">
+        ///   <item><b>key 必须是 AX 那个真常量，不能自己造一个同内容的 CFString。</b>
+        ///     第一版用 <c>CFStringCreateWithCString("AXTrustedCheckOptionPrompt")</c>
+        ///     自己造，配上 NULL 回调表的字典——那种字典按**指针相等**比较 key，AX 拿它的
+        ///     常量指针来查当然查不到，返回 NULL，接着 <c>CFGetTypeID(NULL)</c> 直接
+        ///     SIGSEGV（读地址 0x8）。**整个 app 当场崩掉**。</item>
+        ///   <item><b>回调表要用 kCFType…CallBacks，不能传 NULL。</b> 传 NULL 就是上面那个
+        ///     指针相等的语义；用标准回调表才会走 CFEqual/CFHash，也才会正确 retain。</item>
+        /// </list>
+        ///
+        /// 教训：当时我"验证"过字典**造得出来**，但没验 AX **认不认**——验了个寂寞。
+        /// 现在任何一个常量取不到就干脆不弹框，绝不拿半截参数去调它。
+        /// </summary>
         public static bool AxTrusted(bool prompt)
         {
             if (!prompt) return AXIsProcessTrustedWithOptions(IntPtr.Zero);
 
-            // kAXTrustedCheckOptionPrompt 的字符串值就是它的名字；kCFBooleanTrue 用 dlsym 取
-            var key = CFStringCreateWithCString(IntPtr.Zero, "AXTrustedCheckOptionPrompt", Utf8);
-            var boolTruePtr = dlsym(RtldDefault, "kCFBooleanTrue");
-            var boolTrue = boolTruePtr == IntPtr.Zero ? IntPtr.Zero : Marshal.ReadIntPtr(boolTruePtr);
-            if (boolTrue == IntPtr.Zero) { CFRelease(key); return AXIsProcessTrustedWithOptions(IntPtr.Zero); }
+            var key = GlobalValue("kAXTrustedCheckOptionPrompt");
+            var boolTrue = GlobalValue("kCFBooleanTrue");
+            var keyCb = GlobalAddress("kCFTypeDictionaryKeyCallBacks");
+            var valCb = GlobalAddress("kCFTypeDictionaryValueCallBacks");
 
-            var dict = CFDictionaryCreate(IntPtr.Zero, [key], [boolTrue], 1, IntPtr.Zero, IntPtr.Zero);
+            // 少一个都不弹——宁可不弹，也不能再崩一次
+            if (key == IntPtr.Zero || boolTrue == IntPtr.Zero || keyCb == IntPtr.Zero || valCb == IntPtr.Zero)
+                return AXIsProcessTrustedWithOptions(IntPtr.Zero);
+
+            var dict = CFDictionaryCreate(IntPtr.Zero, [key], [boolTrue], 1, keyCb, valCb);
+            if (dict == IntPtr.Zero) return AXIsProcessTrustedWithOptions(IntPtr.Zero);
+
             try { return AXIsProcessTrustedWithOptions(dict); }
-            finally { CFRelease(dict); CFRelease(key); }
+            finally { CFRelease(dict); }
+        }
+
+        /// <summary>直接把「系统设置 → 隐私与安全性 → 辅助功能」那一页打开。弹框容易被忽略，这个更实在。</summary>
+        public static void OpenAccessibilitySettings()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "open",
+                    ArgumentList = { "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" },
+                    UseShellExecute = false,
+                });
+            }
+            catch { /* 打不开就算了，窗口里写了路径 */ }
         }
 
         private static string NsString(IntPtr ns)

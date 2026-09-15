@@ -29,7 +29,11 @@ public partial class MainWindow : Window
 
         this.FindControl<Button>("GrantBtn")!.Click += (_, _) =>
         {
-            ForegroundWindow.RequestTitlePermission();
+            // ⚠️ 平台层整层都包在 try 里：2026-09-15 这个按钮把整个 app 搞崩过一次
+            // （CFDictionary 的 key 用了自造的 CFString，AX 查不到 → CFGetTypeID(NULL)
+            // → SIGSEGV）。根因已修，但**探针不该因为读不到权限就死掉**。
+            try { ForegroundWindow.RequestTitlePermission(); }
+            catch (Exception ex) { Note($"请求授权失败: {ex.Message}"); }
             RefreshPermission();
         };
 
@@ -44,7 +48,10 @@ public partial class MainWindow : Window
 
     private void Sample()
     {
-        var fg = ForegroundWindow.Read();
+        Foreground fg;
+        try { fg = ForegroundWindow.Read(); }
+        catch (Exception ex) { Note($"读前台窗口失败: {ex.Message}"); return; }
+
         var keyword = this.FindControl<TextBox>("KeywordBox")!.Text ?? "";
 
         this.FindControl<TextBlock>("AppText")!.Text = string.IsNullOrEmpty(fg.App) ? "—" : fg.App;
@@ -57,14 +64,21 @@ public partial class MainWindow : Window
         var hit = keyword.Length > 0 && fg.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase);
         if (hit) _hitSeconds++;
 
+        RefreshPermission();   // 用户在系统设置里勾上之后，这里自己就变过来了，不用重启
         this.FindControl<Border>("HitBanner")!.Background = hit ? Hit : Miss;
         this.FindControl<TextBlock>("HitText")!.Text = hit ? $"命中「{keyword}」" : "没命中";
         this.FindControl<TextBlock>("HitCount")!.Text = $"命中 {_hitSeconds} 秒";
     }
 
+    private void Note(string text)
+        => this.FindControl<TextBlock>("NoteText")!.Text = $"{DateTime.Now:HH:mm:ss}   {text}";
+
     private void RefreshPermission()
     {
-        var ok = ForegroundWindow.TitlePermissionGranted;
+        bool ok;
+        try { ok = ForegroundWindow.TitlePermissionGranted; }
+        catch (Exception ex) { Note($"查授权状态失败: {ex.Message}"); return; }
+
         this.FindControl<Border>("PermBar")!.Background = ok ? Calm : Warn;
         this.FindControl<TextBlock>("PermText")!.Text = ok
             ? "辅助功能已授权，标题读得到"
