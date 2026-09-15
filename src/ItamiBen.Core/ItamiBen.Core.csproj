@@ -10,11 +10,19 @@
     ⚠️ 但要说准确：net10.0 **挡不住 P/Invoke**，[DllImport("user32.dll")] 在这里照样
     编译得过。所以「不碰平台调用」是**纪律**，不是编译器强制的。需要平台调用时
     （读前台窗口、读键鼠空闲）写在 ItamiBen.App 里，别图省事丢进来。
+
+    ⚠️ **Microsoft.Data.Sqlite 是这一层唯一的运行时依赖，也是唯一碰磁盘的地方**
+    （收口在 SampleStore 一个文件里）。这不违反上面那条：SQLite 是跨平台的库依赖，
+    不是平台调用——v3 的 Core 里同样住着一个 AwClient（碰网络），是同一个先例。
+    ⚠️ 测试一律用 `SampleStore.Open(":memory:")`，**碰不到用户真实的库**。
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
 
 </Project>
