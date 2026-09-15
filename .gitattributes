@@ -1,0 +1,2 @@
+# Normalize to Unix line endings (LF) — cross-platform compatible with macOS / WSL2 / Windows
+* text=auto eol=lf

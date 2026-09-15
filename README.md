@@ -8,7 +8,8 @@ simply don't count — the deadline arc slides further away and you watch it go.
 
 No popups, no nagging sounds. Just a clock that is too dumb to negotiate.
 
-**Status: early. Nothing works yet — this is the skeleton.**
+**Status: early.** The foreground-window reader works and is verified on macOS;
+the judgment engine, the clock face and the alarms are not written yet.
 
 ## What makes it different from the other tomatoes
 
@@ -55,4 +56,6 @@ name is the pitch.
 
 ## License
 
-Not decided yet.
+[PolyForm Noncommercial License 1.0.0](./LICENSE) — free for noncommercial use.
+
+Copyright (c) 2026 Achilles.Newman (https://github.com/Achillesy)

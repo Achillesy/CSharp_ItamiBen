@@ -73,3 +73,6 @@ nunit-*.xml
 CLAUDE.md
 DESIGN.md
 DECISIONS.md
+
+# 签名材料：证书、私钥、指纹。⚠️ 私钥绝不能进 git
+signing/
