@@ -23,9 +23,17 @@ public partial class MainWindow : Window
 
     private int _hitSeconds;
 
+    /// <summary>
+    /// 每拍一行的诊断日志。**探针必须能被别人读到**——不然调试就退化成「你看看窗口上写的啥」，
+    /// 一来一回比改代码还慢（2026-09-15 就这么浪费了好几轮）。
+    /// </summary>
+    private static readonly string LogPath = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ItamiBen", "probe.log");
+
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
+        InitLog();
 
         this.FindControl<Button>("GrantBtn")!.Click += (_, _) =>
         {
@@ -38,6 +46,17 @@ public partial class MainWindow : Window
         };
 
         RefreshPermission();
+
+        // 探针阶段：没授权就**开机自己注册一次**。
+        // ⚠️ 这一步不只是"弹个框方便用户"——ad-hoc 签名的授权绑在 cdhash 上，
+        //    每次重编都会作废，而系统设置里那条旧记录**看着还在**、其实认的是旧指纹。
+        //    启动时主动注册，能保证列表里那一条对应的就是当前这个二进制。
+        //    ⚠️ 产品化之前要改掉：每次启动都弹框 + 开系统设置太吵。
+        if (!ForegroundWindow.TitlePermissionGranted)
+        {
+            try { ForegroundWindow.RequestTitlePermission(); }
+            catch (Exception ex) { LogLine($"自动注册授权失败: {ex.Message}"); }
+        }
 
         // 一秒一拍。产品里这会是唯一那口钟，探针阶段先这么跑。
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -65,6 +84,10 @@ public partial class MainWindow : Window
         if (hit) _hitSeconds++;
 
         RefreshPermission();   // 用户在系统设置里勾上之后，这里自己就变过来了，不用重启
+
+        LogLine($"trusted={ForegroundWindow.TitlePermissionGranted,-5} hit={hit,-5} "
+              + $"app={fg.App,-18} note={fg.Note,-46} title={fg.Title}");
+
         this.FindControl<Border>("HitBanner")!.Background = hit ? Hit : Miss;
         this.FindControl<TextBlock>("HitText")!.Text = hit ? $"命中「{keyword}」" : "没命中";
         this.FindControl<TextBlock>("HitCount")!.Text = $"命中 {_hitSeconds} 秒";
@@ -72,6 +95,23 @@ public partial class MainWindow : Window
 
     private void Note(string text)
         => this.FindControl<TextBlock>("NoteText")!.Text = $"{DateTime.Now:HH:mm:ss}   {text}";
+
+    private static void InitLog()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(LogPath)!);
+            System.IO.File.WriteAllText(LogPath,
+                $"# ItamiBen 探针 pid={Environment.ProcessId} 启动于 {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+        }
+        catch { /* 写不了就算了，窗口照跑 */ }
+    }
+
+    private static void LogLine(string line)
+    {
+        try { System.IO.File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss}  {line}\n"); }
+        catch { }
+    }
 
     private void RefreshPermission()
     {

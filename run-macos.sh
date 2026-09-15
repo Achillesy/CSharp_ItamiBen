@@ -9,8 +9,22 @@
 # macOS 很可能因此**把授权作废、要求重新勾选**。真做成产品要解决签名。
 #    症状：改完代码重跑，标题又读不到了 → 去「系统设置 → 隐私与安全性 → 辅助功能」
 #    把 ItamiBen 关掉再打开（或者删掉条目重新授权）。
+#
+# ⚠️ **授权和重新编译是冲突的**：ad-hoc 签名的授权绑在 cdhash 上，源码一改、重编、
+#    重签，cdhash 就变，刚给的辅助功能授权当场作废（2026-09-15 被这个坑了好几轮）。
+#    所以「只想再跑一次、别动二进制」时用：  ./run-macos.sh --run-only
+#    真正的解法是弄一张自签名证书，那样授权绑的是证书不是 cdhash，重编也不失效。
 set -euo pipefail
 cd "$(dirname "$0")"
+
+if [ "${1:-}" = "--run-only" ]; then
+  echo "==> 只启动，不编译不重签（保住已有授权）"
+  pkill -f "ItamiBen.app/Contents/MacOS/ItamiBen" 2>/dev/null || true
+  sleep 1
+  open dist/ItamiBen.app
+  echo "已启动。日志：~/Library/Application Support/ItamiBen/probe.log"
+  exit 0
+fi
 
 VERSION=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Directory.Build.props)
 OUT=dist/ItamiBen.app
@@ -47,5 +61,9 @@ echo "==> ad-hoc 签名"
 codesign --force --deep --sign - --identifier com.achillesy.itamiben "$OUT" 2>/dev/null
 
 echo "==> 启动"
+# ⚠️ 必须先杀掉在跑的那个：`open` 对已运行的 app **只是切到前台**，不会用新二进制重启，
+#    于是你以为在测新代码、其实还是旧进程（2026-09-15 被这个骗过一次）。
+pkill -f "ItamiBen.app/Contents/MacOS/ItamiBen" 2>/dev/null || true
+sleep 1
 open "$OUT"
 echo "已启动。没有授权的话窗口里会告诉你怎么开。"
