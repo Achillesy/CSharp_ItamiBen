@@ -223,8 +223,12 @@ public sealed class Round
     /// 就永远空着（= 没采到），**绝不补记**。DESIGN §2.1.1 量到 `DispatcherTimer(1s)`
     /// 13 分钟漏 5 拍且不报错，所以外面必须高频采样 + 靠这里去重。
     /// </summary>
+    /// <param name="away">
+    /// 人在不在。由 <see cref="AwayMap"/> 跨行算好传进来——⚠️ **别在这里拿单行的
+    /// idle 比门槛**，门槛是事后才跨过的，一行一判会把锁屏画成红格。
+    /// </param>
     /// <returns>这一秒的判定；这一秒没被记（重复 / 休息中 / 已终结）时返回 null。</returns>
-    public SecondJudgment? Observe(DateTimeOffset now, string app, string title)
+    public SecondJudgment? Observe(DateTimeOffset now, string app, string title, bool away = false)
     {
         if (Ending is not null) return null;
 
@@ -232,17 +236,13 @@ public sealed class Round
         Consume(slot);
 
         // ── 休息中：只推进阶段，不判定。休息不吃余量，也不可能触底（C6 把这个边界设计掉了）
-        if (AchievedAt is not null)
-        {
-            if (now >= AchievedAt.Value.AddMinutes(BreakMinutes)) End(now, EndReason.Completed);
-            return null;
-        }
+        if (AchievedAt is not null) { RestCheck(now); return null; }
 
         SecondJudgment? judged = null;
         if (slot > _lastRecorded && slot < RingSeconds)
         {
             _lastRecorded = slot;
-            var j = Judgment.Judge(app, title, Goals, _rules);
+            var j = Judgment.Judge(app, title, away, Goals, _rules);
             judged = j;
 
             if (j.Sampled)
@@ -268,6 +268,34 @@ public sealed class Round
 
         if (SlackSeconds < 0) End(now, EndReason.RanOut);
         return judged;
+    }
+
+    /// <summary>
+    /// **只把时钟推到 <paramref name="now"/>，不记任何一秒。**
+    ///
+    /// 两个用处：
+    /// <list type="number">
+    ///   <item>同一秒里的第 2~10 拍——那一秒已经记过了，但时间还在走；</item>
+    ///   <item>从库里重建之后补最后一段——库里最后一行到此刻之间可能什么都没有
+    ///         （程序没跑、电脑睡了），那段时间**照样从环上过去了**，必须推进，
+    ///         否则余量不会减少、触底永远不会发生。</item>
+    /// </list>
+    ///
+    /// ⚠️ 它**不会**把那些秒记成任何东西——没观测到就是没观测到（DECISIONS F3）。
+    /// </summary>
+    public void Advance(DateTimeOffset now)
+    {
+        if (Ending is not null) return;
+        Consume(SlotAt(now));
+
+        if (AchievedAt is not null) { RestCheck(now); return; }
+        if (SlackSeconds < 0) End(now, EndReason.RanOut);
+    }
+
+    /// <summary>休息走完没有。⚠️ 休息期间不可能触底——C6 把那个边界情况设计掉了。</summary>
+    private void RestCheck(DateTimeOffset now)
+    {
+        if (now >= AchievedAt!.Value.AddMinutes(BreakMinutes)) End(now, EndReason.Completed);
     }
 
     /// <summary>

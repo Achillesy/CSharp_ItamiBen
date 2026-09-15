@@ -38,6 +38,12 @@ rm -rf "$OUT"
 mkdir -p "$CONTENTS/MacOS"
 cp -R src/ItamiBen.App/bin/Release/net10.0/. "$CONTENTS/MacOS/"
 
+# ⚠️ Microsoft.Data.Sqlite 会带进来一个 runtimes/browser-wasm 目录，codesign --deep 认不出
+#    它的格式，整个签名当场失败（"bundle format unrecognized, invalid, or unsuitable"）。
+#    macOS 上永远用不到它，直接删掉。顺手把另外两个平台的 native 也删了，bundle 小一半。
+rm -rf "$CONTENTS/MacOS/runtimes/browser-wasm"
+rm -rf "$CONTENTS/MacOS/runtimes"/win-* "$CONTENTS/MacOS/runtimes"/linux-*
+
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

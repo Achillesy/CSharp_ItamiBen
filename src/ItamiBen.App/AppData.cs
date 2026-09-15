@@ -53,6 +53,13 @@ public static class AppData
     public static string TotalsPath() => Path.Combine(Dir, "during.json");
 
     /// <summary>
+    /// 观测库（DESIGN §9）：一秒一行的 app / title / 空闲。
+    /// **跨轮持久**——v3 的 `During` 是 checkpoint 模型，第 N 轮的秒在第 N+1 轮 Start 时
+    /// 才入账，库一清这条链就断（DECISIONS F4）。
+    /// </summary>
+    public static string SamplesPath() => Path.Combine(Dir, "samples.db");
+
+    /// <summary>
     /// 程序**自己那些文件**的写法。不转义非 ASCII：目标名可能是任何语言，这个文件是
     /// 给人看的（想把某个目标清零就是手动改它）。
     ///

@@ -42,6 +42,16 @@ public partial class MainWindow : Window
     private GoalTotals _totals = new();
     private Round? _round;
 
+    /// <summary>观测库和录制器。开不起来就一个都没有——录不上不该把程序搞崩。</summary>
+    private SampleStore? _store;
+    private Recorder? _recorder;
+
+    /// <summary>最近一拍的采样，录制器从这里取前台窗口（Sampler 已经读过了，不重复读）。</summary>
+    private Sample _last;
+
+    /// <summary>上一次从库里整个重建是在哪一分钟。-1 = 还没重建过。</summary>
+    private int _lastRebuiltMinute = -1;
+
     private readonly Settings _settings = Settings.Load();
     private readonly AlarmClock _alarm = new();
 
@@ -70,6 +80,7 @@ public partial class MainWindow : Window
         Log.Start();
         LoadRules();
         _totals = Totals.Load();
+        OpenStore();
 
         BuildGoals();
         BuildTiers();
@@ -167,21 +178,104 @@ public partial class MainWindow : Window
 
     private void OnTick(Sample s)
     {
-        // ⚠️ 休息阶段也要喂——阶段靠 Observe 推进（Round 的文档里写着）
-        if (_round is { Ending: null })
+        _last = s;
+
+        if (_round is { Ending: null } round)
         {
-            var j = _round.Observe(s.At, s.App, s.Title);
+            // ⚠️ **只有专注阶段才录**（DECISIONS F4）：按 Start 开始，达成就停。
+            //    休息期间不写行——环上那一段本来就画淡蓝块，有没有观测都一样。
+            if (round.Phase == RoundPhase.Focusing && _recorder is { } rec && rec.Record(s.At))
+            {
+                // 写进库了，同一秒也喂给环：这样读数是实时的，不用等下一次重建。
+                // 两条路算出来的是同一个结果（重放幂等），下面每分钟的重建会对账。
+                // ⚠️ 实时这条路只能按**当前这一秒**的 idle 判，所以跨过门槛之前那 180 秒
+                //    会先画成红格——每分钟从库重建时 AwayMap 会跨行回溯，把它们纠正成
+                //    空白。v3 对这个「回溯改写」有同样的行为，是语义不是 bug
+                var j = round.Observe(s.At, s.App, s.Title, s.Idle >= AwayMap.ThresholdSeconds);
+                if (j is { } judged)
+                    Log.Line($"{judged.Outcome,-10} focused={round.FocusedSeconds,-5} slack={round.SlackSeconds,-5} "
+                           + $"idle={_last.Idle,-5} app={s.App,-18} title={s.Title}");
+            }
+            else
+            {
+                // 这一秒已经记过了（一秒十拍），或者在休息。时间照样要推进
+                round.Advance(s.At);
+            }
 
-            // 只在真正记了一秒的时候写日志：一秒十拍，全写等于每秒十行
-            if (j is { } judged)
-                Log.Line($"{judged.Outcome,-10} focused={_round.FocusedSeconds,-5} slack={_round.SlackSeconds,-5} "
-                       + $"app={s.App,-18} title={s.Title}");
+            if (round.Ending is null && s.At.Minute != _lastRebuiltMinute)
+            {
+                _lastRebuiltMinute = s.At.Minute;
+                Rebuild(s.At);
+            }
 
-            if (_round.Ending is not null) Settle(_round.Ending.Value);
+            if (_round?.Ending is { } reason) Settle(reason);
         }
 
         CheckAlarm();
         UpdateUi(s);
+    }
+
+    /// <summary>
+    /// **每分钟从库里把整个环重建一次。**
+    ///
+    /// 这不是优化，是这个架构的地基：「任何时候根据库里的内容重建 120 分钟的环，
+    /// 结果都一样」——靠的是 <see cref="Round.Observe"/> 那个只进不退的哨兵让重放幂等。
+    /// 崩溃恢复走的也是这条路。
+    ///
+    /// ⚠️ 重建完还要 <see cref="Round.Advance"/> 到此刻：库里最后一行到现在之间可能
+    /// 什么都没有（程序没跑、电脑睡了），那段时间**照样从环上过去了**。
+    ///
+    /// 顺带对一次账：实时那条路和重建这条路应该算出同一个数，不一样就说明库没写进去。
+    /// </summary>
+    private void Rebuild(DateTimeOffset now)
+    {
+        if (_round is not { } live || _store is null) return;
+
+        try
+        {
+            // live.StartedAt 已经是抹到整分的了，Round 的构造再抹一次是幂等的
+            var rows = _store.Read(live.StartedAt, now.AddSeconds(1));
+
+            // ⚠️ 离开区间必须**跨行**算：门槛是事后才跨过的，一行一判会把锁屏画成红格
+            //    （macOS 锁屏读到的是 loginwindow，不是空字符串——2026-09-16 实测）
+            var away = AwayMap.Of(rows);
+
+            var rebuilt = new Round(live.StartedAt, live.FocusMinutes, live.Goals, _rules);
+            foreach (var o in rows)
+                rebuilt.Observe(o.At, o.App, o.Title, away.Covers(o.At));
+            rebuilt.Advance(now);
+
+            if (rebuilt.FocusedSeconds != live.FocusedSeconds)
+                Log.Warn($"rebuild mismatch: live={live.FocusedSeconds}s db={rebuilt.FocusedSeconds}s "
+                       + "— 说明有秒没写进库");
+
+            Log.Line($"rebuilt from db: minute={rebuilt.CurrentMinute,-4} focused={rebuilt.FocusedSeconds,-5} "
+                   + $"slack={rebuilt.SlackSeconds,-5} rows={rows.Count,-5} away={away.Spans.Count} "
+                   + $"phase={rebuilt.Phase}");
+            _round = rebuilt;
+        }
+        catch (Exception e)
+        {
+            // 重建失败就继续用实时那个环——读不了库不该把正在跑的一轮毁掉
+            Log.Error("Failed to rebuild the round from samples.db", e);
+        }
+    }
+
+    private void OpenStore()
+    {
+        try
+        {
+            _store = SampleStore.Open(AppData.SamplesPath());
+            _recorder = new Recorder(_store, () => (_last.App, _last.Title), () => _last.Idle);
+            var (apps, titles, samples) = _store.Counts;
+            Log.Line($"samples.db opened: {samples} samples, {apps} apps, {titles} titles, "
+                   + $"oldest={_store.Oldest:yyyy-MM-dd HH:mm:ss} newest={_store.Newest:yyyy-MM-dd HH:mm:ss}");
+        }
+        catch (Exception e)
+        {
+            // 录不上也不能崩：环会退化成「一秒都没采到」，但程序照跑
+            Log.Error("Failed to open samples.db", e);
+        }
     }
 
     /// <summary>
@@ -255,6 +349,7 @@ public partial class MainWindow : Window
         Settle(EndReason.Closed);
         _settings.AlarmAt = _alarm.FireAt;
         _settings.Save();
+        _store?.Dispose();
     }
 
     private void OnAction()
@@ -272,6 +367,7 @@ public partial class MainWindow : Window
 
         _round = new Round(DateTimeOffset.Now, _focusMinutes, goals, _rules);
         _written = false;
+        _lastRebuiltMinute = -1;
         Log.Line($"round started: focus={_focusMinutes}min break={_round.BreakMinutes}min "
                + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goals={string.Join("/", goals)}");
         UpdateUi();

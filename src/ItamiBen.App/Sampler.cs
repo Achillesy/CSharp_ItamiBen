@@ -3,8 +3,12 @@ using ItamiBen.App.Platform;
 
 namespace ItamiBen.App;
 
-/// <summary>一拍采样的结果。<paramref name="Note"/> 只进日志。</summary>
-public readonly record struct Sample(DateTimeOffset At, string App, string Title, string Note);
+/// <summary>
+/// 一拍采样的结果——**一秒观测的全部内容**，原样写进库（DESIGN §9）。
+/// <paramref name="Note"/> 只进日志。
+/// </summary>
+/// <param name="Idle">距上次键鼠输入多少秒。⚠️ **原始值**，不在这里算 afk（DECISIONS F2）。</param>
+public readonly record struct Sample(DateTimeOffset At, string App, string Title, int Idle, string Note);
 
 /// <summary>
 /// **唯一那口钟。** 每一拍读一次前台窗口，交给 <see cref="Core.Round"/>。
@@ -67,7 +71,7 @@ public sealed class Sampler : IDisposable
         {
             // 平台层抛了 ⇒ 这一秒什么都没读到。**不猜、不沿用上一次**
             Log.Error("ReadApp failed", e);
-            Ticked?.Invoke(new Sample(DateTimeOffset.Now, "", "", "ReadApp threw"));
+            Ticked?.Invoke(new Sample(DateTimeOffset.Now, "", "", InputIdle.Seconds(), "ReadApp threw"));
             return;
         }
 
@@ -79,10 +83,13 @@ public sealed class Sampler : IDisposable
         var got = Volatile.Read(ref _got);
         var fresh = got is not null && got.Handle == app.Handle && got.App == app.Name;
 
+        // ⚠️ 空闲也在 UI 线程读：它是纯查询（macOS 那条连辅助功能授权都不要），
+        //    微秒级，没有挪到后台去的理由——真正需要隔离的只有标题那条同步 IPC
         Ticked?.Invoke(new Sample(
             DateTimeOffset.Now,
             app.Name,
             fresh ? got!.Text : "",
+            InputIdle.Seconds(),
             fresh ? got!.Note : $"title not caught up ({app.Note})"));
     }
 

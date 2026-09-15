@@ -83,6 +83,17 @@ public class RoundTests
         Assert.Equal(60, r.WastedSeconds);
     }
 
+    [Fact]
+    public void 人不在的秒两个计数都不加但照样吃余量()
+    {
+        var r = NewRound();
+        for (var i = 0; i < 60; i++) r.Observe(T0.AddSeconds(i), "loginwindow", "Login", away: true);
+
+        Assert.Equal(0, r.Cell(0).SampledSeconds);    // 不画红格：不冤枉人
+        Assert.Equal(0, r.FocusedSeconds);
+        Assert.Equal(60, r.WastedSeconds);            // 但那一分钟确实从环上过去了
+    }
+
     // ── 格子 ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -231,6 +242,62 @@ public class RoundTests
             Assert.Equal(42, r.FocusedSeconds);
             Assert.Equal(42, r.FocusedSecondsByGoal["编程"]);
         }
+    }
+
+    // ── 只推进时间、不记秒（从库重建时补最后一段用）──────────────────────
+
+    [Fact]
+    public void 只推进时间不会记下任何一秒()
+    {
+        var r = NewRound();
+        Work(r, 0, 10);
+        r.Advance(T0.AddSeconds(100));
+
+        Assert.Equal(10, r.FocusedSeconds);
+        Assert.Equal(10, r.Cell(0).SampledSeconds);
+        Assert.Equal(0, r.Cell(1).SampledSeconds);
+        Assert.Equal(91, r.WastedSeconds);          // 101 秒过去了，专注 10 秒
+    }
+
+    [Fact]
+    public void 只推进时间也会触底()
+    {
+        // 程序睡了两小时再回来：那段时间照样从环上过去了
+        var r = NewRound(10);
+        r.Advance(T0.AddHours(3));
+        Assert.Equal(EndReason.RanOut, r.Ending);
+    }
+
+    [Fact]
+    public void 只推进时间也会结束休息()
+    {
+        var r = NewRound(1);
+        Work(r, 0, 60);
+        Assert.Equal(RoundPhase.Resting, r.Phase);
+
+        r.Advance(T0.AddSeconds(119));
+        Assert.Equal(EndReason.Completed, r.Ending);
+    }
+
+    [Fact]
+    public void 重放同一段观测结果完全一样()
+    {
+        // 「任何时候从库里重建 120 分钟的环，结果都一样」——这条性质靠哨兵只进不退
+        static Round Build(int times)
+        {
+            var r = NewRound(10, "编程");
+            for (var pass = 0; pass < times; pass++)
+                for (var i = 0; i < 90; i++)
+                    r.Observe(T0.AddSeconds(i), i % 3 == 0 ? "Code" : "Safari", "Round.cs");
+            return r;
+        }
+
+        var once = Build(1);
+        var thrice = Build(3);
+        Assert.Equal(once.FocusedSeconds, thrice.FocusedSeconds);
+        Assert.Equal(once.WastedSeconds, thrice.WastedSeconds);
+        Assert.Equal(once.Cells.Select(c => (c.FocusedSeconds, c.SampledSeconds)),
+                     thrice.Cells.Select(c => (c.FocusedSeconds, c.SampledSeconds)));
     }
 
     // ── 提交时就该拒绝的设定 ──────────────────────────────────────────────

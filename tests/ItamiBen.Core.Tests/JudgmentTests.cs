@@ -10,7 +10,7 @@ public class JudgmentTests
     [Fact]
     public void 命中选中的目标就是专注并且记在那个目标头上()
     {
-        var j = Judgment.Judge("Code", "Round.cs", 编程, TestRules.Rules);
+        var j = Judgment.Judge("Code", "Round.cs", false, 编程, TestRules.Rules);
         Assert.Equal(SecondOutcome.Focused, j.Outcome);
         Assert.Equal("编程", j.Goal);
         Assert.True(j.Sampled);
@@ -19,7 +19,7 @@ public class JudgmentTests
     [Fact]
     public void 采到了但不命中就是跑偏()
     {
-        var j = Judgment.Judge("Safari", "淘宝", 编程, TestRules.Rules);
+        var j = Judgment.Judge("Safari", "淘宝", false, 编程, TestRules.Rules);
         Assert.Equal(SecondOutcome.OffTask, j.Outcome);
         Assert.Null(j.Goal);
         Assert.True(j.Sampled);      // 跑偏也是「采到了」——红格的高度靠它
@@ -28,7 +28,7 @@ public class JudgmentTests
     [Fact]
     public void 没勾选的目标即便命中规则也算跑偏()
     {
-        var j = Judgment.Judge("Preview", "曼昆经济学原理.pdf", 编程, TestRules.Rules);
+        var j = Judgment.Judge("Preview", "曼昆经济学原理.pdf", false, 编程, TestRules.Rules);
         Assert.Equal(SecondOutcome.OffTask, j.Outcome);
     }
 
@@ -36,7 +36,7 @@ public class JudgmentTests
     public void 读不到app这一秒等于没采既不计入也不算跑偏()
     {
         // Windows 锁屏时 GetForegroundWindow() 返回 0；macOS 登录窗口没有 frontmostApplication
-        var j = Judgment.Judge("", "", 编程, TestRules.Rules);
+        var j = Judgment.Judge("", "", false, 编程, TestRules.Rules);
         Assert.Equal(SecondOutcome.Unread, j.Outcome);
         Assert.False(j.Sampled);
         Assert.False(j.Focused);
@@ -47,7 +47,7 @@ public class JudgmentTests
     [InlineData("ItamiBen.exe")]    // Windows 的进程名
     public void 前台是自己这一秒等于没采(string self)
     {
-        var j = Judgment.Judge(self, "ItamiBen", 编程, TestRules.Rules);
+        var j = Judgment.Judge(self, "ItamiBen", false, 编程, TestRules.Rules);
         Assert.Equal(SecondOutcome.SelfExempt, j.Outcome);
         Assert.False(j.Sampled);
     }
@@ -57,8 +57,33 @@ public class JudgmentTests
     {
         // 用户偏要写一条匹配 ItamiBen 的规则：盯着钟面也换不来一秒专注
         var rules = GoalRules.Parse("""{ "Groups": { "刷钟面": { "Rules": [ { "App": "^ItamiBen" } ] } } }""");
-        var j = Judgment.Judge("ItamiBen", "", ["刷钟面"], rules);
+        var j = Judgment.Judge("ItamiBen", "", false, ["刷钟面"], rules);
         Assert.Equal(SecondOutcome.SelfExempt, j.Outcome);
+    }
+
+    [Fact]
+    public void 人不在时这一秒等于没采()
+    {
+        var j = Judgment.Judge("Code", "Round.cs", away: true, 编程, TestRules.Rules);
+        Assert.Equal(SecondOutcome.Away, j.Outcome);
+        Assert.False(j.Sampled);
+        Assert.False(j.Focused);
+    }
+
+    [Fact]
+    public void 人不在压过屏幕上是什么()
+    {
+        // macOS 锁屏读到的是 loginwindow（实测），一行一判会把锁屏画成红格
+        Assert.Equal(SecondOutcome.Away, Judgment.Judge("loginwindow", "Login", true, 编程, TestRules.Rules).Outcome);
+        Assert.Equal(SecondOutcome.OffTask, Judgment.Judge("loginwindow", "Login", false, 编程, TestRules.Rules).Outcome);
+    }
+
+    [Fact]
+    public void 人不在也压过自身豁免和读不到()
+    {
+        // 三者都落进「这一秒等于没采」，分开只为了日志里看得出原因
+        Assert.Equal(SecondOutcome.Away, Judgment.Judge("ItamiBen", "", true, 编程, TestRules.Rules).Outcome);
+        Assert.Equal(SecondOutcome.Away, Judgment.Judge("", "", true, 编程, TestRules.Rules).Outcome);
     }
 
     [Fact]
@@ -73,14 +98,14 @@ public class JudgmentTests
           }
         }
         """);
-        Assert.Equal("编程", Judgment.Judge("Code", "", ["编程", "读书"], rules).Goal);
-        Assert.Equal("读书", Judgment.Judge("Code", "", ["读书", "编程"], rules).Goal);
+        Assert.Equal("编程", Judgment.Judge("Code", "", false, ["编程", "读书"], rules).Goal);
+        Assert.Equal("读书", Judgment.Judge("Code", "", false, ["读书", "编程"], rules).Goal);
     }
 
     [Fact]
     public void 勾了两个目标时命中任意一个都算专注()
     {
-        Assert.Equal("读书", Judgment.Judge("Preview", "曼昆经济学原理.pdf", 两个, TestRules.Rules).Goal);
-        Assert.Equal("编程", Judgment.Judge("Code", "Round.cs", 两个, TestRules.Rules).Goal);
+        Assert.Equal("读书", Judgment.Judge("Preview", "曼昆经济学原理.pdf", false, 两个, TestRules.Rules).Goal);
+        Assert.Equal("编程", Judgment.Judge("Code", "Round.cs", false, 两个, TestRules.Rules).Goal);
     }
 }
