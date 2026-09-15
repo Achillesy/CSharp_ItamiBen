@@ -33,6 +33,12 @@ public partial class MainWindow : Window
     /// </summary>
     private const int AlarmRings = 4;
 
+    /// <summary>
+    /// alarms.cron 到点响几遍。**2 遍**（v3 的 J10）：它响完还留着一分钟的提示条，
+    /// 漏听还能看回来；闹钟给 4 遍是因为它响完什么都不留。
+    /// </summary>
+    private const int AlarmsListRings = 2;
+
     private readonly Sampler _sampler = new();
     private readonly List<CheckBox> _goalBoxes = [];
     private readonly List<RadioButton> _tierButtons = [];
@@ -51,6 +57,21 @@ public partial class MainWindow : Window
 
     /// <summary>上一次从库里整个重建是在哪一分钟。-1 = 还没重建过。</summary>
     private int _lastRebuiltMinute = -1;
+
+    /// <summary>上一次跑整分钟那一串事情是在哪一分钟。-1 = 还没跑过（启动后第一拍就跑）。</summary>
+    private int _lastMinute = -1;
+
+    /// <summary>alarms.cron，每分钟重读一次——用户手写的文件，改完不该还要重启。</summary>
+    private IReadOnlyList<CronEntry> _alarms = [];
+
+    /// <summary>
+    /// alarms.cron 的去重水位线。**纯内存、不持久化，初始化成启动那一刻**（v3 的 J7）：
+    /// 程序关闭期间错过的条目重开后直接跳过，不倒回去补。
+    /// </summary>
+    private DateTime _alarmsProcessedThrough = DateTime.Now;
+
+    /// <summary>提示条显示到哪一刻。null = 没在显示。⚠️ 用截止时刻不用布尔量，同 E6。</summary>
+    private DateTime? _bannerUntil;
 
     private readonly Settings _settings = Settings.Load();
     private readonly AlarmClock _alarm = new();
@@ -212,8 +233,91 @@ public partial class MainWindow : Window
             if (_round?.Ending is { } reason) Settle(reason);
         }
 
+        // ⚠️ 整分钟那一串排在闹钟**之前**（v3 的 J10）：两边都要出声时，
+        //    Windows 的 winmm 是单通道、后响的会掐断先响的，而闹钟响完什么都不留、
+        //    清单响完还留着一分钟的提示条 —— 所以让闹钟赢。
+        if (s.At.Minute != _lastMinute)
+        {
+            _lastMinute = s.At.Minute;
+            OnMinute(s.At.LocalDateTime);
+        }
+
         CheckAlarm();
         UpdateUi(s);
+    }
+
+    /// <summary>
+    /// 整分钟那一串。**顺序是定死的**：
+    /// <list type="number">
+    ///   <item>提示条到期收起——⚠️ 必须排在画新提示条**之前**，反过来会把第 ② 步
+    ///         刚画上的那条当场擦掉；</item>
+    ///   <item>alarms.cron 到点检查（响 2 遍 + 提示条 + 日志）；</item>
+    ///   <item>小红圈位置重算——每拍整个重算，不存在「清除上一次画的圆」这回事。</item>
+    /// </list>
+    /// </summary>
+    private void OnMinute(DateTime now)
+    {
+        if (_bannerUntil is { } until && now >= until) ShowBanner(null);
+
+        _alarms = LoadAlarms();
+        CheckAlarmsList(now);
+        RefreshAlarmsDot(now);
+    }
+
+    /// <summary>每分钟重读一次：这是用户手写的文件，改完不该还要重启。读不了就当没有。</summary>
+    private static IReadOnlyList<CronEntry> LoadAlarms()
+    {
+        try
+        {
+            var path = AppData.AlarmsPath();
+            return File.Exists(path) ? AlarmsList.Parse(File.ReadAllText(path)) : [];
+        }
+        catch (Exception e)
+        {
+            Log.Error("Failed to read alarms.cron", e);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// 到点的条目。
+    ///
+    /// ⚠️ **反馈只有日志这一条正向渠道**（v3 的 J16）：解析不了的行安静跳过，不记日志、
+    /// 不提示、不统计加载了几条。知情代价——一个 typo = 这条提醒永远不响，屏幕上和日志里
+    /// 都零反馈。诊断方式是「提醒没响 → 翻日志查不到记录 → 反推自己写错了」，
+    /// 所以成功那一行**必须带上命中的表达式原文**，否则多条规则时只知道响过、
+    /// 不知道是哪一行响的。
+    /// </summary>
+    private void CheckAlarmsList(DateTime now)
+    {
+        var due = AlarmsList.Due(_alarms, _alarmsProcessedThrough, now);
+        _alarmsProcessedThrough = now;
+        if (due.Count == 0) return;
+
+        foreach (var e in due)
+            Log.Line($"alarms.cron fired {e.At:HH:mm} [{e.Expression}] {e.Text}");
+
+        ShowBanner(string.Join('\n', due.Select(e => $"{e.At:HH:mm}   {e.Text}")),
+                   new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0).AddMinutes(1));
+        Sound.Repeat(_settings.AlarmsSound, AlarmsListRings);
+    }
+
+    private void RefreshAlarmsDot(DateTime now)
+    {
+        var nextDue = AlarmsList.NextDue(_alarms, now);
+        var next = nextDue.Count > 0 ? nextDue[0] : (AlarmEntry?)null;
+
+        var dial = this.FindControl<DialControl>("Dial")!;
+        dial.AlarmsDotMinutes = AlarmsList.DotPosition(next, now);
+        dial.AlarmsDotMultiple = nextDue.Count > 1;
+    }
+
+    /// <summary><paramref name="text"/> 为 null 就是收起。</summary>
+    private void ShowBanner(string? text, DateTime? until = null)
+    {
+        _bannerUntil = text is null ? null : until;
+        this.FindControl<Border>("AlarmBanner")!.IsVisible = text is not null;
+        if (text is not null) this.FindControl<TextBlock>("AlarmBannerText")!.Text = text;
     }
 
     /// <summary>

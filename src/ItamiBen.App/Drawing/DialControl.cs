@@ -26,6 +26,20 @@ public class DialControl : Control
 
     /// <summary>闹钟黄针：比分针短、比时针略长（v3 的比例，原样搬）。</summary>
     private const double RAlarm = 0.62;
+
+    /// <summary>
+    /// alarms.cron 的小红圈：圆心落在表盘边缘（1.0），**故意允许盖到木框上**——
+    /// 跟色环（0.31~0.68）、闹钟黄针（0.62）都不在同一层，不会被看成同一件事。
+    /// </summary>
+    private const double RAlarmsDot = 1.0, RAlarmsDotRadius = 0.05, RAlarmsDotStroke = 0.022;
+
+    /// <summary>
+    /// 同一分钟不止一条时，圈**里面**再画一个**实心点**。
+    /// ⚠️ 半径 0.020 是量出来的：外圈内缘只在 ≈5.5px 处，想在里面塞「环 + 可见间隙」
+    /// 两者各只能分到 1px 出头，非 Retina 屏上是一团糊。实心点离外圈内缘还有 2.7px 空白。
+    /// **两态靠两个独立信号**（颜色红/橙 + 中心那点），任缺一个另一个仍然读得出来。
+    /// </summary>
+    private const double RAlarmsDotInner = 0.020;
     private const double RHub = 0.035;
 
     /// <summary>
@@ -67,6 +81,21 @@ public class DialControl : Control
     public static readonly StyledProperty<double> AlarmMinutesProperty =
         AvaloniaProperty.Register<DialControl, double>(nameof(AlarmMinutes));
 
+    /// <summary>
+    /// alarms.cron 下一条的角度位置（0~719 分钟），null = 不画。
+    /// **由调用方每拍整个重算**——跟盘面上其它一切一样，条件不满足这一拍的结果直接就是
+    /// 「不画」，不存在「清除上一次画的圆」这回事。
+    /// </summary>
+    public static readonly StyledProperty<double?> AlarmsDotMinutesProperty =
+        AvaloniaProperty.Register<DialControl, double?>(nameof(AlarmsDotMinutes));
+
+    /// <summary>下一条那一分钟上是不是**不止一条**。</summary>
+    public static readonly StyledProperty<bool> AlarmsDotMultipleProperty =
+        AvaloniaProperty.Register<DialControl, bool>(nameof(AlarmsDotMultiple));
+
+    public double? AlarmsDotMinutes { get => GetValue(AlarmsDotMinutesProperty); set => SetValue(AlarmsDotMinutesProperty, value); }
+    public bool AlarmsDotMultiple { get => GetValue(AlarmsDotMultipleProperty); set => SetValue(AlarmsDotMultipleProperty, value); }
+
     public DialPalette Palette { get => GetValue(PaletteProperty); set => SetValue(PaletteProperty, value); }
     public double AlarmMinutes { get => GetValue(AlarmMinutesProperty); set => SetValue(AlarmMinutesProperty, value); }
     public IReadOnlyList<MinuteCell> Cells { get => GetValue(CellsProperty); set => SetValue(CellsProperty, value); }
@@ -75,7 +104,8 @@ public class DialControl : Control
 
     static DialControl()
         => AffectsRender<DialControl>(PaletteProperty, CellsProperty, StartedAtProperty,
-                                      ProjectionProperty, AlarmMinutesProperty);
+                                      ProjectionProperty, AlarmMinutesProperty,
+                                      AlarmsDotMinutesProperty, AlarmsDotMultipleProperty);
 
     // 12 点是 0°，顺时针，每分钟 6°
     private static Point At(Point c, double r, double deg)
@@ -110,6 +140,25 @@ public class DialControl : Control
         DrawTicks(ctx, c, R, rFace);
         DrawNumerals(ctx, c, R, rFace);
         DrawHands(ctx, c, R, rFace);
+        DrawAlarmsDot(ctx, c, R);
+    }
+
+    /// <summary>
+    /// alarms.cron 下一条的小红圈。空心圆环而不是实心点，圆心移到表盘边缘、故意盖到
+    /// 木框上，好让它在一堆细刻度和数字旁边一眼就能看见。
+    /// </summary>
+    private void DrawAlarmsDot(DrawingContext ctx, Point c, Func<double, double> R)
+    {
+        if (AlarmsDotMinutes is not { } minutes) return;
+        var at = At(c, R(RAlarmsDot), minutes % 720 / 2.0);   // 720 分钟 = 360°，跟黄针同一个换算
+
+        var ring = AlarmsDotMultiple ? Palette.AlarmsDotOuter : Palette.AlarmsDot;
+        ctx.DrawEllipse(null, new Pen(new SolidColorBrush(ring), R(RAlarmsDotStroke)),
+                        at, R(RAlarmsDotRadius), R(RAlarmsDotRadius));
+
+        if (AlarmsDotMultiple)
+            ctx.DrawEllipse(new SolidColorBrush(Palette.AlarmsDot), null,
+                            at, R(RAlarmsDotInner), R(RAlarmsDotInner));
     }
 
     /// <summary>钟投在墙上的影子。压扁、下移、由黑渐隐。</summary>

@@ -11,7 +11,7 @@ namespace ItamiBen.App;
 public sealed record DialPalette(
     Color Face, Color FaceRim, Color Ink, Color Tick,
     Color BezelLit, Color BezelMid, Color BezelDark,
-    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm)
+    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter)
 {
     /// <summary>日面：白表盘 + 木边框（照着用户给的那张实物挂钟照片调的）。</summary>
     public static readonly DialPalette Light = new(
@@ -28,7 +28,13 @@ public sealed record DialPalette(
         Break: Color.FromRgb(0x7F, 0xB2, 0xDD),       // 淡蓝休息块
         Sweep: Color.FromRgb(0x33, 0x40, 0x4B),
         // 闹钟黄针：老式闹钟那种暖黄。比分针短、比时针粗
-        Alarm: Color.FromRgb(0xF0, 0xC0, 0x40));
+        Alarm: Color.FromRgb(0xF0, 0xC0, 0x40),
+        // alarms.cron 的小红圈。⚠️ 独立色号，**别复用 OffTask 的红**——数值相近也不共用，
+        // 以后想单独调其中一个不会牵动另一个（v3 的 J 组同款理由）
+        AlarmsDot: Color.FromRgb(0xD6, 0x45, 0x3F),
+        // 同一分钟不止一条时外圈换橙。⚠️ 取值要偏艳橙：这个标记的圆心压在木框上
+        // （#B57C4C），淡橙会糊进木色里，而红色本来就是靠对比度选的
+        AlarmsDotOuter: Color.FromRgb(0xE8, 0x6A, 0x16));
 
     /// <summary>
     /// 夜面。⚠️ <see cref="Break"/> **单独调亮一档**（DECISIONS D4）：
@@ -48,5 +54,7 @@ public sealed record DialPalette(
         Commit: Color.FromRgb(0x6E, 0x7A, 0x87),
         Break: Color.FromRgb(0x8F, 0xC4, 0xEE),       // 比日面亮一档，见 D4
         Sweep: Color.FromRgb(0xB8, 0xC4, 0xD0),
-        Alarm: Color.FromRgb(0xF5, 0xD0, 0x50));
+        Alarm: Color.FromRgb(0xF5, 0xD0, 0x50),
+        AlarmsDot: Color.FromRgb(0xE9, 0x63, 0x5C),
+        AlarmsDotOuter: Color.FromRgb(0xFA, 0x8A, 0x3C));
 }

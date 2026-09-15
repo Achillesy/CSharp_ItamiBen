@@ -50,6 +50,18 @@
       <TextBlock Name="AlarmText" FontSize="18" FontWeight="Bold" Opacity="0.85"
                  HorizontalAlignment="Left" VerticalAlignment="Top" Margin="2,0,0,0"
                  IsHitTestVisible="False" Text="" />
+
+      <!--
+        alarms.cron 到点的提示条，**刚好显示一分钟**（到点起、到下一个整分止）。
+        ⚠️ 不要在它隐藏之后再做「清除」动作——跟盘面上其它一切一样，这是
+        「这一拍该不该显示」的条件判断，不是要擦掉的状态。
+      -->
+      <Border Name="AlarmBanner" IsVisible="False" IsHitTestVisible="False"
+              VerticalAlignment="Bottom" CornerRadius="6" Padding="10,7" Margin="0,0,0,2"
+              Background="#E6D6453F">
+        <TextBlock Name="AlarmBannerText" Foreground="White" FontWeight="SemiBold"
+                   TextWrapping="Wrap" TextAlignment="Center" />
+      </Border>
     </Grid>
   </DockPanel>
 </Window>

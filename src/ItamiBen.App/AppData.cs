@@ -53,6 +53,12 @@ public static class AppData
     public static string TotalsPath() => Path.Combine(Dir, "during.json");
 
     /// <summary>
+    /// alarms.cron —— **用户手写，程序只读不写**，跟 rules.json 同一类契约。
+    /// 每分钟重读一次，所以改完不用重启。
+    /// </summary>
+    public static string AlarmsPath() => Path.Combine(Dir, "alarms.cron");
+
+    /// <summary>
     /// 观测库（DESIGN §9）：一秒一行的 app / title / 空闲。
     /// **跨轮持久**——v3 的 `During` 是 checkpoint 模型，第 N 轮的秒在第 N+1 轮 Start 时
     /// 才入账，库一清这条链就断（DECISIONS F4）。

@@ -24,6 +24,10 @@ public sealed class Settings
     [JsonPropertyName("alarmSound")]
     public string? AlarmSound { get; set; }
 
+    /// <summary>alarms.cron 到点的音色。跟闹钟分开挑，好让两者听起来不一样。</summary>
+    [JsonPropertyName("alarmsSound")]
+    public string? AlarmsSound { get; set; }
+
     /// <summary>
     /// 闹钟的响铃时刻。读回来**只为了显示**（黄针残影），不激活——
     /// 关着程序时错过的闹钟不补响。
@@ -57,6 +61,11 @@ public sealed class Settings
         settings.AlarmSound ??= Sound.PreferredOrFirst(
             "Sosumi", "Ping", "Glass", "Submarine",        // macOS
             "Alarm01", "Ring01", "Windows Notify", "chimes");  // Windows
+
+        // 故意挑跟闹钟不一样的一个：两件事该听得出区别
+        settings.AlarmsSound ??= Sound.PreferredOrFirst(
+            "Ping", "Glass", "Purr", "Submarine",
+            "Windows Notify", "chimes", "Alarm02");
 
         return settings;
     }

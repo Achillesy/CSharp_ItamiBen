@@ -22,6 +22,13 @@ counts if the window you were actually looking at matches a rule you set beforeh
 
 The rules are yours to write, but you write them **before** the run, not during it.
 
+## Reminders
+
+Drop an `alarms.cron` next to your `rules.json` and ItamiBen will nag you on a schedule.
+It is a **standard crontab** — Vixie semantics, no dialect of its own — and the sixth
+column is text, never a command. See `alarms.cron.example`. The next one within twelve
+hours shows up as a small red ring on the dial.
+
 ## Requirements
 
 - .NET 10 runtime (SDK to build)
