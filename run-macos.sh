@@ -57,8 +57,19 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "==> ad-hoc 签名"
-codesign --force --deep --sign - --identifier com.achillesy.itamiben "$OUT" 2>/dev/null
+# ⚠️ **必须用这张自签名证书签，不能用 ad-hoc**（2026-09-15 定，DESIGN §2.2）。
+#    ad-hoc 的 Designated Requirement 只有一行 `cdhash H"..."`——连 bundle id 都没有，
+#    于是**每次重编 cdhash 一变，辅助功能授权当场失配**，而系统设置里那条记录看着还在。
+#    用证书签之后 DR 变成 `identifier + certificate leaf`，重编多少次都稳定。
+#    证书没了就重新生成一张（见 DESIGN §2.2），代价只是重新授权一次。
+SIGN_ID="ItamiBen Development"
+if ! security find-identity -v -p codesigning | grep -q "$SIGN_ID"; then
+  echo "✗ 找不到代码签名证书「$SIGN_ID」，退回 ad-hoc（⚠️ 每次重编都要重新授权）"
+  codesign --force --deep --sign - --identifier com.achillesy.itamiben "$OUT" 2>/dev/null
+else
+  echo "==> 用「$SIGN_ID」签名"
+  codesign --force --deep --sign "$SIGN_ID" --identifier com.achillesy.itamiben "$OUT"
+fi
 
 echo "==> 启动"
 # ⚠️ 必须先杀掉在跑的那个：`open` 对已运行的 app **只是切到前台**，不会用新二进制重启，
