@@ -8,8 +8,10 @@ simply don't count — the deadline arc slides further away and you watch it go.
 
 No popups, no nagging sounds. Just a clock that is too dumb to negotiate.
 
-**Status: early.** The foreground-window reader works and is verified on macOS;
-the judgment engine, the clock face and the alarms are not written yet.
+**Status: early, but it runs.** Pick a goal, pick 10 / 25 / 50 minutes, press Start, and
+the clock watches the foreground window for the rest of the run. Verified end to end on
+macOS; **the Windows half has never actually been run.** Alarms and sounds are not there
+yet.
 
 ## What makes it different from the other tomatoes
 
@@ -24,8 +26,9 @@ The rules are yours to write, but you write them **before** the run, not during 
 - .NET 10 runtime (SDK to build)
 - Windows or macOS
 
-⚠️ **macOS needs permission to read window titles.** Which permission — and what happens
-when you decline — is still being decided; see the design notes.
+⚠️ **macOS needs Accessibility permission to read window titles.** Without it you still
+get the app name, but title rules never match — the app says so in its status bar and
+offers to open the right settings page. Windows needs no permission.
 
 There is **no ActivityWatch dependency**. ItamiBen reads the foreground window itself.
 (Its predecessor, ItamiTimer, was built on ActivityWatch; that turned out to be the wrong

@@ -31,4 +31,12 @@
     <ProjectReference Include="..\ItamiBen.Core\ItamiBen.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    随程序发一份默认 rules.json（AppData.RulesPath 的第二级）。用户自己那份在运行时
+    目录里，优先级更高，**重装多少次都不会被这一份覆盖**。
+  -->
+  <ItemGroup>
+    <Content Include="..\..\rules.json" Link="rules.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

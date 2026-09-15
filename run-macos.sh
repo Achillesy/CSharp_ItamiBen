@@ -22,7 +22,7 @@ if [ "${1:-}" = "--run-only" ]; then
   pkill -f "ItamiBen.app/Contents/MacOS/ItamiBen" 2>/dev/null || true
   sleep 1
   open dist/ItamiBen.app
-  echo "已启动。日志：~/Library/Application Support/ItamiBen/probe.log"
+  echo "已启动。日志：~/Library/Application Support/ItamiBen/itamiben.log"
   exit 0
 fi
 

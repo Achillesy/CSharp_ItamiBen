@@ -1,0 +1,28 @@
+{
+  // ItamiBen 的规则文件。**程序只读它，永远不写**——所以这些注释不会被吃掉。
+  //
+  // 每个小目标一组规则，**组内任意一条命中就算这一秒命中**。
+  // App / Title 都是正则；两个都写就两个都要中，哪个不写哪个就不设约束。
+  // 标题读不到时是空字符串，写了 Title 的规则自然不命中——这就是全部语义，没有例外。
+  //
+  // app 名：macOS 是 localizedName（Code / Google Chrome），Windows 是进程名加后缀
+  // （Code.exe），所以下面用 (\\.exe)? 同时覆盖两边。
+  //
+  // ⚠️ 不用给 ItamiBen 自己写规则：前台是它自己时那一秒既不计入也不算跑偏。
+  // ⚠️ 不再用的目标写 "Disabled": true，别删——删了以后想找回来还得重写。
+  "Groups": {
+    "编程": {
+      "Rules": [
+        { "App": "^(Code|Visual Studio Code|Rider|Xcode|Terminal|iTerm2|Claude)(\\.exe)?$" },
+        { "App": "^(Google Chrome|Safari|Microsoft Edge|firefox)(\\.exe)?$",
+          "Title": "GitHub|Stack Overflow|docs\\.|MDN" }
+      ]
+    },
+    "读书": {
+      "Rules": [
+        { "Title": "\\.pdf" },
+        { "App": "^(Preview|Books|Zotero|SumatraPDF)(\\.exe)?$" }
+      ]
+    }
+  }
+}

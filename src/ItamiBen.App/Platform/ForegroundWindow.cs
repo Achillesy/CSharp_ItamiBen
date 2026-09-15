@@ -3,8 +3,23 @@ using System.Runtime.Versioning;
 
 namespace ItamiBen.App.Platform;
 
-/// <summary>前台窗口的一次采样。<paramref name="Title"/> 为空时看 <paramref name="TitleReadable"/> 区分「真的没标题」和「读不到」。</summary>
-public readonly record struct Foreground(string App, string Title, bool TitleReadable, string Note);
+/// <summary>
+/// 前台 <b>app 身份</b>的一次采样。<paramref name="Handle"/> 是读标题要用的句柄，
+/// 平台各不相同（macOS 是 pid，Windows 是 HWND）——**调用方不该关心它是什么**，
+/// 原样交回 <see cref="ForegroundWindow.ReadTitle"/> 就行。
+/// </summary>
+/// <param name="Name">macOS 的 <c>localizedName</c>／Windows 的进程名 + <c>.exe</c>。空 = 什么都没读到。</param>
+public readonly record struct ForegroundApp(string Name, nint Handle, string Note);
+
+/// <summary>
+/// 前台<b>窗口标题</b>的一次采样。<paramref name="Text"/> 为空时看
+/// <paramref name="Readable"/> 区分「真的没标题」和「读不到」。
+///
+/// ⚠️ 判定层不需要这个区分（DECISIONS C2：读到什么就是什么，空标题自然匹配不上），
+/// 它只进日志——排查「为什么这一分钟全红」时，`APIDisabled` 和「这窗口本来就没标题」
+/// 是完全不同的两件事。
+/// </summary>
+public readonly record struct ForegroundTitle(string Text, bool Readable, string Note);
 
 /// <summary>
 /// **读当前最前面的窗口**——这个项目存在的理由（DESIGN §3）。
@@ -26,11 +41,31 @@ public static class ForegroundWindow
     /// <summary>AX 的 IPC 超时。250ms——对方不理我们就走人，绝不站在那儿等。</summary>
     private const float AxTimeoutSeconds = 0.25f;
 
-    public static Foreground Read()
+    /// <summary>
+    /// **第一条路：app 身份。** 零权限、不阻塞、几乎不会失败，微秒级。
+    /// 主钟每一拍只调它。
+    /// </summary>
+    public static ForegroundApp ReadApp()
     {
-        if (OperatingSystem.IsMacOS()) return Mac.Read();
-        if (OperatingSystem.IsWindows()) return Win.Read();
-        return new Foreground("", "", false, "unsupported platform");
+        if (OperatingSystem.IsMacOS()) return Mac.ReadApp();
+        if (OperatingSystem.IsWindows()) return Win.ReadApp();
+        return new ForegroundApp("", 0, "unsupported platform");
+    }
+
+    /// <summary>
+    /// **第二条路：窗口标题。** 尽力而为，带超时，读不到就空着。
+    ///
+    /// ⚠️ **绝不能跟 <see cref="ReadApp"/> 在同一个循环里调**（DECISIONS B1）——
+    /// AW 就是这么死的：标题卡住，连它已经拿到的 app 变化都吐不出来，实测哑了 402 秒。
+    /// 产品里它跑在 <see cref="Sampler"/> 的后台线程上。
+    /// </summary>
+    /// <param name="handle"><see cref="ForegroundApp.Handle"/>，原样传回来。</param>
+    public static ForegroundTitle ReadTitle(nint handle)
+    {
+        if (handle == 0) return new ForegroundTitle("", false, "no window");
+        if (OperatingSystem.IsMacOS()) return Mac.ReadTitle(handle);
+        if (OperatingSystem.IsWindows()) return Win.ReadTitle(handle);
+        return new ForegroundTitle("", false, "unsupported platform");
     }
 
     /// <summary>macOS 的辅助功能授权状态（Windows 上恒为 true——那边读标题不需要授权）。</summary>
@@ -88,24 +123,32 @@ public static class ForegroundWindow
         private static readonly Lazy<bool> AppKit = new(() =>
             dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", 1 /* RTLD_LAZY */) != IntPtr.Zero);
 
-        public static Foreground Read()
+        /// <summary>
+        /// ⚠️ **只在 UI 线程调**：AppKit 的东西不保证线程安全，而这一次调用本来就是
+        /// 微秒级的，没有挪到后台去的理由。真正需要隔离的是标题那一半。
+        /// </summary>
+        public static ForegroundApp ReadApp()
         {
-            if (!AppKit.Value) return new Foreground("", "", false, "AppKit 加载失败");
+            if (!AppKit.Value) return new ForegroundApp("", 0, "AppKit 加载失败");
 
-            // ① app 身份：NSWorkspace.sharedWorkspace.frontmostApplication —— 零权限、不阻塞
+            // NSWorkspace.sharedWorkspace.frontmostApplication —— 零权限、不阻塞
             var cls = objc_getClass("NSWorkspace");
-            if (cls == IntPtr.Zero) return new Foreground("", "", false, "找不到 NSWorkspace 类");
+            if (cls == IntPtr.Zero) return new ForegroundApp("", 0, "找不到 NSWorkspace 类");
 
             var ws = Send(cls, sel_registerName("sharedWorkspace"));
             var app = Send(ws, sel_registerName("frontmostApplication"));
-            if (app == IntPtr.Zero) return new Foreground("", "", false, "没有前台应用");
+            if (app == IntPtr.Zero) return new ForegroundApp("", 0, "没有前台应用");
 
             var name = NsString(Send(app, sel_registerName("localizedName")));
             var pid = SendInt(app, sel_registerName("processIdentifier"));
+            return new ForegroundApp(name, pid, "ok");
+        }
 
-            // ② 标题：AX，尽力而为。**这一半失败不影响上面那一半**——整个设计的要点
-            var (title, readable, note) = AxTitle(pid);
-            return new Foreground(name, title, readable, note);
+        /// <summary>句柄是 pid。AX 走的是同步 IPC，所以这个方法**跑在后台线程上**。</summary>
+        public static ForegroundTitle ReadTitle(nint pid)
+        {
+            var (title, readable, note) = AxTitle((int)pid);
+            return new ForegroundTitle(title, readable, note);
         }
 
         private static (string Title, bool Readable, string Note) AxTitle(int pid)
@@ -248,24 +291,37 @@ public static class ForegroundWindow
             IntPtr hWnd, uint msg, IntPtr wParam, System.Text.StringBuilder lParam,
             uint flags, uint timeoutMs, out IntPtr result);
 
-        public static Foreground Read()
+        /// <summary>
+        /// 进程名，不发消息给对方，所以卡不住。
+        ///
+        /// ⚠️ **锁屏时 <c>GetForegroundWindow()</c> 返回 0**，这里于是返回空 app 名——
+        /// 判定层会把这一秒当成「没采到」（DECISIONS C10），这是对的：锁着屏幕的人
+        /// 既没在专注也没在摸鱼。
+        /// </summary>
+        public static ForegroundApp ReadApp()
         {
             var h = GetForegroundWindow();
-            if (h == IntPtr.Zero) return new Foreground("", "", false, "no foreground window");
+            if (h == IntPtr.Zero) return new ForegroundApp("", 0, "no foreground window");
 
-            // ① app 身份：进程名。不发消息给对方，卡不住
             GetWindowThreadProcessId(h, out var pid);
             var app = "";
             try { app = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName + ".exe"; }
             catch { /* 进程刚没了 */ }
 
-            // ② 标题：⚠️ **一定要用 SendMessageTimeout，不能用 GetWindowText**
-            //    ——后者对外部窗口发的是同步 WM_GETTEXT，对方卡住我们就跟着卡住，
-            //    正是 macOS 那边 AX 的同一个坑
-            var len = GetWindowTextLength(h);
+            return new ForegroundApp(app, h, "ok");
+        }
+
+        /// <summary>
+        /// 句柄是 HWND。⚠️ **一定要用 SendMessageTimeout，不能用 GetWindowText**
+        /// ——后者对外部窗口发的是同步 WM_GETTEXT，对方卡住我们就跟着卡住，
+        /// 正是 macOS 那边 AX 的同一个坑。
+        /// </summary>
+        public static ForegroundTitle ReadTitle(nint hWnd)
+        {
+            var len = GetWindowTextLength(hWnd);
             var sb = new System.Text.StringBuilder(Math.Max(len + 1, 256));
-            var ok = SendMessageTimeoutW(h, WmGetText, sb.Capacity, sb, SmtoAbortIfHung, 250, out _) != IntPtr.Zero;
-            return new Foreground(app, ok ? sb.ToString() : "", ok, ok ? "ok" : "WM_GETTEXT 超时（对方没响应）");
+            var ok = SendMessageTimeoutW(hWnd, WmGetText, sb.Capacity, sb, SmtoAbortIfHung, 250, out _) != IntPtr.Zero;
+            return new ForegroundTitle(ok ? sb.ToString() : "", ok, ok ? "ok" : "WM_GETTEXT 超时（对方没响应）");
         }
     }
 }

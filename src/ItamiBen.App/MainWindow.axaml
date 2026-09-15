@@ -1,49 +1,45 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ItamiBen.App"
         x:Class="ItamiBen.App.MainWindow"
-        Title="ItamiBen — 前台窗口探针"
-        Width="460" Height="300"
-        Topmost="True"
-        CanResize="True"
+        Title="ItamiBen"
+        Width="420" Height="700"
+        MinWidth="360" MinHeight="560"
         WindowStartupLocation="CenterScreen">
 
   <!--
-    第一个探针（骨架阶段）：每秒读一次前台窗口，命中关键词就整窗变绿。
-    不是产品界面，只是用来回答「本机到底能不能读到标题」。
+    ⚠️ 界面文字一律英文（CLAUDE.md），目标名除外——那是用户自己在 rules.json 里写的。
   -->
-  <Border Name="Backdrop" Padding="14">
-    <DockPanel LastChildFill="True">
+  <DockPanel Margin="14">
 
-      <!-- 命中横幅 -->
-      <Border Name="HitBanner" DockPanel.Dock="Top" CornerRadius="6" Padding="10,8" Margin="0,0,0,10">
-        <TextBlock Name="HitText" FontSize="20" FontWeight="Bold"
-                   HorizontalAlignment="Center" Text="等待中…" />
-      </Border>
+    <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,12,0,0">
 
-      <!-- 关键词 -->
-      <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
-        <TextBlock Text="关键词" VerticalAlignment="Center" Opacity="0.7" />
-        <TextBox Name="KeywordBox" Text="经济学" Width="150" />
-        <TextBlock Name="HitCount" VerticalAlignment="Center" Opacity="0.7" Text="命中 0 秒" />
-      </StackPanel>
+      <!-- 三段读数的文字版。⚠️ 用分钟不用秒：格子每分钟才封盘，秒级跳动是噪声（DESIGN §4.5） -->
+      <TextBlock Name="Readout" FontSize="17" FontWeight="SemiBold"
+                 HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                 Text="Pick what you are allowed to do." />
 
-      <!-- 授权状态 -->
-      <Border Name="PermBar" DockPanel.Dock="Bottom" CornerRadius="4" Padding="8,6" Margin="0,10,0,0">
+      <!-- 小目标：勾选，可多选。内容来自 rules.json -->
+      <WrapPanel Name="GoalsPanel" HorizontalAlignment="Center" />
+
+      <!-- ⚠️ 档位只有 10 / 25 / 50，别往上加（DECISIONS C6） -->
+      <StackPanel Name="TierPanel" Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center" />
+
+      <!-- ⚠️ 休息期间它**不变成 Start**（DECISIONS C8）：不给「一口气连干三轮」的捷径 -->
+      <Button Name="ActionBtn" Content="Start" Padding="0,9"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+
+      <TextBlock Name="TotalsText" FontSize="12" Opacity="0.75"
+                 HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+
+      <Border Name="StatusBar" CornerRadius="4" Padding="8,6">
         <DockPanel LastChildFill="True">
-          <Button Name="GrantBtn" DockPanel.Dock="Right" Content="请求授权" Margin="8,0,0,0" />
-          <TextBlock Name="PermText" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12" />
+          <Button Name="GrantBtn" DockPanel.Dock="Right" Content="Grant…" Margin="8,0,0,0" />
+          <TextBlock Name="StatusText" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
         </DockPanel>
       </Border>
+    </StackPanel>
 
-      <!-- 当前采样 -->
-      <StackPanel Spacing="4">
-        <TextBlock Text="app" Opacity="0.55" FontSize="11" />
-        <TextBlock Name="AppText" FontSize="15" FontWeight="SemiBold" Text="—" />
-        <TextBlock Text="title" Opacity="0.55" FontSize="11" Margin="0,6,0,0" />
-        <TextBlock Name="TitleText" FontSize="13" TextWrapping="Wrap" MaxLines="3" Text="—" />
-        <TextBlock Name="NoteText" Opacity="0.55" FontSize="11" Margin="0,6,0,0" Text="" />
-      </StackPanel>
-
-    </DockPanel>
-  </Border>
+    <local:DialControl Name="Dial" />
+  </DockPanel>
 </Window>
