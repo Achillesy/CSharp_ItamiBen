@@ -55,11 +55,16 @@ public partial class MainWindow : Window
     /// <summary>最近一拍的采样，录制器从这里取前台窗口（Sampler 已经读过了，不重复读）。</summary>
     private Sample _last;
 
-    /// <summary>上一次从库里整个重建是在哪一分钟。-1 = 还没重建过。</summary>
-    private int _lastRebuiltMinute = -1;
+    /// <summary>
+    /// 上一次从库里整个重建 / 上一次跑整分钟那一串，用的是**绝对分钟序号**
+    /// （Unix 秒 ÷ 60），不是 <c>DateTime.Minute</c>（0~59）。
+    ///
+    /// ⚠️ 用 0~59 的话，**睡眠恰好整小时之后两者会相等**，那一分钟的重建和提醒检查
+    /// 直接被跳过——不报错，只是安静地少跑一次。这类错正是这个项目最怕的那种。
+    /// </summary>
+    private long _lastRebuiltMinute = -1;
 
-    /// <summary>上一次跑整分钟那一串事情是在哪一分钟。-1 = 还没跑过（启动后第一拍就跑）。</summary>
-    private int _lastMinute = -1;
+    private long _lastMinute = -1;
 
     /// <summary>alarms.cron，每分钟重读一次——用户手写的文件，改完不该还要重启。</summary>
     private IReadOnlyList<CronEntry> _alarms = [];
@@ -224,9 +229,9 @@ public partial class MainWindow : Window
                 round.Advance(s.At);
             }
 
-            if (round.Ending is null && s.At.Minute != _lastRebuiltMinute)
+            if (round.Ending is null && MinuteOf(s.At) != _lastRebuiltMinute)
             {
-                _lastRebuiltMinute = s.At.Minute;
+                _lastRebuiltMinute = MinuteOf(s.At);
                 Rebuild(s.At);
             }
 
@@ -236,9 +241,9 @@ public partial class MainWindow : Window
         // ⚠️ 整分钟那一串排在闹钟**之前**（v3 的 J10）：两边都要出声时，
         //    Windows 的 winmm 是单通道、后响的会掐断先响的，而闹钟响完什么都不留、
         //    清单响完还留着一分钟的提示条 —— 所以让闹钟赢。
-        if (s.At.Minute != _lastMinute)
+        if (MinuteOf(s.At) != _lastMinute)
         {
-            _lastMinute = s.At.Minute;
+            _lastMinute = MinuteOf(s.At);
             OnMinute(s.At.LocalDateTime);
         }
 
@@ -255,6 +260,9 @@ public partial class MainWindow : Window
     ///   <item>小红圈位置重算——每拍整个重算，不存在「清除上一次画的圆」这回事。</item>
     /// </list>
     /// </summary>
+    /// <summary>绝对分钟序号。见 <see cref="_lastRebuiltMinute"/> 为什么不能用 0~59。</summary>
+    private static long MinuteOf(DateTimeOffset at) => at.ToUnixTimeSeconds() / 60;
+
     private void OnMinute(DateTime now)
     {
         if (_bannerUntil is { } until && now >= until) ShowBanner(null);
@@ -547,7 +555,11 @@ public partial class MainWindow : Window
         //    崩在两者之间 ⇒ 本轮的秒丢了，那是 C5 已经知情接受的失败方向。
         //    反过来（先写账本、后标记）崩了 ⇒ 下次启动会把同一轮**再结算一遍**，
         //    账本虚高，而虚高是不可逆的：算过的秒不能拿走，多算的也没法证明是多算的。
-        _store?.EndRound(_round.StartedAt, _round.EndedAt ?? DateTimeOffset.Now, reason.ToString());
+        // ⚠️ 写进库的是 **`_round.Ending`** 不是传进来的 `reason`：环可能已经自己终结了
+        //    （触底 / 休息走完），那时 `End` 是空操作、`Ending` 保留的是真正的原因。
+        //    现在每个调用点传的都对，但这条不该靠调用点保证——它只写一次，写错就永远错。
+        _store?.EndRound(_round.StartedAt, _round.EndedAt ?? DateTimeOffset.Now,
+                         (_round.Ending ?? reason).ToString());
 
         _totals.Add(_round.FocusedSecondsByGoal);
         Totals.Save(_totals);
@@ -636,6 +648,18 @@ public partial class MainWindow : Window
         this.FindControl<Button>("GrantBtn")!.IsVisible = !granted;
         this.FindControl<Border>("StatusBar")!.Background = new SolidColorBrush(
             granted ? Color.FromArgb(0x18, 0x80, 0x80, 0x80) : Color.FromRgb(0xC4, 0x5A, 0x28));
+
+        // ⚠️ 库开不起来 ⇒ 一秒都录不进去 ⇒ **每一轮都会静默触底**。
+        //    这是最坏的一种失败：程序照跑、钟面照转，只是永远不可能达成。必须说出来
+        if (_store is null)
+        {
+            this.FindControl<TextBlock>("StatusText")!.Text =
+                "Cannot open samples.db — nothing is being recorded, so every round will run out. "
+                + "See itamiben.log.";
+            this.FindControl<Border>("StatusBar")!.Background = new SolidColorBrush(Color.FromRgb(0xC4, 0x5A, 0x28));
+            this.FindControl<Button>("GrantBtn")!.IsVisible = false;
+            return;
+        }
 
         if (!granted)
         {
