@@ -1,18 +1,49 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ItamiBen.App.MainWindow"
-        Title="一袋米要我洗嘞"
-        Width="360" Height="220"
-        CanResize="False"
+        Title="ItamiBen — 前台窗口探针"
+        Width="460" Height="300"
+        Topmost="True"
+        CanResize="True"
         WindowStartupLocation="CenterScreen">
 
-  <!-- 骨架占位：判定引擎和钟面还没做，先让它能跑起来。 -->
-  <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-    <TextBlock Text="ItamiBen" FontSize="34" FontWeight="Bold"
-               HorizontalAlignment="Center" />
-    <TextBlock Text="Too dumb to make excuses for you" Opacity="0.65"
-               HorizontalAlignment="Center" />
-    <TextBlock Name="VersionText" Opacity="0.45" FontSize="12"
-               HorizontalAlignment="Center" Margin="0,12,0,0" />
-  </StackPanel>
+  <!--
+    第一个探针（骨架阶段）：每秒读一次前台窗口，命中关键词就整窗变绿。
+    不是产品界面，只是用来回答「本机到底能不能读到标题」。
+  -->
+  <Border Name="Backdrop" Padding="14">
+    <DockPanel LastChildFill="True">
+
+      <!-- 命中横幅 -->
+      <Border Name="HitBanner" DockPanel.Dock="Top" CornerRadius="6" Padding="10,8" Margin="0,0,0,10">
+        <TextBlock Name="HitText" FontSize="20" FontWeight="Bold"
+                   HorizontalAlignment="Center" Text="等待中…" />
+      </Border>
+
+      <!-- 关键词 -->
+      <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+        <TextBlock Text="关键词" VerticalAlignment="Center" Opacity="0.7" />
+        <TextBox Name="KeywordBox" Text="经济学" Width="150" />
+        <TextBlock Name="HitCount" VerticalAlignment="Center" Opacity="0.7" Text="命中 0 秒" />
+      </StackPanel>
+
+      <!-- 授权状态 -->
+      <Border Name="PermBar" DockPanel.Dock="Bottom" CornerRadius="4" Padding="8,6" Margin="0,10,0,0">
+        <DockPanel LastChildFill="True">
+          <Button Name="GrantBtn" DockPanel.Dock="Right" Content="请求授权" Margin="8,0,0,0" />
+          <TextBlock Name="PermText" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12" />
+        </DockPanel>
+      </Border>
+
+      <!-- 当前采样 -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="app" Opacity="0.55" FontSize="11" />
+        <TextBlock Name="AppText" FontSize="15" FontWeight="SemiBold" Text="—" />
+        <TextBlock Text="title" Opacity="0.55" FontSize="11" Margin="0,6,0,0" />
+        <TextBlock Name="TitleText" FontSize="13" TextWrapping="Wrap" MaxLines="3" Text="—" />
+        <TextBlock Name="NoteText" Opacity="0.55" FontSize="11" Margin="0,6,0,0" Text="" />
+      </StackPanel>
+
+    </DockPanel>
+  </Border>
 </Window>
