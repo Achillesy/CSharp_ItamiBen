@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    判定与计时的纯逻辑层：零 UI 引用，`now` 一律是参数，所以全部可单测。
+
+    net10.0（不带 -windows 后缀）让编译器帮忙挡住 UI 那一半：WinForms / WPF / Avalonia
+    这类桌面 SDK 在这个目标框架下根本引用不进来。永远不要往这里加 UseWindowsForms、
+    UseWPF 或任何 UI 包引用。
+
+    ⚠️ 但要说准确：net10.0 **挡不住 P/Invoke**，[DllImport("user32.dll")] 在这里照样
+    编译得过。所以「不碰平台调用」是**纪律**，不是编译器强制的。需要平台调用时
+    （读前台窗口、读键鼠空闲）写在 ItamiBen.App 里，别图省事丢进来。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

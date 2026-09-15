@@ -1,0 +1,12 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ItamiBen.App.App"
+             Name="ItamiBen"
+             RequestedThemeVariant="Default">
+
+  <!-- ⚠️ Name="ItamiBen" 跟 csproj 的 AssemblyName 一样是承重的：自身豁免靠它。 -->
+
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+</Application>

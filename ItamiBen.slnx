@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ItamiBen.Core/ItamiBen.Core.csproj" />
+    <Project Path="src/ItamiBen.App/ItamiBen.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ItamiBen.Core.Tests/ItamiBen.Core.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ItamiBen.App.MainWindow"
+        Title="一袋米要我洗嘞"
+        Width="360" Height="220"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen">
+
+  <!-- 骨架占位：判定引擎和钟面还没做，先让它能跑起来。 -->
+  <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+    <TextBlock Text="ItamiBen" FontSize="34" FontWeight="Bold"
+               HorizontalAlignment="Center" />
+    <TextBlock Text="Too dumb to make excuses for you" Opacity="0.65"
+               HorizontalAlignment="Center" />
+    <TextBlock Name="VersionText" Opacity="0.45" FontSize="12"
+               HorizontalAlignment="Center" Margin="0,12,0,0" />
+  </StackPanel>
+</Window>

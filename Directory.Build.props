@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    版本号的唯一来源，这个目录下每个项目自动继承（MSBuild 约定，不用显式 import）。
+
+    运行时通过 Assembly.GetName().Version 读，打包脚本也读这里
+    ——要改版本号，只改这一处。
+  -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+</Project>
