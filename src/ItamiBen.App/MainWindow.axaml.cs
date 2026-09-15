@@ -84,6 +84,7 @@ public partial class MainWindow : Window
 
         BuildGoals();
         BuildTiers();
+        ResumeRound();
 
         this.FindControl<Button>("ActionBtn")!.Click += (_, _) => OnAction();
         this.FindControl<Button>("GrantBtn")!.Click += (_, _) =>
@@ -261,6 +262,59 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// **崩溃恢复。** 库里还有没终结的一轮就把它接回来。
+    ///
+    /// 这是新架构白捡的性质：本轮的状态（起点 / 档位 / 目标）在 `round` 表里，
+    /// 观测在 `sample` 表里，**重放一遍就全回来了**。v4 原来的 C5 明写着
+    /// 「崩在第 119 分钟，那 119 分钟全没了，没有后路」——那个代价现在没有了。
+    ///
+    /// 三种结局：
+    /// <list type="bullet">
+    ///   <item>还在两小时环里 ⇒ 接着跑，界面把目标和档位一并还原；</item>
+    ///   <item>离现在超过两小时（或余量早就耗尽）⇒ <see cref="Round.Advance"/> 会让它
+    ///         当场触底，走同一个终结动作；</item>
+    ///   <item>rules.json 改过、那个目标没了 ⇒ 没法重放，就地终结，不猜。</item>
+    /// </list>
+    /// </summary>
+    private void ResumeRound()
+    {
+        if (_store?.OpenRound() is not { } rec) return;
+
+        try
+        {
+            _round = new Round(rec.StartedAt, rec.FocusMinutes, rec.Goals, _rules);
+        }
+        catch (ArgumentException e)
+        {
+            // 目标被禁用/删掉了。**不猜、不降级**——宁可这一轮作废
+            Log.Error($"Cannot resume the round started at {rec.StartedAt:HH:mm}", e);
+            _store.EndRound(rec.StartedAt, DateTimeOffset.Now, nameof(EndReason.Closed));
+            _round = null;
+            return;
+        }
+
+        _written = false;
+        _lastRebuiltMinute = -1;
+        Rebuild(DateTimeOffset.Now);          // 从 sample 重放 + 补最后一段
+
+        foreach (var b in _goalBoxes) b.IsChecked = rec.Goals.Contains((string)b.Content!);
+        _focusMinutes = rec.FocusMinutes;
+        foreach (var b in _tierButtons) b.IsChecked = (int)b.Tag! == rec.FocusMinutes;
+
+        if (_round?.Ending is { } reason)
+        {
+            Log.Line($"resumed round from {rec.StartedAt:HH:mm} had already ended: {reason}");
+            Settle(reason);
+        }
+        else
+        {
+            Log.Line($"resumed round from {rec.StartedAt:HH:mm}: focus={rec.FocusMinutes}min "
+                   + $"focused={_round?.FocusedSeconds}s slack={_round?.SlackSeconds}s "
+                   + $"goals={string.Join("/", rec.Goals)}");
+        }
+    }
+
     private void OpenStore()
     {
         try
@@ -368,6 +422,7 @@ public partial class MainWindow : Window
         _round = new Round(DateTimeOffset.Now, _focusMinutes, goals, _rules);
         _written = false;
         _lastRebuiltMinute = -1;
+        _store?.BeginRound(_round.StartedAt, _round.FocusMinutes, _round.Goals);
         Log.Line($"round started: focus={_focusMinutes}min break={_round.BreakMinutes}min "
                + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goals={string.Join("/", goals)}");
         UpdateUi();
@@ -383,6 +438,13 @@ public partial class MainWindow : Window
         if (_round is null || _written) return;
 
         _round.End(DateTimeOffset.Now, reason);
+
+        // ⚠️ **顺序是有讲究的：先在库里标记终结，再写账本。**
+        //    崩在两者之间 ⇒ 本轮的秒丢了，那是 C5 已经知情接受的失败方向。
+        //    反过来（先写账本、后标记）崩了 ⇒ 下次启动会把同一轮**再结算一遍**，
+        //    账本虚高，而虚高是不可逆的：算过的秒不能拿走，多算的也没法证明是多算的。
+        _store?.EndRound(_round.StartedAt, _round.EndedAt ?? DateTimeOffset.Now, reason.ToString());
+
         _totals.Add(_round.FocusedSecondsByGoal);
         Totals.Save(_totals);
         _written = true;

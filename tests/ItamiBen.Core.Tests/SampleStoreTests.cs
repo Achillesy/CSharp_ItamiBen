@@ -133,6 +133,91 @@ public class SampleStoreTests
         Assert.Equal(T0, row.At);                       // 同一个瞬间
     }
 
+    // ── 轮次：本轮状态进库 ⇒ 崩溃不丢本轮 ────────────────────────────────
+
+    [Fact]
+    public void 开了一轮之后查得到没终结的那一轮()
+    {
+        using var db = Memory();
+        Assert.Null(db.OpenRound());
+
+        db.BeginRound(T0, 25, ["编程", "读书"]);
+
+        var open = db.OpenRound();
+        Assert.NotNull(open);
+        Assert.Equal(T0, open!.Value.StartedAt);
+        Assert.Equal(25, open.Value.FocusMinutes);
+        Assert.Equal(["编程", "读书"], open.Value.Goals);
+    }
+
+    [Fact]
+    public void 终结之后就查不到了()
+    {
+        using var db = Memory();
+        db.BeginRound(T0, 25, ["编程"]);
+        db.EndRound(T0, T0.AddMinutes(30), "GaveUp");
+        Assert.Null(db.OpenRound());
+    }
+
+    [Fact]
+    public void 同一分钟里再开一轮后开的赢()
+    {
+        // 起点抹到整分，所以 Give up 之后马上再开会撞主键——两轮的环起点本来就是同一个
+        using var db = Memory();
+        db.BeginRound(T0, 25, ["编程"]);
+        db.BeginRound(T0, 10, ["读书"]);
+
+        var open = db.OpenRound();
+        Assert.Equal(10, open!.Value.FocusMinutes);
+        Assert.Equal(["读书"], open.Value.Goals);
+    }
+
+    [Fact]
+    public void 目标名里有逗号也存得住()
+    {
+        // 用换行分隔不是逗号，正是为了这个
+        using var db = Memory();
+        db.BeginRound(T0, 25, ["写作, 修订", "编程"]);
+        Assert.Equal(["写作, 修订", "编程"], db.OpenRound()!.Value.Goals);
+    }
+
+    [Fact]
+    public void 崩溃之后整轮都能从库里重放回来()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"itamiben-test-{Guid.NewGuid():N}.db");
+        try
+        {
+            // 第一次运行：开一轮，攒 100 秒专注，然后「崩了」（没有 EndRound）
+            using (var db = SampleStore.Open(path))
+            {
+                db.BeginRound(T0, 10, ["编程"]);
+                for (var i = 0; i < 100; i++) db.Write(T0.AddSeconds(i), "Code", "Round.cs", 0);
+            }
+
+            // 第二次运行：接回来
+            using (var db = SampleStore.Open(path))
+            {
+                var rec = db.OpenRound();
+                Assert.NotNull(rec);
+
+                var rows = db.Read(rec!.Value.StartedAt, T0.AddSeconds(200));
+                var away = AwayMap.Of(rows);
+                var round = new Round(rec.Value.StartedAt, rec.Value.FocusMinutes, rec.Value.Goals, TestRules.Rules);
+                foreach (var o in rows) round.Observe(o.At, o.App, o.Title, away.Covers(o.At));
+                round.Advance(T0.AddSeconds(199));
+
+                Assert.Equal(100, round.FocusedSeconds);        // 一秒没丢
+                Assert.Equal(100, round.WastedSeconds);         // 崩掉那 100 秒照样吃余量
+                Assert.Equal(RoundPhase.Focusing, round.Phase);
+            }
+        }
+        finally
+        {
+            foreach (var f in Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(path) + "*"))
+                try { File.Delete(f); } catch { }
+        }
+    }
+
     [Fact]
     public void 关掉再开数据还在()
     {

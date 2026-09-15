@@ -69,6 +69,13 @@ public sealed class SampleStore : IDisposable
               title_id INTEGER REFERENCES title(id),
               idle     INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS round (
+              started_at    INTEGER PRIMARY KEY,   -- UTC 秒，已抹到整分
+              focus_minutes INTEGER NOT NULL,
+              goals         TEXT NOT NULL,         -- 换行分隔（目标名可能含逗号）
+              ended_at      INTEGER,               -- NULL = 还在跑
+              end_reason    TEXT
+            );
             """);
 
         return new SampleStore(db);
@@ -152,6 +159,63 @@ public sealed class SampleStore : IDisposable
                 IdleSeconds: r.GetInt32(3)));
 
         return list;
+    }
+
+    // ── 轮次：本轮状态进库 ⇒ 崩溃不丢本轮 ────────────────────────────────
+
+    /// <summary>
+    /// 库里记着的一轮。**只有重建需要的三个参数**——其余（专注了多少秒、余量还剩多少、
+    /// 现在是哪一阶段）全都是从 `sample` 重放出来的，一个都不存。
+    ///
+    /// ⚠️ 别往这里加「已专注秒数」之类的字段：那就成了第二个真相源，跟重放的结果会漂。
+    /// </summary>
+    public readonly record struct RoundRecord(DateTimeOffset StartedAt, int FocusMinutes, IReadOnlyList<string> Goals);
+
+    /// <summary>
+    /// 开一轮。
+    ///
+    /// ⚠️ 用 REPLACE 而不是 IGNORE：`started_at` 抹到了整分，所以同一分钟里
+    /// Give up 再开一轮会撞主键，后开的那轮应该赢——它俩的环起点本来就是同一个。
+    /// </summary>
+    public void BeginRound(DateTimeOffset startedAt, int focusMinutes, IReadOnlyList<string> goals)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "INSERT OR REPLACE INTO round (started_at, focus_minutes, goals) VALUES ($at, $f, $g);";
+        cmd.Parameters.AddWithValue("$at", startedAt.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$f", focusMinutes);
+        cmd.Parameters.AddWithValue("$g", string.Join('\n', goals));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// 终结一轮。<paramref name="reason"/> **只是记录**，跟 <c>EndReason</c> 一样
+    /// 不许拿来分叉任何逻辑（DECISIONS C5）。
+    /// </summary>
+    public void EndRound(DateTimeOffset startedAt, DateTimeOffset endedAt, string reason)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "UPDATE round SET ended_at = $end, end_reason = $why WHERE started_at = $at;";
+        cmd.Parameters.AddWithValue("$at", startedAt.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$end", endedAt.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$why", reason);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// 还没终结的那一轮（最近的一条）。**崩溃恢复的入口**：有就把它从 `sample`
+    /// 重放出来接着跑，没有就是干净启动。
+    /// </summary>
+    public RoundRecord? OpenRound()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT started_at, focus_minutes, goals FROM round WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1;";
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+
+        return new RoundRecord(
+            DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
+            r.GetInt32(1),
+            r.GetString(2).Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>
