@@ -34,5 +34,7 @@ public static class Log
         }
     }
 
+    public static void Warn(string text) => Line($"WARN  {text}");
+
     public static void Error(string what, Exception e) => Line($"ERROR {what}: {e.GetType().Name} {e.Message}");
 }

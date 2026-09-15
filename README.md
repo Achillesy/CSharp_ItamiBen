@@ -6,12 +6,13 @@ A pomodoro clock with teeth. Pick what you're allowed to work on, commit to a st
 focus, and it watches the foreground window for the whole run. Wander off and those minutes
 simply don't count — the deadline arc slides further away and you watch it go.
 
-No popups, no nagging sounds. Just a clock that is too dumb to negotiate.
+No popups, no nagging sounds. Just a clock that is too dumb to negotiate. (There *is* an
+alarm — scroll on the dial to move the yellow hand — but that is a wall clock's job, and it
+has nothing to do with judging your focus.)
 
 **Status: early, but it runs.** Pick a goal, pick 10 / 25 / 50 minutes, press Start, and
-the clock watches the foreground window for the rest of the run. Verified end to end on
-macOS; **the Windows half has never actually been run.** Alarms and sounds are not there
-yet.
+the clock watches the foreground window for the rest of the run. Scroll on the dial to set
+the alarm. Verified end to end on macOS; **the Windows half has never actually been run.**
 
 ## What makes it different from the other tomatoes
 

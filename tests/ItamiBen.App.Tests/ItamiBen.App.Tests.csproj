@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    引的是 App 工程本身（WinExe 照样可以被测试工程引用）。
+    ⚠️ 这里**只测 App 层里的纯逻辑**（音频文件头解析这类），Avalonia 从不初始化。
+    判定和计时的测试仍然全部在 ItamiBen.Core.Tests 里——别把它们挪过来。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ItamiBen.App\ItamiBen.App.csproj" />
+  </ItemGroup>
+
+</Project>

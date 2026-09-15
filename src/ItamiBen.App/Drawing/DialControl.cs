@@ -23,6 +23,9 @@ public class DialControl : Control
     private const double RNumerals = 0.745;
     private const double RTickMinor = 0.918, RTickMajor = 0.893, RTickOuter = 0.955;
     private const double RHour = 0.55, RMinute = 0.775, RSecond = 0.88;
+
+    /// <summary>闹钟黄针：比分针短、比时针略长（v3 的比例，原样搬）。</summary>
+    private const double RAlarm = 0.62;
     private const double RHub = 0.035;
 
     /// <summary>
@@ -54,13 +57,25 @@ public class DialControl : Control
     public static readonly StyledProperty<RingProjection?> ProjectionProperty =
         AvaloniaProperty.Register<DialControl, RingProjection?>(nameof(Projection));
 
+    /// <summary>
+    /// 闹钟黄针的位置，从 12 点起算的分钟数（0~719）——直接传
+    /// <see cref="Core.AlarmClock.Position"/>。
+    ///
+    /// ⚠️ **从没拨过针时它是 0，黄针停在 12 点上，照样画**（v3 的 E7：过期或没设的
+    /// 闹钟留下的是「黄针残影」）。真实的闹钟本来就长这样：针一直在，只是没上弦。
+    /// </summary>
+    public static readonly StyledProperty<double> AlarmMinutesProperty =
+        AvaloniaProperty.Register<DialControl, double>(nameof(AlarmMinutes));
+
     public DialPalette Palette { get => GetValue(PaletteProperty); set => SetValue(PaletteProperty, value); }
+    public double AlarmMinutes { get => GetValue(AlarmMinutesProperty); set => SetValue(AlarmMinutesProperty, value); }
     public IReadOnlyList<MinuteCell> Cells { get => GetValue(CellsProperty); set => SetValue(CellsProperty, value); }
     public DateTimeOffset? StartedAt { get => GetValue(StartedAtProperty); set => SetValue(StartedAtProperty, value); }
     public RingProjection? Projection { get => GetValue(ProjectionProperty); set => SetValue(ProjectionProperty, value); }
 
     static DialControl()
-        => AffectsRender<DialControl>(PaletteProperty, CellsProperty, StartedAtProperty, ProjectionProperty);
+        => AffectsRender<DialControl>(PaletteProperty, CellsProperty, StartedAtProperty,
+                                      ProjectionProperty, AlarmMinutesProperty);
 
     // 12 点是 0°，顺时针，每分钟 6°
     private static Point At(Point c, double r, double deg)
@@ -301,6 +316,8 @@ public class DialControl : Control
         var shift = Matrix.CreateTranslation(rFace * 0.014, rFace * 0.018);
         var shadowBrush = new SolidColorBrush(A(Shadow, 0x38));
 
+        // 闹钟黄针：720 分钟 = 360°，所以位置除以 2 就是角度
+        var alarmGeo = Taper(c, AlarmMinutes % 720 / 2.0, R(RAlarm), rFace * 0.024, rFace * 0.006, rFace * 0.06);
         var hourGeo = Taper(c, hour * 30, R(RHour), rFace * 0.030, rFace * 0.013, rFace * 0.10);
         var minGeo = Taper(c, min * 6, R(RMinute), rFace * 0.022, rFace * 0.008, rFace * 0.10);
         var secPen = new Pen(new SolidColorBrush(Palette.Sweep), rFace * 0.008) { LineCap = PenLineCap.Round };
@@ -310,11 +327,14 @@ public class DialControl : Control
 
         using (ctx.PushTransform(shift))
         {
+            ctx.DrawGeometry(shadowBrush, null, alarmGeo);
             ctx.DrawGeometry(shadowBrush, null, hourGeo);
             ctx.DrawGeometry(shadowBrush, null, minGeo);
             ctx.DrawLine(secShadowPen, tail, tip);
         }
 
+        // ⚠️ 黄针画在时针**前面**，所以「被时针盖住」= 到点了——不需要任何额外状态
+        ctx.DrawGeometry(new SolidColorBrush(Palette.Alarm), null, alarmGeo);
         ctx.DrawGeometry(new SolidColorBrush(Palette.Ink), null, hourGeo);
         ctx.DrawGeometry(new SolidColorBrush(Palette.Ink), null, minGeo);
         ctx.DrawLine(secPen, tail, tip);

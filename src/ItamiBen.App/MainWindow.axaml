@@ -40,6 +40,16 @@
       </Border>
     </StackPanel>
 
-    <local:DialControl Name="Dial" />
+    <!--
+      钟面 + 叠在左上角的闹钟时刻。
+      ⚠️ 标签必须 IsHitTestVisible="False"：滚轮拨针挂在 Dial 上，
+         标签不能把左上角那片区域变成挡事件的东西（v3 的 E15）。
+    -->
+    <Grid>
+      <local:DialControl Name="Dial" />
+      <TextBlock Name="AlarmText" FontSize="18" FontWeight="Bold" Opacity="0.85"
+                 HorizontalAlignment="Left" VerticalAlignment="Top" Margin="2,0,0,0"
+                 IsHitTestVisible="False" Text="" />
+    </Grid>
   </DockPanel>
 </Window>

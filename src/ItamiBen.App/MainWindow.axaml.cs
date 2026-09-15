@@ -27,6 +27,12 @@ public partial class MainWindow : Window
     /// </summary>
     private static readonly int[] Tiers = [10, 25, 50];
 
+    /// <summary>
+    /// 闹钟响几遍。**4 遍**（v3 的 E11）：它是这个程序里**唯一没有第二次机会**的声音
+    /// ——响完什么都不留（黄针不动、不弹窗），走个神就错过了。间隔 = 音频文件自己的长度。
+    /// </summary>
+    private const int AlarmRings = 4;
+
     private readonly Sampler _sampler = new();
     private readonly List<CheckBox> _goalBoxes = [];
     private readonly List<RadioButton> _tierButtons = [];
@@ -35,6 +41,22 @@ public partial class MainWindow : Window
     private string? _rulesError;
     private GoalTotals _totals = new();
     private Round? _round;
+
+    private readonly Settings _settings = Settings.Load();
+    private readonly AlarmClock _alarm = new();
+
+    /// <summary>连拨的计数和上一拍的时刻，见 <see cref="OnAlarmWheel"/>。</summary>
+    private DateTime _lastWheelAt = DateTime.MinValue;
+    private int _wheelStreak;
+
+    /// <summary>两拍之间超过这么久就算断了，下一拍从 1 分钟/格重新起步。</summary>
+    private const int WheelStreakGapMs = 300;
+
+    /// <summary>
+    /// 调整期静默的**截止时刻**。⚠️ 用时刻不用布尔量（v3 的 E6）：布尔 + `Task.Delay`
+    /// 复位的话，滚轮连续来时**早到的复位会掐断晚到的那次调整期**。
+    /// </summary>
+    private DateTime _alarmQuietUntil = DateTime.MinValue;
 
     /// <summary>本轮是否已落盘。**落盘是一个动作，不是一条政策**（DECISIONS C5）。</summary>
     private bool _written;
@@ -61,6 +83,14 @@ public partial class MainWindow : Window
             catch (Exception e) { Log.Error("RequestTitlePermission failed", e); }
         };
 
+        // 读回时刻只为了显示黄针残影，**不激活**——关着程序时错过的闹钟不补响（v3 的 E7）
+        _alarm.Restore(_settings.AlarmAt);
+        Log.Line($"alarm restored: at={_settings.AlarmAt:yyyy-MM-dd HH:mm} sound={_settings.AlarmSound ?? "(none)"}");
+
+        // ⚠️ 拨针挂在**钟面本身**上，没有独立按钮（v3 的 E4：Button 内部会把
+        //    PointerPressed 标 Handled，挂在钟面上的普通订阅收不到）。
+        this.FindControl<DialControl>("Dial")!.PointerWheelChanged += OnAlarmWheel;
+
         ApplyTheme();
         ActualThemeVariantChanged += (_, _) => ApplyTheme();
 
@@ -68,9 +98,9 @@ public partial class MainWindow : Window
         _sampler.Start();
 
         // ⚠️ 关窗和 Cmd+Q 是两条不同的路，但**执行的是同一个写入动作**（C5）
-        Closing += (_, _) => Settle(EndReason.Closed);
+        Closing += (_, _) => OnExit();
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.ShutdownRequested += (_, _) => Settle(EndReason.Closed);
+            desktop.ShutdownRequested += (_, _) => OnExit();
 
         UpdateUi();
     }
@@ -150,7 +180,81 @@ public partial class MainWindow : Window
             if (_round.Ending is not null) Settle(_round.Ending.Value);
         }
 
+        CheckAlarm();
         UpdateUi(s);
+    }
+
+    /// <summary>
+    /// 滚轮拨闹钟：**前滚逆时针、后滚顺时针**。慢拨一格 1 分钟，**连着快拨会加速**。
+    ///
+    /// ⚠️ **方向是用户点名的，别按自己的「直觉」翻转**（v3 的 E3 明写着这一条）。
+    ///
+    /// ⚠️ **加速看的是拨的节奏，不是单次事件的大小**（v3 2026-08-02 改的）。
+    /// 原来那版读 <c>Math.Abs(e.Delta.Y) / 120</c>——120 是 **Win32 `WM_MOUSEWHEEL`**
+    /// 的单位，而 Avalonia 的 <c>Delta.Y</c> **一格就是 1.0**。于是那个除法永远是 0.008，
+    /// 被 <c>Math.Max(1, …)</c> 拉回 1，档位判断永远落在第一档：**那道加速梯子一次都
+    /// 没跑起来过**，而且不报错。CLAUDE.md 的硬性约束里点名的就是这个坑。
+    ///
+    /// Avalonia 里快拨表现为**事件更密**而不是 Delta 更大，所以正确的做法是数
+    /// 「连着拨了几格」——间隔超过 <see cref="WheelStreakGapMs"/> 毫秒就断档重来。
+    /// 这样慢拨仍然是一分钟一分钟微调，快拨一口气能扫过几个小时。
+    /// </summary>
+    private void OnAlarmWheel(object? sender, Avalonia.Input.PointerWheelEventArgs e)
+    {
+        if (e.Delta.Y == 0) return;
+
+        var now = DateTime.Now;
+        _wheelStreak = (now - _lastWheelAt).TotalMilliseconds <= WheelStreakGapMs ? _wheelStreak + 1 : 1;
+        _lastWheelAt = now;
+
+        // 一串连拨里：1 → 3 → 8 → 15 → 30 分钟/格。一圈 12 小时是 720 格，
+        // 30 分钟/格时二十来下就能扫完；一松手立刻回到 1 分钟/格，微调不受影响。
+        var step = _wheelStreak switch
+        {
+            <= 2 => 1,
+            <= 5 => 3,
+            <= 10 => 8,
+            <= 20 => 15,
+            _ => 30,
+        };
+
+        // 高精度触控板一次可能报好几格，一并乘进去
+        var notches = Math.Max(1, (int)Math.Round(Math.Abs(e.Delta.Y)));
+        var direction = e.Delta.Y > 0 ? -1 : +1;
+
+        _alarm.Bump(direction * notches * step * AlarmClock.SlotMinutes, now);
+        _alarmQuietUntil = now.AddSeconds(2);
+        e.Handled = true;
+        UpdateUi();
+    }
+
+    /// <summary>
+    /// 闹钟到点了没有。挂在采样节拍上（100ms），所以误差不到一拍。
+    ///
+    /// ⚠️ v3 把它挂在整分钟节拍上，是因为那边同一分钟里还有 AW 查询、清单、三声通知
+    /// 要排先后（它的 L13）。v4 这一拍只有闹钟一件事，没有顺序可排，挂在采样节拍上
+    /// 反而更准。<see cref="AlarmClock.ShouldFire"/> 自带一次性，重复调用无害。
+    /// </summary>
+    private void CheckAlarm()
+    {
+        var now = DateTime.Now;
+        if (now < _alarmQuietUntil) return;      // 正在拨针，别当场响（E6）
+        if (!_alarm.ShouldFire(now)) return;
+
+        _alarm.MarkFired();                       // 先消费掉再出声：响铃失败也不该让它反复响
+        Log.Line($"alarm fired: {_alarm.FireAt:HH:mm} sound={_settings.AlarmSound ?? "(none)"} ×{AlarmRings}");
+        Sound.Repeat(_settings.AlarmSound, AlarmRings);
+    }
+
+    /// <summary>
+    /// 受控退出。⚠️ 两件事，**都必须做**：本轮落盘（C5）和闹钟时刻落盘（E7）。
+    /// 后者跟有没有正在跑的一轮无关——所以它不能藏在 <see cref="Settle"/> 里。
+    /// </summary>
+    private void OnExit()
+    {
+        Settle(EndReason.Closed);
+        _settings.AlarmAt = _alarm.FireAt;
+        _settings.Save();
     }
 
     private void OnAction()
@@ -198,11 +302,13 @@ public partial class MainWindow : Window
         var dial = this.FindControl<DialControl>("Dial")!;
         var running = _round is { Ending: null };
 
+        dial.AlarmMinutes = _alarm.Position;
         dial.Cells = _round?.Cells ?? [];
         dial.StartedAt = _round?.StartedAt;
         dial.Projection = _round?.Project();
         dial.InvalidateVisual();
 
+        this.FindControl<TextBlock>("AlarmText")!.Text = FormatAlarm();
         this.FindControl<TextBlock>("Readout")!.Text = ReadoutText();
         this.FindControl<TextBlock>("TotalsText")!.Text = FormatTotals();
 
@@ -281,6 +387,21 @@ public partial class MainWindow : Window
         if (sample is { } s)
             this.FindControl<TextBlock>("StatusText")!.Text =
                 $"{(s.App.Length == 0 ? "—" : s.App)}   {(s.Title.Length == 0 ? "(no title)" : s.Title)}";
+    }
+
+    /// <summary>
+    /// 闹钟时刻。
+    ///
+    /// ⚠️ **必须把「上弦了」和「黄针残影」分开**：两者在盘面上长得一模一样
+    /// （v3 的 E7 明说过期闹钟只剩残影），不写出来用户读不出它还作不作数。
+    /// </summary>
+    private string FormatAlarm()
+    {
+        if (_alarm.FireAt is not { } at) return "";
+
+        var now = DateTime.Now;
+        var when = at.Date == now.Date ? at.ToString("HH:mm") : at.ToString("HH:mm") + " tomorrow";
+        return _alarm.IsArmed(now) ? $"⏰ {when}" : $"⏰ {when} · off";
     }
 
     /// <summary>向上取整到分钟：读数因此每分钟才跳一次，跟格子封盘同步。</summary>

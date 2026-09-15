@@ -11,7 +11,7 @@ namespace ItamiBen.App;
 public sealed record DialPalette(
     Color Face, Color FaceRim, Color Ink, Color Tick,
     Color BezelLit, Color BezelMid, Color BezelDark,
-    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep)
+    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm)
 {
     /// <summary>日面：白表盘 + 木边框（照着用户给的那张实物挂钟照片调的）。</summary>
     public static readonly DialPalette Light = new(
@@ -26,7 +26,9 @@ public sealed record DialPalette(
         OffTask: Color.FromRgb(0xD6, 0x45, 0x3F),
         Commit: Color.FromRgb(0x8A, 0x94, 0xA0),      // 灰色承诺弧。⚠️ 不能省（DECISIONS D3）
         Break: Color.FromRgb(0x7F, 0xB2, 0xDD),       // 淡蓝休息块
-        Sweep: Color.FromRgb(0x33, 0x40, 0x4B));
+        Sweep: Color.FromRgb(0x33, 0x40, 0x4B),
+        // 闹钟黄针：老式闹钟那种暖黄。比分针短、比时针粗
+        Alarm: Color.FromRgb(0xF0, 0xC0, 0x40));
 
     /// <summary>
     /// 夜面。⚠️ <see cref="Break"/> **单独调亮一档**（DECISIONS D4）：
@@ -45,5 +47,6 @@ public sealed record DialPalette(
         OffTask: Color.FromRgb(0xE9, 0x63, 0x5C),
         Commit: Color.FromRgb(0x6E, 0x7A, 0x87),
         Break: Color.FromRgb(0x8F, 0xC4, 0xEE),       // 比日面亮一档，见 D4
-        Sweep: Color.FromRgb(0xB8, 0xC4, 0xD0));
+        Sweep: Color.FromRgb(0xB8, 0xC4, 0xD0),
+        Alarm: Color.FromRgb(0xF5, 0xD0, 0x50));
 }
