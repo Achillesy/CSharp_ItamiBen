@@ -87,10 +87,10 @@ program. Drag it **by the dial** (the draggable area is the circle, not the squa
 
 ### A smaller window, and seeing through it
 
-Drop a `layout.json` next to your rules:
+Two keys at the top level of `rules.json`:
 
 ```json
-{ "layout": "compact", "opacity": 75 }
+{ "Groups": { ... }, "layout": "compact", "opacity": 75 }
 ```
 
 `layout` is `standard` (380 px wide) or `compact` (292 px). `opacity` is 0–100 and applies
@@ -108,13 +108,12 @@ All under `~/Library/Application Support/ItamiBen/` (macOS) or `%APPDATA%\ItamiB
 |---|---|
 | `rules.json` | **you.** The program only ever reads it. A default ships inside the app. |
 | `alarms.cron` | **you.** Optional. Re-read once a minute. |
-| `layout.json` | **you.** Optional. Read once at startup. |
 | `samples.db` | the program. Observations, rounds, events, settings **and the hours ledger**. |
 | `itamiben.log` | the program. Only what could not reach the database; normally empty. |
 
-Comments and trailing commas are allowed in the three files you write.
+Comments and trailing commas are allowed in the two files you write.
 
-The split is the point: **three files you write, one database the program writes, and a log
+The split is the point: **two files you write, one database the program writes, and a log
 that stays empty.** Sounds, window position, alarm time and the per-goal hours used to live
 in a `settings.json` and a `during.json`; they are rows in `samples.db` now, because you
 never hand-edited them and one fewer file is one fewer thing to keep consistent. Existing

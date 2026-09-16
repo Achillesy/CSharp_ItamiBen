@@ -293,6 +293,15 @@ public partial class MainWindow : Window
             _rulesError = $"{Path.GetFileName(path)}: {e.Message}";
             Events.Error("rules", $"Failed to load {path}", e);
         }
+
+        // 档位和透明度跟规则写在同一份文件里（I14），一次读完一起装上
+        WindowLayout.Bind(_rules);
+
+        // ⚠️ **作废的 layout.json 还在就要吭一声**：它还在，说明用户以为它还管用，
+        //    而「改了没反应」正是这个项目最恨的那类失败。
+        if (File.Exists(Path.Combine(AppData.Dir, WindowLayout.RetiredFileName)))
+            Events.Warn("config", $"{WindowLayout.RetiredFileName} is no longer read — "
+                                + "move its \"layout\" / \"opacity\" into rules.json");
     }
 
     /// <summary>

@@ -51,6 +51,27 @@ public sealed class RulesFile
     /// </summary>
     [JsonConverter(typeof(CommandTableConverter))]
     public Dictionary<string, IReadOnlyList<string>>? ExecuteCommand { get; init; }
+
+    /// <summary>
+    /// 窗口档位：<c>standard</c>（默认）或 <c>compact</c>。
+    ///
+    /// ⚠️ 2026-09-16 从单独的 `layout.json` 并进来（DECISIONS I14）：**少一个要手写的文件**。
+    /// 它必须长在这个类上、跟着同一个解析器走——v3 的 §15.4 就是同一份文件两条读取路径，
+    /// 咬了两次，症状都是半个文件安静地失效。
+    /// </summary>
+    [JsonPropertyName("layout")]
+    public string? Layout { get; init; }
+
+    /// <summary>
+    /// 不透明度百分数。
+    ///
+    /// ⚠️ 声明成 <see cref="JsonElement"/> 而不是 <c>double?</c>，是为了**一个字段写错
+    /// 不牵连另一个字段**：这是份手写 JSON，有人写成 <c>"50"</c>（带引号）完全可能；
+    /// 声明成 <c>double?</c> 的话整份反序列化当场抛，连 `Groups` 都跟着丢了——
+    /// 那就成了「改了个外观开关，所有目标都不见了」。
+    /// </summary>
+    [JsonPropertyName("opacity")]
+    public JsonElement? Opacity { get; init; }
 }
 
 /// <summary>
@@ -114,10 +135,13 @@ public sealed class GoalRules
     };
 
     private GoalRules(IReadOnlyList<CompiledGroup> groups,
-                      IReadOnlyDictionary<string, IReadOnlyList<string>> commands)
+                      IReadOnlyDictionary<string, IReadOnlyList<string>> commands,
+                      string? layout, double? opacityPercent)
     {
         _groups = groups;
         _commands = commands;
+        LayoutName = layout;
+        OpacityPercent = opacityPercent;
     }
 
     /// <summary>
@@ -132,7 +156,7 @@ public sealed class GoalRules
         => CommandsFor(OperatingSystem.IsWindows() ? "windows" : "macos").FirstOrDefault();
 
     /// <summary>空规则——一个目标都没有。界面在还没有 rules.json 时用它顶着。</summary>
-    public static GoalRules Empty { get; } = new([], new Dictionary<string, IReadOnlyList<string>>());
+    public static GoalRules Empty { get; } = new([], new Dictionary<string, IReadOnlyList<string>>(), null, null);
 
     public static GoalRules Parse(string json)
     {
@@ -159,7 +183,31 @@ public sealed class GoalRules
         }
 
         return new GoalRules(groups,
-            file.ExecuteCommand ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase));
+            file.ExecuteCommand ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase),
+            file.Layout, ReadPercent(file.Opacity));
+    }
+
+    /// <summary>`layout` 那个词，原样给出来——怎么解释是界面层的事。</summary>
+    public string? LayoutName { get; }
+
+    /// <summary>
+    /// `opacity` 那个百分数。写了个认不出的东西（对象、布尔、乱码）就是 null，
+    /// **不抛也不猜**——调用方拿 null 当「没写」处理。
+    /// </summary>
+    public double? OpacityPercent { get; }
+
+    private static double? ReadPercent(JsonElement? raw)
+    {
+        if (raw is not { } e) return null;
+        return e.ValueKind switch
+        {
+            JsonValueKind.Number when e.TryGetDouble(out var n) => n,
+            // 手写文件里 "50" 带引号太常见了，认它
+            JsonValueKind.String when double.TryParse(e.GetString(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var s) => s,
+            _ => null,
+        };
     }
 
     private static Regex? Compile(string? pattern, string where)

@@ -1,7 +1,5 @@
 using Avalonia;
-using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using ItamiBen.Core;
 
 namespace ItamiBen.App;
 
@@ -36,23 +34,29 @@ public sealed record LayoutMetrics(
     int BannerMaxLines, double BannerMaxWidth, Thickness DominoMargin);
 
 /// <summary>
-/// 窗口外观的开关，放在运行时目录的 <c>layout.json</c>。从 v3 搬过来（它的 K25）。
+/// 窗口外观的开关。**写在 `rules.json` 的顶层**（2026-09-16 从单独的 `layout.json`
+/// 并进来，DECISIONS I14）：
 ///
 /// <code>
-/// { "layout": "compact", "opacity": 75 }
+/// { "Groups": { ... }, "layout": "compact", "opacity": 75 }
 /// </code>
 ///
-/// ⚠️ **这是用户手写的 JSON，程序只读不写**，所以解析必须跟 `rules.json` 同一套三件套
-/// （注释 / 尾逗号 / 键名大小写不敏感）——少一个就是「写了注释就静默失效」那类事故。
+/// ⚠️ **这个类自己不读文件、不解析 JSON**：值由 <see cref="GoalRules"/> 一起读出来，
+/// 这里只负责**怎么解释**。一份文件一个解析器——v3 的 §15.4 就是同一份文件两条读取
+/// 路径，咬了两次，症状都是半个文件安静地失效。
 ///
-/// ⚠️ **别搬进 `settings.json`**：那个文件程序随时整份重写，手改会被下一次写盘覆盖掉。
+/// ⚠️ **别搬进设置表**：那是程序写、用户只看的地方（I12），而这两个值用户要手改。
 ///
 /// ⚠️ **只在启动时读一次，运行中改了不生效**——这是用户要的语义，也顺带免掉了
 /// 「运行中换档要重新夹回屏幕、提示条正显示着怎么办」的一整类边界情况。
 /// </summary>
 public static class WindowLayout
 {
-    public const string FileName = "layout.json";
+    /// <summary>
+    /// 作废的那个文件名。留着只为**提醒**：它还在的话说明用户以为它还管用，
+    /// 而「改了没反应」正是这个项目最恨的那类失败——所以启动时要吭一声。
+    /// </summary>
+    public const string RetiredFileName = "layout.json";
 
     /// <summary>不透明度的下限。再低就只剩一团看不清的影子了。</summary>
     public const double MinOpacityPercent = 10;
@@ -83,102 +87,38 @@ public static class WindowLayout
         BannerMaxLines: 1, BannerMaxWidth: 220,
         DominoMargin: new Thickness(0, 8, 0, -2));
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-        PropertyNameCaseInsensitive = true,
-    };
-
-    private sealed class LayoutFile
-    {
-        [JsonPropertyName("layout")] public string? Layout { get; set; }
-
-        /// <summary>
-        /// ⚠️ 声明成 <see cref="JsonElement"/> 而不是 <c>double?</c>，是为了**一个字段
-        /// 写错不牵连另一个字段**：这是份手写 JSON，有人把它写成 <c>"50"</c>（带引号）
-        /// 完全可能；声明成 <c>double?</c> 的话反序列化整个抛异常，连 <c>layout</c>
-        /// 那一档也跟着丢了。现在数字和数字字符串都认，别的类型安静退回默认值。
-        /// </summary>
-        [JsonPropertyName("opacity")] public JsonElement? Opacity { get; set; }
-    }
-
     public sealed record LayoutSettings(LayoutMode Mode, double Opacity);
 
     /// <summary>
-    /// **文件只读一次**，档位和透明度一起出来——不是两个 Lazy 各读一遍。
+    /// 启动时装一次，之后全程不变。
     ///
-    /// 用 <see cref="Lazy{T}"/> 而不是字段初始化器：后者会在**类型初始化**时就去碰
-    /// 文件系统和日志，那样单元测试碰一下任何静态成员都会被拖下水。
+    /// ⚠️ **不用 `Lazy` 也不用字段初始化器**：那两种写法会在**类型初始化**那一刻就去碰
+    /// 文件和日志，单元测试碰一下任何静态成员都被拖下水。现在它就是个普通的值，
+    /// 谁装谁负责。
     /// </summary>
-    private static readonly Lazy<LayoutSettings> LazyFile = new(Load);
+    private static LayoutSettings _current = new(LayoutMode.Standard, DefaultOpacity);
 
-    public static LayoutMode Mode => LazyFile.Value.Mode;
+    /// <summary>规则读出来之后装上去。**一次启动只该调一次。**</summary>
+    public static void Bind(GoalRules rules)
+        => _current = new LayoutSettings(ModeOf(rules.LayoutName), OpacityOf(rules.OpacityPercent));
+
+    public static LayoutMode Mode => _current.Mode;
 
     /// <summary>这一次启动的不透明度（0~1）。</summary>
-    public static double Opacity => LazyFile.Value.Opacity;
+    public static double Opacity => _current.Opacity;
 
     public static LayoutMetrics Current => Mode == LayoutMode.Compact ? Compact : Standard;
 
-    private static LayoutSettings Load()
-    {
-        var path = Path.Combine(AppData.Dir, FileName);
-        try
-        {
-            var exists = File.Exists(path);
-            var text = exists ? File.ReadAllText(path) : null;
-            var settings = new LayoutSettings(ParseMode(text), ParseOpacity(text));
-
-            return settings;
-        }
-        catch (Exception e)
-        {
-            // 读不到就用标准档 + 默认透明度——**绝不因为一个可选的外观开关起不来**
-            Events.Error("config", $"Failed to read {path}; using the standard layout", e);
-            return new LayoutSettings(LayoutMode.Standard, DefaultOpacity);
-        }
-    }
-
-    /// <summary>认不出的一律标准档。**纯函数，文件读取在外面**，所以能测。</summary>
-    public static LayoutMode ParseMode(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return LayoutMode.Standard;
-        try
-        {
-            var value = JsonSerializer.Deserialize<LayoutFile>(json, JsonOpts)?.Layout;
-            return string.Equals(value, "compact", StringComparison.OrdinalIgnoreCase)
-                ? LayoutMode.Compact : LayoutMode.Standard;
-        }
-        catch (JsonException) { return LayoutMode.Standard; }
-    }
+    /// <summary>认不出的一律标准档。</summary>
+    public static LayoutMode ModeOf(string? name)
+        => string.Equals(name, "compact", StringComparison.OrdinalIgnoreCase)
+            ? LayoutMode.Compact : LayoutMode.Standard;
 
     /// <summary>
     /// 认那个百分数。**不在 10~100 里、没写、写成别的类型——一律
     /// <see cref="DefaultOpacityPercent"/>**（不夹到边界，理由见那里）。
     /// </summary>
-    public static double ParseOpacity(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return DefaultOpacity;
-        try { return FromPercent(JsonSerializer.Deserialize<LayoutFile>(json, JsonOpts)?.Opacity); }
-        catch (JsonException) { return DefaultOpacity; }
-    }
-
-    private static double FromPercent(JsonElement? raw)
-    {
-        if (raw is not { } e) return DefaultOpacity;
-
-        double pct;
-        switch (e.ValueKind)
-        {
-            case JsonValueKind.Number when e.TryGetDouble(out pct):
-                break;
-            case JsonValueKind.String when double.TryParse(
-                    e.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out pct):
-                break;
-            default:
-                return DefaultOpacity;
-        }
-
-        return pct >= MinOpacityPercent && pct <= MaxOpacityPercent ? pct / 100.0 : DefaultOpacity;
-    }
+    public static double OpacityOf(double? percent)
+        => percent is { } p && p >= MinOpacityPercent && p <= MaxOpacityPercent
+            ? p / 100.0 : DefaultOpacity;
 }

@@ -138,3 +138,63 @@ public class GoalRulesTests
         Assert.True(rules.Matches("编程", "Code", ""));
     }
 }
+
+/// <summary>
+/// `rules.json` 里那两个外观开关（2026-09-16 从 layout.json 并进来，DECISIONS I14）。
+///
+/// ⚠️ 要紧的不是「读得对」，是**读错一个字段不能把整份规则带走**：
+/// 这是用户手写的文件，而目标列表就在同一份文件里。
+/// </summary>
+public class RulesLayoutTests
+{
+    [Fact]
+    public void 档位和透明度跟规则写在同一份文件里()
+    {
+        var r = GoalRules.Parse("""
+            {
+              // 上个月调的
+              "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } },
+              "LAYOUT": "compact",
+              "Opacity": 40,
+            }
+            """);
+
+        // ⚠️ 手写文件的三件套（注释 / 尾逗号 / 键名大小写）少认一样，
+        //    就是「写了注释就静默失效」那类事故
+        Assert.Equal("compact", r.LayoutName);
+        Assert.Equal(40, r.OpacityPercent);
+        Assert.Equal(["编程"], r.SelectableGoals);
+    }
+
+    [Fact]
+    public void 带引号的数字也认()
+        // 手写 JSON，写成 "50" 完全可能
+        => Assert.Equal(50, GoalRules.Parse("""{ "Groups": {}, "opacity": "50" }""").OpacityPercent);
+
+    [Fact]
+    public void 透明度写错不牵连档位也不牵连目标()
+    {
+        // ⚠️ 这就是 opacity 声明成 JsonElement 而不是 double? 的全部理由：
+        //    声明成 double? 的话整份反序列化当场抛，**连 Groups 都跟着丢**——
+        //    那就成了「改了个外观开关，所有目标都不见了」
+        var r = GoalRules.Parse("""
+            {
+              "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } },
+              "layout": "compact",
+              "opacity": "写错了"
+            }
+            """);
+
+        Assert.Null(r.OpacityPercent);
+        Assert.Equal("compact", r.LayoutName);
+        Assert.Equal(["编程"], r.SelectableGoals);
+    }
+
+    [Fact]
+    public void 两个都没写就是没写()
+    {
+        var r = GoalRules.Parse("""{ "Groups": {} }""");
+        Assert.Null(r.LayoutName);
+        Assert.Null(r.OpacityPercent);
+    }
+}
