@@ -66,6 +66,12 @@ public partial class MainWindow : Window
 
     private long _lastMinute = -1;
 
+    /// <summary>
+    /// 上一次重建时算出来的离开区间条数。
+    /// **用来分辨「对账对不上」的两种原因**——见 <see cref="Rebuild"/> 里那段。
+    /// </summary>
+    private int _lastAwaySpans;
+
     /// <summary>alarms.cron，每分钟重读一次——用户手写的文件，改完不该还要重启。</summary>
     private IReadOnlyList<CronEntry> _alarms = [];
 
@@ -340,7 +346,11 @@ public partial class MainWindow : Window
     ///
     /// 顺带对一次账：实时那条路和重建这条路应该算出同一个数，不一样就说明库没写进去。
     /// </summary>
-    private void Rebuild(DateTimeOffset now)
+    /// <param name="compare">
+    /// 跟当前这个环对一次账。⚠️ **恢复那条路要传 false**：那时手里的环是刚构造出来的
+    /// 空壳，跟重建结果必然不同，对账只会吐出一条假警告。
+    /// </param>
+    private void Rebuild(DateTimeOffset now, bool compare = true)
     {
         if (_round is not { } live || _store is null) return;
 
@@ -358,9 +368,25 @@ public partial class MainWindow : Window
                 rebuilt.Observe(o.At, o.App, o.Title, away.Covers(o.At));
             rebuilt.Advance(now);
 
-            if (rebuilt.FocusedSeconds != live.FocusedSeconds)
-                Log.Warn($"rebuild mismatch: live={live.FocusedSeconds}s db={rebuilt.FocusedSeconds}s "
-                       + "— 说明有秒没写进库");
+            // ⚠️ **对不上有两种完全不同的原因，别混成一条警告**（2026-09-16 实机撞到）：
+            //
+            //   ① 离开区间**新增**了一条 ⇒ 跨过 180 秒门槛，前面那最多 179 秒被追认成
+            //      「人不在」。实时那条路当时把它们记成了专注（idle 还没到门槛），
+            //      重建把它们拿掉——**这是设计本身，不是错**；
+            //   ② 区间条数没变却仍然对不上 ⇒ 真的有秒没写进库，那才是要查的。
+            //
+            // 头一版把两者都打成 "有秒没写进库"，实机第一次跨门槛就报了一条假警告
+            // （live=532 → db=353，正好 179 秒）。**一个会说谎的自检比没有自检更糟。**
+            if (compare && rebuilt.FocusedSeconds != live.FocusedSeconds)
+            {
+                if (away.Spans.Count > _lastAwaySpans)
+                    Log.Line($"retroactive away: focused {live.FocusedSeconds}s → {rebuilt.FocusedSeconds}s "
+                           + $"（跨过门槛，之前那段被追认成离开；away={away.Spans.Count}）");
+                else
+                    Log.Warn($"rebuild mismatch: live={live.FocusedSeconds}s db={rebuilt.FocusedSeconds}s "
+                           + "— 区间条数没变却对不上，说明真的有秒没写进库");
+            }
+            _lastAwaySpans = away.Spans.Count;
 
             Log.Line($"rebuilt from db: minute={rebuilt.CurrentMinute,-4} focused={rebuilt.FocusedSeconds,-5} "
                    + $"slack={rebuilt.SlackSeconds,-5} rows={rows.Count,-5} away={away.Spans.Count} "
@@ -408,7 +434,8 @@ public partial class MainWindow : Window
 
         _written = false;
         _lastRebuiltMinute = -1;
-        Rebuild(DateTimeOffset.Now);          // 从 sample 重放 + 补最后一段
+        _lastAwaySpans = 0;
+        Rebuild(DateTimeOffset.Now, compare: false);   // 从 sample 重放 + 补最后一段
 
         foreach (var b in _goalBoxes) b.IsChecked = rec.Goals.Contains((string)b.Content!);
         _focusMinutes = rec.FocusMinutes;
@@ -484,6 +511,11 @@ public partial class MainWindow : Window
 
         _alarm.Bump(direction * notches * step * AlarmClock.SlotMinutes, now);
         _alarmQuietUntil = now.AddSeconds(2);
+
+        // ⚠️ 拨针要留痕：它的后果（响铃）可能几小时后才发作，到时候「这闹钟哪来的」
+        //    完全无从查起。2026-09-16 实测就撞上一次——日志里只有 `alarm fired`，
+        //    查不出是谁把它从 15:32 拨到 10:22 的
+        Log.Line($"alarm set to {_alarm.FireAt:yyyy-MM-dd HH:mm} (wheel {direction * notches * step:+#;-#;0} min)");
         e.Handled = true;
         UpdateUi();
     }
@@ -534,6 +566,7 @@ public partial class MainWindow : Window
         _round = new Round(DateTimeOffset.Now, _focusMinutes, goals, _rules);
         _written = false;
         _lastRebuiltMinute = -1;
+        _lastAwaySpans = 0;
         _store?.BeginRound(_round.StartedAt, _round.FocusMinutes, _round.Goals);
         Log.Line($"round started: focus={_focusMinutes}min break={_round.BreakMinutes}min "
                + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goals={string.Join("/", goals)}");
