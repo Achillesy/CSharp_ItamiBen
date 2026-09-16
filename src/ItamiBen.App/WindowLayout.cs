@@ -26,6 +26,10 @@ public enum LayoutMode { Standard, Compact }
 ///
 /// ⚠️ 紧凑档的**上**边距特意放大到 8（标准档 2）：提示条跟骨牌叠在同一格里，
 /// 紧凑档只让排一行，得给它留出高度。
+///
+/// ⚠️ 两档的下边距**出处不同，别去「统一」它们**：标准档的 −4 是 v3 定的、v3 上验过；
+/// 紧凑档的 −2 是用户 2026-09-16 对着 v4 的窗口现场调的（v3 那边是 −3，他看下来还是
+/// 陷得深了一点）。哪档改动哪档，不要为了看起来整齐去动没人验过的那一档。
 /// </param>
 public sealed record LayoutMetrics(
     double WindowWidth, double DialHeight, double DominoHeight,
@@ -77,7 +81,7 @@ public static class WindowLayout
     private static readonly LayoutMetrics Compact = new(
         WindowWidth: 292, DialHeight: 256, DominoHeight: 56,
         BannerMaxLines: 1, BannerMaxWidth: 220,
-        DominoMargin: new Thickness(0, 8, 0, -3));
+        DominoMargin: new Thickness(0, 8, 0, -2));
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
