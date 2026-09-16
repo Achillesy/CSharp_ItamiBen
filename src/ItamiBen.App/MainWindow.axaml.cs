@@ -67,6 +67,9 @@ public partial class MainWindow : Window
 
     private long _lastMinute = -1;
 
+    /// <summary>上一次响滴答的那一秒（绝对秒序号）。</summary>
+    private long _lastTickSecond = -1;
+
     /// <summary>
     /// 上一次重建时算出来的离开区间条数。
     /// **用来分辨「对账对不上」的两种原因**——见 <see cref="Rebuild"/> 里那段。
@@ -90,6 +93,7 @@ public partial class MainWindow : Window
     /// （菜单只构造一次，不会自己更新）。图钉那项还要跟右上角的图标**联动**。
     /// </summary>
     private MenuItem? _pinItem;
+    private MenuItem? _tickItem;
     private MenuItem? _closeItem;
 
     /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
@@ -278,6 +282,12 @@ public partial class MainWindow : Window
         pin.Content = ChromeIcons.Pin(_settings.Pinned, palette);
         pin.Classes.Set("on", _settings.Pinned);
 
+        var tick = this.FindControl<Button>("TickBtn")!;
+        tick.Content = ChromeIcons.Speaker(_settings.TickEnabled, palette);
+        tick.Classes.Set("on", _settings.TickEnabled);
+
+        if (_tickItem is not null) _tickItem.IsChecked = _settings.TickEnabled;
+
         this.FindControl<Button>("ThemeBtn")!.Content = ChromeIcons.Theme(dark, palette);
 
         if (_pinItem is not null) _pinItem.IsChecked = _settings.Pinned;
@@ -293,6 +303,21 @@ public partial class MainWindow : Window
     {
         _settings.Pinned = pinned;
         Topmost = pinned;
+        ApplyChrome();
+    }
+
+    /// <summary>
+    /// 滴答的**唯一入口**——喇叭图标、菜单项、设置一次全对齐。
+    ///
+    /// ⚠️ **`Tick.Stop()` 只能挂在这里，绝不能放进 <see cref="ApplyChrome"/>**（v3 的 E13）：
+    /// Windows 上它是 `PlaySound(null)`，停的是**本进程在 winmm 单通道上正在放的任何东西**
+    /// ——包括正在响的闹钟。而 `ApplyChrome` 有好几个调用点（换主题、点图钉），
+    /// 放进去就等于「点一下图钉把正在响的闹钟掐了」。
+    /// </summary>
+    private void SetTicking(bool on)
+    {
+        _settings.TickEnabled = on;
+        if (!on) Tick.Stop();
         ApplyChrome();
     }
 
@@ -349,7 +374,12 @@ public partial class MainWindow : Window
         _pinItem = new MenuItem { Header = "Keep on top", ToggleType = MenuItemToggleType.CheckBox };
         _pinItem.Click += (_, _) => SetPinned(!_settings.Pinned);
 
-        dial.ContextMenu = new ContextMenu { ItemsSource = new[] { _pinItem, close } };
+        _tickItem = new MenuItem { Header = "Ticking", ToggleType = MenuItemToggleType.CheckBox };
+        _tickItem.Click += (_, _) => SetTicking(!_settings.TickEnabled);
+
+        dial.ContextMenu = new ContextMenu { ItemsSource = new[] { _tickItem, _pinItem, close } };
+
+        this.FindControl<Button>("TickBtn")!.Click += (_, _) => SetTicking(!_settings.TickEnabled);
 
         this.FindControl<Button>("PinBtn")!.Click += (_, _) => SetPinned(!_settings.Pinned);
         this.FindControl<Button>("ThemeBtn")!.Click += (_, _) =>
@@ -437,6 +467,14 @@ public partial class MainWindow : Window
         {
             _lastMinute = MinuteOf(s.At);
             OnMinute(s.At.LocalDateTime);
+        }
+
+        // 滴答：一秒一下。**一直响，不是跑偏才响**——后者是提示音，跟 D1 冲突
+        var second = s.At.ToUnixTimeSeconds();
+        if (_settings.TickEnabled && second != _lastTickSecond)
+        {
+            _lastTickSecond = second;
+            Tick.Play(s.At.Second, _settings.TickVolume);
         }
 
         CheckAlarm();

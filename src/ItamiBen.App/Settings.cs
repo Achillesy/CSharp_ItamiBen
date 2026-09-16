@@ -38,6 +38,16 @@ public sealed class Settings
     [JsonPropertyName("darkTheme")]
     public bool? DarkTheme { get; set; }
 
+    /// <summary>
+    /// 滴答声开着没有。
+    /// ⚠️ **v4 只有「一直响」这一种**（环境音）；v3 那种「跑偏才响」是提示音，
+    /// 跟 D1 / E4 冲突，没搬。
+    /// </summary>
+    [JsonPropertyName("tickEnabled")] public bool TickEnabled { get; set; }
+
+    /// <summary>滴答音量 0~100。音色是合成的，没有可挑的（见 <see cref="Platform.Tick"/>）。</summary>
+    [JsonPropertyName("tickVolume")] public int TickVolume { get; set; } = 35;
+
     /// <summary>窗口是不是一直压在最上面。默认**开**——它是一只挂钟，挡住了就没用了。</summary>
     [JsonPropertyName("pinned")]
     public bool Pinned { get; set; } = true;

@@ -36,13 +36,15 @@ internal static class MacAudio
     [DllImport(AudioToolbox)]
     private static extern void AudioServicesPlaySystemSound(uint soundId);
 
+    [DllImport(AudioToolbox)]
+    private static extern int AudioServicesDisposeSystemSoundID(uint soundId);
+
     /// <summary>
     /// 路径 → SystemSoundID。**建一次留着**：创建那一步会把整个文件读进来解码，
     /// 每次重建就是每次读盘。可选的系统音只有十几个，这个缓存不会长大。
     ///
-    /// ⚠️ v3 还有一个 `Forget(path)`，是给「音量变了要重建 SoundID」用的
-    /// （SystemSoundID 在创建那一刻就把音频数据吃进去了）。v4 没有音量功能，
-    /// 没有调用方，**就不搬**——留着没人调的代码等于留一个会慢慢失真的说明。
+    /// ⚠️ 2026-09-16 搬滴答声时把 <see cref="Forget"/> 补回来了——那时才有了调用方。
+    /// 这正是「有调用方才搬」那条纪律该有的用法（DECISIONS E5）。
     /// </summary>
     private static readonly Dictionary<string, uint> Ids = [];
     private static readonly Lock Gate = new();
@@ -70,6 +72,21 @@ internal static class MacAudio
         catch (Exception e)
         {
             Log.Error($"Playback failed: {path}", e);
+        }
+    }
+
+    /// <summary>
+    /// 忘掉某个文件已经建好的 SoundID。
+    ///
+    /// ⚠️ **音量一变就必须调它**：SystemSoundID 在**创建那一刻**就把音频数据吃进去了，
+    /// 之后覆盖同名文件毫无效果——症状是拖音量滑块什么都不发生，永远按老音量响。
+    /// </summary>
+    public static void Forget(string path)
+    {
+        lock (Gate)
+        {
+            if (!Ids.Remove(path, out var id)) return;
+            try { AudioServicesDisposeSystemSoundID(id); } catch { /* 释放失败无所谓 */ }
         }
     }
 

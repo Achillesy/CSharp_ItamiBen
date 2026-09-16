@@ -51,6 +51,37 @@ public static class ChromeIcons
     private const double Box = 16;
 
     /// <summary>
+    /// 喇叭（滴答声）。**开着是两道声波，关着是一道斜杠**——所有人都把划掉的喇叭读成静音，
+    /// 没有歧义。
+    /// </summary>
+    public static Control Speaker(bool on, DialPalette? palette = null)
+    {
+        var (ink, halo) = Pens(palette);
+
+        // 箱体（左边那个小方块）+ 号角（向右张开的梯形），一笔画完
+        var geo = Geometry.Parse("M 2,6 L 5,6 L 9,2.5 L 9,13.5 L 5,10 L 2,10 Z");
+        var canvas = new Canvas { Width = Box, Height = Box };
+
+        // ⚠️ 光晕和填充必须是**两个分开的 Path**，不能在同一个 Path 上同时设 Fill 和
+        //    Stroke——那样描边会描在填充**之上**，啃掉半圈填充的边缘。
+        canvas.Children.Add(new Path { Data = geo, Stroke = halo, StrokeThickness = 1.6, StrokeJoin = PenLineJoin.Round });
+        canvas.Children.Add(new Path { Data = geo, Fill = ink });
+
+        if (on)
+        {
+            // 两道声波，半径拉开一档才读得出是「正在响」而不是「一个圈」
+            AddStroke(canvas, "M 11,5.5 A 4,4 0 0 1 11,10.5", 1.4, ink, halo);
+            AddStroke(canvas, "M 12.8,3.4 A 7,7 0 0 1 12.8,12.6", 1.4, ink, halo);
+        }
+        else
+        {
+            AddStroke(canvas, "M 11,4 L 15,12", 1.6, ink, halo);
+        }
+
+        return canvas;
+    }
+
+    /// <summary>
     /// 图钉。竖着扎进去的那种：圆头 + 杆，**开着填实、关着只留轮廓**。
     /// </summary>
     public static Control Pin(bool on, DialPalette? palette = null)
