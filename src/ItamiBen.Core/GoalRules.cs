@@ -96,8 +96,7 @@ internal sealed class CommandTableConverter : JsonConverter<Dictionary<string, I
 /// 编译好的规则。纯逻辑，不碰时间也不碰网络。
 ///
 /// 它只回答一个问题：**这个 (app, title) 命中那个目标吗？** 判定的其余部分
-/// （命中算 Focused、自身豁免、读不到 app 算没采到）在 <see cref="Judgment"/> 里，
-/// 这个类不掺和。
+/// （人不在压过一切、读不到 app 算没采到）在 <see cref="Judgment"/> 里，这个类不掺和。
 /// </summary>
 public sealed class GoalRules
 {

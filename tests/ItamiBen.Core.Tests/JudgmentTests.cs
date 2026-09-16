@@ -45,20 +45,23 @@ public class JudgmentTests
     [Theory]
     [InlineData("ItamiBen")]        // macOS 的 localizedName
     [InlineData("ItamiBen.exe")]    // Windows 的进程名
-    public void 前台是自己这一秒等于没采(string self)
+    public void 前台是自己没有任何特例(string self)
     {
+        // 2026-09-16 用户拍板删掉自身豁免（C9）：盯着自己的钟面就是跑偏，
+        // 跟盯着别的什么一样。这条测试守着「别又把特例加回来」。
         var j = Judgment.Judge(self, "ItamiBen", false, 编程, TestRules.Rules);
-        Assert.Equal(SecondOutcome.SelfExempt, j.Outcome);
-        Assert.False(j.Sampled);
+        Assert.Equal(SecondOutcome.OffTask, j.Outcome);
+        Assert.True(j.Sampled);
     }
 
     [Fact]
-    public void 自身豁免压过用户写的规则()
+    public void 想让盯钟面算专注就自己写条规则()
     {
-        // 用户偏要写一条匹配 ItamiBen 的规则：盯着钟面也换不来一秒专注
+        // 删掉硬编码豁免之后，这件事回到 rules.json 里——是配置，不是特例（v3 的做法）
         var rules = GoalRules.Parse("""{ "Groups": { "刷钟面": { "Rules": [ { "App": "^ItamiBen" } ] } } }""");
         var j = Judgment.Judge("ItamiBen", "", false, ["刷钟面"], rules);
-        Assert.Equal(SecondOutcome.SelfExempt, j.Outcome);
+        Assert.Equal(SecondOutcome.Focused, j.Outcome);
+        Assert.Equal("刷钟面", j.Goal);
     }
 
     [Fact]
@@ -79,9 +82,9 @@ public class JudgmentTests
     }
 
     [Fact]
-    public void 人不在也压过自身豁免和读不到()
+    public void 人不在压过读不到和前台是自己()
     {
-        // 三者都落进「这一秒等于没采」，分开只为了日志里看得出原因
+        // Away 排在最前面：连「前台是 ItamiBen 自己」都盖过去
         Assert.Equal(SecondOutcome.Away, Judgment.Judge("ItamiBen", "", true, 编程, TestRules.Rules).Outcome);
         Assert.Equal(SecondOutcome.Away, Judgment.Judge("", "", true, 编程, TestRules.Rules).Outcome);
     }

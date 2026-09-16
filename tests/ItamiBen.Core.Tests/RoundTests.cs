@@ -63,24 +63,33 @@ public class RoundTests
     }
 
     [Fact]
-    public void 自身豁免的秒两个计数都不加()
+    public void 盯着自己的钟面记成跑偏()
     {
+        // 2026-09-16 删掉自身豁免（C9）之前这里是「两个计数都不加」。
+        // 现在它跟别的 app 一样进 sampled、不进 focused，格子照样画红。
         var r = NewRound();
         Work(r, 0, 10, "ItamiBen", "ItamiBen");
 
-        Assert.Equal(0, r.Cell(0).SampledSeconds);
+        Assert.Equal(10, r.Cell(0).SampledSeconds);
         Assert.Equal(0, r.Cell(0).FocusedSeconds);
+        Assert.Equal(10, r.Cell(0).OffTaskSeconds);
         Assert.Equal(0, r.FocusedSeconds);
     }
 
     [Fact]
-    public void 盯着钟面看也吃余量只是不被判跑偏()
+    public void 跑偏和没采到吃余量的方式一样()
     {
-        // 「不冤枉人」跟「不占环上的格子」是两回事——后者没有例外
-        var r = NewRound();
-        Work(r, 0, 60, "ItamiBen", "ItamiBen");
-        Assert.Equal(0, r.Cell(0).OffTaskSeconds);
-        Assert.Equal(60, r.WastedSeconds);
+        // 余量只认「走过的秒 − 专注的秒」，不认这一秒是怎么没的——
+        // 这正是删掉自身豁免之后代价不变的原因：变的只有格子的颜色
+        var red = NewRound();
+        Work(red, 0, 60, "ItamiBen", "ItamiBen");
+        var blank = NewRound();
+        Work(blank, 0, 60, "", "");
+
+        Assert.Equal(60, red.Cell(0).OffTaskSeconds);
+        Assert.Equal(0, blank.Cell(0).OffTaskSeconds);
+        Assert.Equal(60, red.WastedSeconds);
+        Assert.Equal(60, blank.WastedSeconds);
     }
 
     [Fact]

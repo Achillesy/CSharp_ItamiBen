@@ -4,7 +4,9 @@
              Name="ItamiBen"
              RequestedThemeVariant="Default">
 
-  <!-- ⚠️ Name="ItamiBen" 跟 csproj 的 AssemblyName 一样是承重的：自身豁免靠它。 -->
+  <!-- ⚠️ Name="ItamiBen" 跟 csproj 的 AssemblyName 要一致：不设的话 macOS 上会报成
+       「Avalonia Application」——一个所有 Avalonia 程序共用的名字，写进 samples.db
+       就分不清是谁了。 -->
 
   <Application.Styles>
     <FluentTheme />
