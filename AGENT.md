@@ -27,11 +27,11 @@ UPDATE config SET version = version + 1, changed_at = unixepoch(), note = 'what 
 ItamiBen checks that number once a minute and reloads. **Without this the user sees no
 effect until they restart**, decides your change did not work, and asks you to do it again.
 
-**2. Append what you did to `applied-sql.log`**, in the same folder as the database:
+**2. Append what you did to `itamiben.log`**, in the same folder as the database:
 
 ```
 ────────────────────────────────────────────────────────
-2026-09-16 18:09:31  OK  1 row(s)
+2026-09-16 18:09:31  applied  OK  1 row(s)
 asked: move tonight's reminder an hour earlier
 
 UPDATE schedule SET cron = '0 20 * * 3' WHERE cron = '0 21 * * 3';
@@ -45,7 +45,8 @@ write it, you did.
 ⚠️ **Append, never rewrite.** And keep the user's own words next to your statements: with
 only the SQL, nobody can tell whether you understood what they asked for.
 
-⚠️ It is a plain text file on purpose — no SQL can reach it, not even by mistake.
+⚠️ It is a plain text file on purpose — no SQL can reach it, not even by mistake, and it is
+still readable when the database itself is the thing that is broken.
 
 ---
 
@@ -70,8 +71,12 @@ only the SQL, nobody can tell whether you understood what they asked for.
 recovered. `sample` is one row per second of observation. **Read them if it helps you answer
 a question; never UPDATE or DELETE.**
 
-Any statement that changes one of these is refused and the whole batch is rolled back —
-including whatever legitimate configuration changes were in it.
+⚠️ **Nothing stops you.** There is no check that catches a statement touching these — a
+guard that only covered one of the two ways in would have been worse than none, because it
+would read as a promise. What exists instead is a record: whatever you run is written to
+`itamiben.log` with the user's own words next to it, and the **Configure online** window
+takes a copy of the database before it applies anything. So a mistake here is visible and
+recoverable — but it is a mistake you have to not make.
 
 ---
 
@@ -204,16 +209,16 @@ ItamiBen's **Configure online** window (Settings → the red button). In that ca
   application names on their machine — **use those names**, do not guess.
 - They cannot run `--query` to check anything for you, and they cannot iterate cheaply.
   **Prefer one correct statement over a clever one.**
-- Anything that touches the ledger is refused and rolled back automatically, so do not try
-  to "clean up" `sample`, `total` or `round` even if it seems helpful.
-- Everything you send is written to `applied-sql.log` alongside what the user asked for,
+- **Never write to `sample`, `total` or `round`.** Nothing stops you; those are the user's
+  hours and history, and they cannot be rebuilt.
+- Everything you send is written to `itamiben.log` alongside what the user asked for,
   whether it worked or not. That is for them, not against you — but write accordingly.
 
 ## Check your work
 
 ```
 ItamiBen --query config      # goals, rules, commands, schedule, as the program reads them
-ItamiBen --query sql         # applied-sql.log: what was asked, what ran, whether it worked
+ItamiBen --query log         # itamiben.log: what was asked, what ran, whether it worked
 ItamiBen --query events      # what fired, what failed
 ItamiBen --query samples     # one row per second, to see what names really appear
 ```

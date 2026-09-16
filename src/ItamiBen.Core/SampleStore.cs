@@ -501,25 +501,6 @@ public sealed class SampleStore : IDisposable
     public readonly record struct AppliedSql(DateTimeOffset At, string? Request, string Statement,
                                              bool Ok, int RowsChanged, string? Message);
 
-    /// <summary>
-    /// 账本的指纹。**执行任何外来 SQL 的前后各取一次，变了就整个回滚。**
-    ///
-    /// ⚠️ 用事后核对，**不用事前审查 SQL**：想靠解析 SQL 判断「它会不会动账本」是必输的
-    /// （子查询、触发器、`DROP TABLE`、`ATTACH`）。指纹对得上才提交，这一条不依赖
-    /// 任何对 SQL 的理解。
-    /// </summary>
-    private string LedgerFingerprint()
-    {
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = """
-            SELECT (SELECT COUNT(*) FROM sample) || '/' || (SELECT COUNT(*) FROM round)
-                || '/' || (SELECT COUNT(*) FROM total)
-                || '/' || (SELECT COALESCE(SUM(seconds), 0) FROM total)
-                || '/' || (SELECT COUNT(*) FROM event);
-            """;
-        return cmd.ExecuteScalar()?.ToString() ?? "";
-    }
-
     /// <summary>把整个库复制一份出去。<c>VACUUM INTO</c> 要求目标不存在。</summary>
     public void BackupTo(string path)
     {
@@ -533,15 +514,15 @@ public sealed class SampleStore : IDisposable
     /// <summary>
     /// 执行一段外来 SQL（多半是网页 AI 写的），**全程在一个事务里**。
     ///
-    /// 顺序是有讲究的：
-    /// <list type="number">
-    ///   <item>取账本指纹；</item>
-    ///   <item>开事务、整段执行；</item>
-    ///   <item>再取一次指纹，**对不上就整个回滚**——一行都不落；</item>
-    ///   <item>顺手把 `config.version` 加一（AI 很可能忘了写那句，而忘了的症状是
-    ///   「改了没反应」，正是这个项目最恨的那类失败）；</item>
-    ///   <item>提交。</item>
-    /// </list>
+    /// 整段在一个事务里：**要么全落，要么一条都不落**。出错自动回滚。
+    /// 跑完顺手把 `config.version` 加一——AI 很可能忘了写那句，而忘了的症状是
+    /// 「改了没反应」，正是这个项目最恨的那类失败。
+    ///
+    /// ⚠️ **这里没有「账本被改了就回滚」那道闸**，2026-09-16 拆掉的（DECISIONS I23）：
+    /// 它只守得住这扇窗，而智能体走 `sqlite3` 直连那道门根本不经过它——**一道只守住
+    /// 两扇门里一扇的闸是摆设**，更糟的是它让文档里「动账本会被挡回去」那句话
+    /// 变成一句只在某一条路上为真的话。真正的退路是**跑之前那份备份**和
+    /// **`itamiben.log` 里那条记录**：出了事看得见、回得去。
     ///
     /// ⚠️ **整段当一条命令跑，不按分号切**：字符串里的分号会把切分器骗过去，
     /// 为了好看的逐条报错引入一个会切错的解析器不划算。出错时 SQLite 的异常里
@@ -549,7 +530,6 @@ public sealed class SampleStore : IDisposable
     /// </summary>
     public SqlResult ApplySql(string sql)
     {
-        var before = LedgerFingerprint();
         var changesBefore = TotalChanges();
 
         using var tx = _db.BeginTransaction();
@@ -560,14 +540,6 @@ public sealed class SampleStore : IDisposable
                 cmd.Transaction = tx;
                 cmd.CommandText = sql;
                 cmd.ExecuteNonQuery();
-            }
-
-            if (LedgerFingerprint() != before)
-            {
-                tx.Rollback();
-                return new SqlResult(false, 0,
-                    "Refused: that SQL changed the ledger (sample / round / total / event). "
-                    + "Nothing was written — the whole thing was rolled back.");
             }
 
             using (var bump = _db.CreateCommand())

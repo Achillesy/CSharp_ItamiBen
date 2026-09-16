@@ -304,8 +304,12 @@ public class StoreLedgerTests
 }
 
 /// <summary>
-/// 外来 SQL 的护栏（DECISIONS I16）。**这组是那扇「在线修改配置」窗口能不能存在的前提**：
-/// 它最终会把一段网页 AI 写的 SQL 跑在用户的库上。
+/// 外来 SQL 的执行（DECISIONS I16 / I23）。
+///
+/// ⚠️ **这里没有「动了账本就回滚」那道闸了**（2026-09-16 拆的）：它只守得住那扇窗，
+/// 而智能体走 `sqlite3` 直连根本不经过它——**一道只守住两扇门里一扇的闸是摆设**。
+/// 剩下的保证只有一条，但那一条是真的：**整段一个事务，要么全落要么一条都不落。**
+/// 退路在别处：跑之前那份备份，和 `itamiben.log` 里那条记录。
 /// </summary>
 public class ApplySqlTests
 {
@@ -313,7 +317,6 @@ public class ApplySqlTests
     {
         var db = SampleStore.Open(":memory:");
         db.AddTotals(new Dictionary<string, int> { ["编程"] = 57203 });
-        db.Write(new DateTimeOffset(2026, 9, 16, 10, 0, 0, TimeSpan.FromHours(8)), "Code", "x", 0);
         return db;
     }
 
@@ -331,40 +334,14 @@ public class ApplySqlTests
     }
 
     [Fact]
-    public void 动了账本就整个回滚_连同一起提交的配置改动()
+    public void 一段里错一句就一句都不落()
     {
         using var db = Memory();
         var version = db.ConfigVersion;
 
-        // ⚠️ 前一句是正当的配置改动，后一句动账本。**两句必须一起作废**——
-        //    只挡住后一句、放行前一句，会留下一个谁都没预期的半吊子状态
-        var r = db.ApplySql("""
-            INSERT INTO goal (name) VALUES ('Coding');
-            UPDATE total SET seconds = 0;
-            """);
-
-        Assert.False(r.Ok);
-        Assert.Contains("ledger", r.Message);
-        Assert.Equal(57203, db.Totals()["编程"]);     // 账本一秒没动
-        Assert.Empty(db.Goals());                      // 配置那一句也没落
-        Assert.Equal(version, db.ConfigVersion);       // 版本号也没动
-    }
-
-    [Fact]
-    public void 删采样也算动账本()
-    {
-        using var db = Memory();
-        Assert.False(db.ApplySql("DELETE FROM sample;").Ok);
-        Assert.Single(db.Read(DateTimeOffset.MinValue.AddDays(1), DateTimeOffset.MaxValue.AddDays(-1)));
-    }
-
-    [Fact]
-    public void 语法错就一行都不落()
-    {
-        using var db = Memory();
-        var version = db.ConfigVersion;
-
-        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('ok'); 这不是 SQL;");
+        // ⚠️ 前一句完全正当，后一句是垃圾。**两句必须一起作废**——
+        //    半段生效会留下一个谁都没预期的状态，而用户以为什么都没发生
+        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('Coding'); 这不是 SQL;");
 
         Assert.False(r.Ok);
         Assert.Empty(db.Goals());
@@ -374,9 +351,9 @@ public class ApplySqlTests
     [Fact]
     public void 导出的配置不含窗口标题也不含逐秒记录()
     {
-        // ⚠️ 这一条是**隐私边界**：导出的东西要被贴进网页对话框。
-        //    程序名可以给（AI 写 app 正则需要），窗口标题不行——
-        //    前者泄露「装了什么」，后者泄露「在干什么」。
+        // ⚠️ 这一条是**隐私边界**，跟 SQL 护栏是两回事，所以它留着：
+        //    导出的东西要被贴进网页对话框。程序名可以给（AI 写 app 正则需要），
+        //    窗口标题不行——前者泄露「装了什么」，后者泄露「在干什么」。
         using var db = Memory();
         db.Write(new DateTimeOffset(2026, 9, 16, 10, 0, 1, TimeSpan.FromHours(8)),
                  "Google Chrome", "某个很私人的网页标题", 0);
@@ -388,26 +365,5 @@ public class ApplySqlTests
         Assert.DoesNotContain("INSERT INTO title", dump);
         Assert.Contains("Google Chrome", dump);          // 程序名要给
         Assert.DoesNotContain("INSERT INTO app", dump);  // 但写成注释，别诱导 AI 往账本里插
-    }
-}
-
-/// <summary>
-/// 账本护栏在把审计挪出数据库之后**依然成立**（DECISIONS I21）：
-/// 记录搬去文件了，但 `sample` / `round` / `total` / `event` 该挡的照挡。
-/// </summary>
-public class LedgerStillGuardedTests
-{
-    [Fact]
-    public void 挪走审计表之后账本照样挡得住()
-    {
-        using var db = SampleStore.Open(":memory:");
-        db.AddTotals(new Dictionary<string, int> { ["编程"] = 100 });
-        // ⚠️ 得真有一行采样：指纹比的是**数量**，空表上 `DELETE` 删掉 0 行、
-        //    指纹自然没变，那是正确行为，不是漏网
-        db.Write(new DateTimeOffset(2026, 9, 16, 10, 0, 0, TimeSpan.FromHours(8)), "Code", "x", 0);
-
-        Assert.False(db.ApplySql("UPDATE total SET seconds = 0;").Ok);
-        Assert.False(db.ApplySql("DELETE FROM sample;").Ok);
-        Assert.Equal(100, db.Totals()["编程"]);
     }
 }

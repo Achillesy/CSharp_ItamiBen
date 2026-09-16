@@ -15,7 +15,7 @@ namespace ItamiBen.App;
 ///
 /// <code>
 /// ItamiBen --query config   [起] [止]    当前的规则 / 命令 / 计划表（起止不管用）
-/// ItamiBen --query sql      [起] [止]    手动执行过的 SQL：要的是什么、跑的是什么、成没成
+/// ItamiBen --query log      [起] [止]    itamiben.log：每次手动改配置，以及够不着库时的求救
 /// ItamiBen --query samples  [起] [止]    一秒一行的原始观测
 /// ItamiBen --query events   [起] [止]    别处留不下痕迹的事（闹钟 / 提醒 / 命令 / 出错）
 /// ItamiBen --query minutes  [起] [止]    每一轮逐分钟的构成，红的还给出是哪扇窗口
@@ -43,13 +43,13 @@ internal static class Query
         switch (what)
         {
             case "config": ConfigDump(db); break;
-            case "sql": SqlHistory(); break;
+            case "log": TextLog(); break;
             case "samples": Samples(db, start, end); break;
             case "events": Events(db, start, end); break;
             case "rounds": Rounds(db, start, end); break;
             case "minutes": Minutes(db, start, end); break;
             default:
-                Console.Error.WriteLine($"unknown query '{what}' — try: config | sql | samples | events | rounds | minutes");
+                Console.Error.WriteLine($"unknown query '{what}' — try: config | log | samples | events | rounds | minutes");
                 break;
         }
 
@@ -82,16 +82,17 @@ internal static class Query
     }
 
     /// <summary>
-    /// 手动执行过的 SQL。**「配置为什么长这样」唯一的答案**——`--query config` 只给现状。
+    /// 文本日志：每次手动改配置，以及够不着库时的求救。
     ///
-    /// ⚠️ 它住在**文件**里不在库里（DECISIONS I21）：SQLite 够不着普通文件，
-    /// 所以这份记录不在任何一句外来 SQL 的射程之内。
+    /// ⚠️ 它住在**库外面**（DECISIONS I21）：SQLite 够不着普通文件，所以这份记录不在
+    /// 任何一句外来 SQL 的射程之内；库坏了要修的时候，它也不在那个坏掉的库里面。
+    /// **「配置为什么长这样」唯一的答案**——`--query config` 只给现状。
     /// </summary>
-    private static void SqlHistory()
+    private static void TextLog()
     {
-        var text = SqlLog.Read();
-        Console.WriteLine($"# {SqlLog.Path_}");
-        Console.Write(text.Length == 0 ? "# (nothing has been applied by hand)\n" : text);
+        var text = Log.Read();
+        Console.WriteLine($"# {AppData.Dir}/itamiben.log");
+        Console.Write(text.Length == 0 ? "# (empty)\n" : text);
     }
 
     private static void Samples(SampleStore db, DateTimeOffset from, DateTimeOffset to)

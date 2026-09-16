@@ -1,20 +1,25 @@
 namespace ItamiBen.App;
 
 /// <summary>
-/// **最后的求救信，不是日志。**
+/// **库里装不下的那些话。** 两类，都在这个文件里：
 ///
-/// 2026-09-16 之前这里是一份正经的运行日志；现在正经的记录去了 `samples.db` 的
-/// `event` 表（见 <see cref="Events"/>）。这个文件只剩一个用处：
-/// **数据库够不着的时候，把话留在某个地方。**
+/// <list type="number">
+///   <item><b>每一次手动改配置</b>（<see cref="Applied"/>）——用户要的是什么、实际跑的
+///   是什么、成没成。这是整个程序里唯一不可逆、且由外人写的动作，而**结果在库里、
+///   那句话推不出来**。⚠️ 它**必须在数据库外面**：SQLite 够不着普通文件
+///   （`ATTACH` 只能挂另一个库），所以这份记录不在任何一句外来 SQL 的射程之内；
+///   库坏了要修的时候，「我到底干过什么」也不在那个坏掉的库里面。</item>
 ///
-/// 够不着一共就那么几种：
-/// <list type="bullet">
-///   <item>观测库自己打不开（磁盘满、文件损坏、权限没了）；</item>
-///   <item>被单实例锁挡回去了，这个进程压根没开库；</item>
-///   <item>启动早期或退出之后崩了，那时候库还没挂上 / 已经关了。</item>
+///   <item><b>够不着数据库时的求救</b>（<see cref="Fallback"/>）——库打不开、被单实例
+///   挡回去、启动早期或退出之后崩了。</item>
 /// </list>
 ///
-/// 正常跑一天，这个文件**一个字节都不该长**。里面有东西 = 出事了。
+/// ⚠️ **原来这个文件是二值的**（里面有东西 = 出事了），2026-09-16 用户把记账并进来，
+/// 这个性质就没了——**这是知情的取舍**：换来的是智能体只有一个地方要写。
+/// 找毛病改成翻 `error` / `FAILED` 那几行，或者 `--query events`。
+///
+/// ⚠️ **不滚存、不截断**：滚掉的正好是最早、最难回忆的那些改动。一次几百字节、
+/// 一个月几次，一年也就几 KB。
 ///
 /// 写失败一律吞掉——**记不上话绝不能把程序搞崩**。
 /// </summary>
@@ -22,15 +27,6 @@ public static class Log
 {
     private static readonly Lock Gate = new();
     private static readonly string Path_ = System.IO.Path.Combine(AppData.Dir, "itamiben.log");
-    private static readonly string Old = Path_ + ".old";
-
-    /// <summary>
-    /// 到这个大小就挪成 `.old`，只留一份旧的。
-    ///
-    /// 这个文件本来就该是空的，门槛纯粹是**防止某个高频错误把磁盘灌满**——
-    /// 那种情况下最早那几行才有用，所以 256KB 绰绰有余。
-    /// </summary>
-    private const long MaxBytes = 256 * 1024;
 
     /// <summary>
     /// <see cref="Arm"/> 调过没有。**没调过就一个字都不写。**
@@ -56,7 +52,6 @@ public static class Log
             try
             {
                 Directory.CreateDirectory(AppData.Dir);
-                Roll();
                 File.AppendAllText(Path_,
                     $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} pid={Environment.ProcessId}  {text}\n");
             }
@@ -67,12 +62,38 @@ public static class Log
     public static void Error(string what, Exception e)
         => Fallback($"error {what}: {e.GetType().Name} {e.Message}");
 
-    /// <summary>调用方必须已经持有 <see cref="Gate"/>，而且自己负责吞异常。</summary>
-    private static void Roll()
+    /// <summary>
+    /// 记一次手动改配置。<paramref name="request"/> 是用户当时写的那句需求。
+    ///
+    /// ⚠️ **意图和产物要配在一起**：光有 SQL，谁也看不出智能体有没有理解错那句话。
+    /// ⚠️ **成功失败都记**，失败的更值钱——尤其是「这段 SQL 想干什么、为什么没跑成」。
+    /// </summary>
+    public static void Applied(string? request, string statement, bool ok, int rows, string? message)
     {
-        var f = new FileInfo(Path_);
-        if (!f.Exists || f.Length < MaxBytes) return;
-        if (File.Exists(Old)) File.Delete(Old);
-        File.Move(Path_, Old);
+        lock (Gate)
+        {
+            try
+            {
+                Directory.CreateDirectory(AppData.Dir);
+                var head = ok ? $"OK  {rows} row(s)" : $"FAILED  {message}";
+                File.AppendAllText(Path_, $"""
+
+                    ────────────────────────────────────────────────────────
+                    {DateTime.Now:yyyy-MM-dd HH:mm:ss}  applied  {head}
+                    {(string.IsNullOrWhiteSpace(request) ? "asked: (not recorded)" : "asked: " + request.Trim())}
+
+                    {statement.Trim()}
+
+                    """);
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>整份读出来给 <c>--query log</c>。</summary>
+    public static string Read()
+    {
+        try { return File.Exists(Path_) ? File.ReadAllText(Path_) : ""; }
+        catch (Exception e) { return $"(could not read {Path_}: {e.Message})"; }
     }
 }

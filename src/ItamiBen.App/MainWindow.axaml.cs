@@ -203,11 +203,7 @@ public partial class MainWindow : Window
         _totals = Totals.Load(_store);
         WindowLayout.Bind(_settings);
         AppData.RefreshAgentDoc();
-        if (_store is { } db)
-        {
-            SqlLog.MigrateFromTable(db);
-            Config.EnsureSeeded(db);
-        }
+        if (_store is { } db) Config.EnsureSeeded(db);
         LoadConfig();
 
         BuildGoals();

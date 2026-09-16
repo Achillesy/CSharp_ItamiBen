@@ -116,7 +116,7 @@ Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
 |---|---|
 | `ItamiBen.sqlite3` | 全部：配置、观测、轮次、事件、设置、累计账本 |
 | `AGENT.md` | 每次启动刷新，智能体读的那份说明 |
-| `itamiben.log` | 只装**够不着数据库**的话。正常情况下是空的——**里面有东西 = 出事了** |
+| `itamiben.log` | 每一次改配置：要的是什么、跑的是什么、成没成；外加够不着数据库时的求救 |
 
 ## 周期提醒
 

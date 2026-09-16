@@ -159,9 +159,8 @@ public partial class SqlWindow : Window
         var r = store.ApplySql(text);
 
         // ⚠️ **记账在 App 层做，不在 Core**：Core 里一个 `File.` 都没有，这条纪律换来的是
-        //    「单元测试碰不到用户的真实文件」。成功失败都记——失败的那些更值钱，
-        //    尤其是「AI 给的 SQL 想动账本，被挡回去了」。
-        SqlLog.Append(request.Text, text, r.Ok, r.RowsChanged, r.Ok ? null : r.Message);
+        //    「单元测试碰不到用户的真实文件」。成功失败都记——失败的更值钱。
+        Log.Applied(request.Text, text, r.Ok, r.RowsChanged, r.Ok ? null : r.Message);
         if (!r.Ok)
         {
             result.Text = $"Nothing was changed.\n\n{r.Message}";

@@ -136,7 +136,7 @@ All under `~/Library/Application Support/ItamiBen/` (macOS) or `%APPDATA%\ItamiB
 |---|---|
 | `ItamiBen.sqlite3` | everything: configuration, observations, rounds, events, settings, and the hours ledger |
 | `AGENT.md` | refreshed at every launch; the instructions the agent reads |
-| `itamiben.log` | only what could not reach the database. Normally empty — anything in it means something went wrong |
+| `itamiben.log` | every configuration change ever applied — what was asked for, what ran — plus anything that could not reach the database |
 
 ## Recurring reminders
 
