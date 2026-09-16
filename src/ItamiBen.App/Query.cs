@@ -15,6 +15,7 @@ namespace ItamiBen.App;
 ///
 /// <code>
 /// ItamiBen --query config   [起] [止]    当前的规则 / 命令 / 计划表（起止不管用）
+/// ItamiBen --query sql      [起] [止]    手动执行过的 SQL：要的是什么、跑的是什么、成没成
 /// ItamiBen --query samples  [起] [止]    一秒一行的原始观测
 /// ItamiBen --query events   [起] [止]    别处留不下痕迹的事（闹钟 / 提醒 / 命令 / 出错）
 /// ItamiBen --query minutes  [起] [止]    每一轮逐分钟的构成，红的还给出是哪扇窗口
@@ -42,12 +43,13 @@ internal static class Query
         switch (what)
         {
             case "config": ConfigDump(db); break;
+            case "sql": SqlHistory(db); break;
             case "samples": Samples(db, start, end); break;
             case "events": Events(db, start, end); break;
             case "rounds": Rounds(db, start, end); break;
             case "minutes": Minutes(db, start, end); break;
             default:
-                Console.Error.WriteLine($"unknown query '{what}' — try: config | samples | events | rounds | minutes");
+                Console.Error.WriteLine($"unknown query '{what}' — try: config | sql | samples | events | rounds | minutes");
                 break;
         }
 
@@ -77,6 +79,24 @@ internal static class Query
         Console.WriteLine("## schedule (enabled only)");
         foreach (var e in db.Schedule())
             Console.WriteLine($"  {e.Cron,-16} text={e.Text ?? "(none)"}  run={e.Run ?? "(none)"}");
+    }
+
+    /// <summary>
+    /// 手动执行过的 SQL。**「配置为什么长这样」唯一的答案**——`--query config` 只给现状。
+    /// </summary>
+    private static void SqlHistory(SampleStore db)
+    {
+        var rows = db.SqlHistory();
+        Console.WriteLine($"# {rows.Count} manual SQL applications (most recent first)");
+        foreach (var a in rows)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"== {a.At:yyyy-MM-dd HH:mm}  {(a.Ok ? $"OK, {a.RowsChanged} row(s)" : "FAILED")}");
+            if (a.Request is { Length: > 0 } req)
+                foreach (var line in req.Split('\n')) Console.WriteLine($"   asked: {line}");
+            foreach (var line in a.Statement.Split('\n')) Console.WriteLine($"   ran:   {line}");
+            if (a.Message is { Length: > 0 } m) Console.WriteLine($"   why:   {m}");
+        }
     }
 
     private static void Samples(SampleStore db, DateTimeOffset from, DateTimeOffset to)

@@ -104,7 +104,7 @@ public partial class SqlWindow : Window
         };
 
         var apply = this.FindControl<Button>("Apply")!;
-        apply.Click += (_, _) => RunSql(sql, result, apply);
+        apply.Click += (_, _) => RunSql(sql, result, apply, request);
 
         // ⚠️ **改了 SQL 才重新允许 Apply**：跑成功之后按钮要变灰，否则手一抖就跑第二遍
         //    ——而第二遍是不是无害，取决于 AI 碰巧写的是 upsert 还是 INSERT。
@@ -133,7 +133,9 @@ public partial class SqlWindow : Window
     /// ⚠️ 方法名**不能叫 `Apply`**：axaml 里那个 `Name="Apply"` 会让 Avalonia 的
     /// 名字生成器造一个同名字段，撞上就是 `CS0102`。这个项目为这类冲突改过两次名
     /// （`TotalsText` / `AlarmText`）。
-    private void RunSql(TextBox sql, TextBlock result, Button apply)
+    /// ⚠️ <paramref name="request"/> 一起记进 `applied_sql`：**意图和产物配在一起**，
+    /// 三周后翻回来才看得出 AI 有没有理解错你的话。
+    private void RunSql(TextBox sql, TextBlock result, Button apply, TextBox request)
     {
         if (_store is not { } store) { result.Text = "The database is not open."; return; }
         if (string.IsNullOrWhiteSpace(sql.Text)) { result.Text = "There is no SQL to apply."; return; }
@@ -154,7 +156,7 @@ public partial class SqlWindow : Window
             }
         }
 
-        var r = store.ApplySql(text);
+        var r = store.ApplySql(text, request.Text);
         if (!r.Ok)
         {
             result.Text = $"Nothing was changed.\n\n{r.Message}";

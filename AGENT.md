@@ -44,11 +44,15 @@ effect until they restart**, decides your change did not work, and asks you to d
 
 ### Not yours — the ledger. Never write to these.
 
-`sample` · `app` · `title` · `round` · `event` · `total`
+`sample` · `app` · `title` · `round` · `event` · `total` · `applied_sql`
 
 `total` is the user's lifetime hours per goal — tens or hundreds of hours that cannot be
-recovered. `sample` is one row per second of observation. **Read them if it helps you
-answer a question; never UPDATE or DELETE.**
+recovered. `sample` is one row per second of observation. `applied_sql` is the record of
+every statement ever applied by hand, including the ones that were refused. **Read them if
+it helps you answer a question; never UPDATE or DELETE.**
+
+Any statement that changes one of these is refused and the whole thing is rolled back —
+including whatever legitimate configuration changes were in the same batch.
 
 ---
 
@@ -183,11 +187,14 @@ ItamiBen's **Configure online** window (Settings → the red button). In that ca
   **Prefer one correct statement over a clever one.**
 - Anything that touches the ledger is refused and rolled back automatically, so do not try
   to "clean up" `sample`, `total` or `round` even if it seems helpful.
+- Everything you send is recorded in `applied_sql` alongside what the user asked for,
+  whether it worked or not. That is for them, not against you — but write accordingly.
 
 ## Check your work
 
 ```
 ItamiBen --query config      # goals, rules, commands, schedule, as the program reads them
+ItamiBen --query sql         # every statement applied by hand: asked, ran, worked or not
 ItamiBen --query events      # what fired, what failed
 ItamiBen --query samples     # one row per second, to see what names really appear
 ```
