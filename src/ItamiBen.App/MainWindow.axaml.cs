@@ -909,6 +909,15 @@ public partial class MainWindow : Window
             }
             _lastAwaySpans = away.Spans.Count;
 
+            // 刚过去那一分钟红在哪扇窗口上。⚠️ **只做诊断，永不回流**：环上只说
+            //    「这一分钟红了」，两小时后你根本想不起来当时开着什么。
+            //    ⚠️ 它跟判定调的是**同一个 Judgment、同一批行、同一张 AwayMap**，
+            //    所以「为什么」永远跟「算没算」一致——别在这儿另写一套匹配。
+            var justPassed = TimeGrid.PreviousMinute(now);
+            if (justPassed >= live.StartedAt
+                && OffTaskAttribution.Biggest(rows, away, live.Goals, _rules, justPassed) is { } who)
+                Log.Line($"off-task {justPassed:HH:mm}: {who.Seconds}s on [{who.App}] {who.Title}");
+
             Log.Line($"rebuilt from db: minute={rebuilt.CurrentMinute,-4} focused={rebuilt.FocusedSeconds,-5} "
                    + $"slack={rebuilt.SlackSeconds,-5} rows={rows.Count,-5} away={away.Spans.Count} "
                    + $"phase={rebuilt.Phase}");

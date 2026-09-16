@@ -20,9 +20,16 @@ internal static class Program
             e.SetObserved();
         };
 
-        // ⚠️ 下面两个是**打包时用的调试出口，不是产品功能**，跟 DECISIONS A3「不做 CLI」
+        // ⚠️ 下面三个是**调试出口，不是产品功能**，跟 DECISIONS A3「不做 CLI」
         //    不冲突：A3 禁的是 v3 那种独立的 `itami` 工具，这里只是两个跑完就退的开关。
         //    图标仍然是**代码画出来的**，仓库里一张位图都没有——这条规矩从钟面一路管到这儿。
+        if (args is ["--dial-specimens", var specDir, ..])
+        {
+            HeadlessBuilder().SetupWithoutStarting();
+            DialSpecimens.Render(specDir);
+            return;
+        }
+
         if (args is ["--export-icon", var icoPath, ..])
         {
             HeadlessBuilder().SetupWithoutStarting();
@@ -56,7 +63,7 @@ internal static class Program
         .UsePlatformDetect();
 
     /// <summary>
-    /// 两个导出开关专用的 AppBuilder。**正常启动不走这里。**
+    /// 三个调试出口专用的 AppBuilder。**正常启动不走这里。**
     ///
     /// ⚠️ **为什么不能共用一个**：导出只往 `RenderTargetBitmap` 上画，根本不需要窗口
     /// 系统，而 `UsePlatformDetect` 会去初始化原生窗口系统——有图形会话时看不出区别，

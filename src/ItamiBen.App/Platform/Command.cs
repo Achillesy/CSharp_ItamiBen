@@ -42,6 +42,20 @@ public static class Command
         }
 
         Log.Line($"running executeCommand: {cmd}");
+        RunDetached(cmd);
+    }
+
+    /// <summary>
+    /// 把**这一条**命令原样交给 shell 跑，起完就返回。
+    ///
+    /// ⚠️ 从 <see cref="LaunchDetached"/> 里拆出来，**只为了能测**：
+    /// `LaunchDetached` 到点会去**现读 rules.json**，而在这台机器上那份文件里
+    /// `executeCommand.macos[0]` 就是重启命令——测试要是调它，当场把机器重启了。
+    /// 拆开之后测试只喂一条自己写的无害命令，走的却是同一条起进程的代码，
+    /// 引号那条路径一个字节都没绕开。
+    /// </summary>
+    public static void RunDetached(string cmd)
+    {
         try
         {
             var proc = Process.Start(BuildStartInfo(cmd));

@@ -20,4 +20,14 @@ public static class TimeGrid
     /// </summary>
     public static DateTimeOffset FloorToMinute(DateTimeOffset t)
         => new(t.Year, t.Month, t.Day, t.Hour, t.Minute, 0, t.Offset);
+
+    /// <summary>
+    /// **刚过去完整的那一分钟**的起点。
+    ///
+    /// ⚠️ 单拎出来是因为 v3 正是在这一步栽的：它那行「这一分钟有多少秒跑偏」的日志
+    /// 取错了索引（指到了投影尾巴上），于是读到的永远是 0——**整个生产历史里一次都没
+    /// 打出来过**，而「零匹配」看起来跟「一直没跑偏」一模一样。
+    /// 算式只有一行，但它**必须是能被测试钉住的一行**。
+    /// </summary>
+    public static DateTimeOffset PreviousMinute(DateTimeOffset now) => FloorToMinute(now).AddMinutes(-1);
 }
