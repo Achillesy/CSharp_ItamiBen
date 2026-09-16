@@ -20,25 +20,25 @@ namespace ItamiBen.App;
 /// interior are new. The silhouette was right the first time and there was nothing to gain
 /// by redrawing it.
 ///
-/// Anatomy of the cut face, in the order it gets painted (user's correction, 2026-09-16):
-/// the fruit is **flesh all the way out -- no skin band**; the **white wings** spreading
-/// from the centre are the placenta; the **dark green** pockets they separate are juice.
+/// Anatomy of the cut face (user's correction, 2026-09-16): the fruit is **flesh all the
+/// way out -- no skin band**, and the two **dark green worms**, curving out along the wall
+/// and back in, are the juice. The pale column down the middle is not drawn at all: it is
+/// simply the flesh left between the two worms.
 ///
 /// Pure vector, like the dial and the dominoes: a handful of Beziers and ellipses, no
 /// bitmap asset, crisp at any size.
 ///
-/// **Colour constraint (set by the user): at most 8 colours, no outline.** Seven here.
+/// **Colour constraint (set by the user): at most 8 colours, no outline.** Six here.
 /// Depth comes from the brightness difference between flat blocks, never a gradient: a
 /// gradient smears into a blur at 16px, while flat blocks still read.
 /// </summary>
 public static class TomatoIcon
 {
-    // ---- 7 colours, not one more
+    // ---- 6 colours, not one more
     private static readonly Color Flesh     = Color.FromRgb(0xCF, 0xE3, 0x94);  // 果肉，青番茄偏黄的浅绿
     private static readonly Color FleshDark = Color.FromRgb(0xA9, 0xC4, 0x70);  // 右下那弯暗面
     private static readonly Color Juice     = Color.FromRgb(0x4E, 0x8E, 0x2A);  // 果汁，深绿
-    private static readonly Color JuiceDeep = Color.FromRgb(0x3A, 0x6E, 0x1E);  // 果汁的暗面
-    private static readonly Color Pith      = Color.FromRgb(0xF4, 0xF8, 0xE4);  // 中间那副白翅膀（胎座），籽也是它
+    private static readonly Color Seed      = Color.FromRgb(0xF4, 0xF8, 0xE4);  // 籽
     private static readonly Color Sepal     = Color.FromRgb(0x24, 0x60, 0x1C);  // 萼片
     private static readonly Color SepalLit  = Color.FromRgb(0x3E, 0x8A, 0x2B);  // 压在上面那两片 + 果梗
 
@@ -57,25 +57,20 @@ public static class TomatoIcon
             Fill(FleshDark, Body(P, 0.512, 0.572, 1.00));
             Fill(Flesh, Body(P, 0.492, 0.556, 1.00));
 
-            // ---- 果汁：中间一整块深绿，等下被白翅膀切成四腔。
-            //      ⚠️ 这里**不要去画四个独立的腔**：那样四块的边界得手工对齐，
-            //      翅膀一改就全歪。一块底 + 一个分隔件，边界永远自洽。
-            Fill(JuiceDeep, Body(P, 0.500, 0.564, 0.80));
-            Fill(Juice, Body(P, 0.488, 0.552, 0.785));
+            // ---- 果汁：**左右对称的两条弯虫**，从果蒂下方起、贴着果壁鼓出去、
+            //      再收回底部中央。中间和四周剩下的浅色就是果肉，不用另画。
+            //      ⚠️ 别再画成「一整块深色 + 白色分隔件」——那样中间那片白色会抢戏，
+            //      整个图标读成星形闪光。深色本身就是形状。
+            Fill(Juice, Worm(P, false));
+            Fill(Juice, Worm(P, true));
 
-            // ---- 白翅膀：从果蒂下面一路向下的中轴，中途朝左右张开两片，
-            //      这是整个图标的主角（用户原话：「中间是白色像翅膀一样张开的结构」）
-            Fill(Pith, Wings(P));
-
-            // ---- 籽：嵌在果汁里，贴着翅膀排
+            // ---- 籽：顺着虫身排一列
             foreach (var (x, y) in new[]
                      {
-                         (0.354, 0.370), (0.268, 0.400),                   // 左上腔
-                         (0.646, 0.370), (0.732, 0.400),                   // 右上腔
-                         (0.300, 0.648), (0.342, 0.726), (0.406, 0.784),   // 左下腔
-                         (0.700, 0.648), (0.658, 0.726), (0.594, 0.784),   // 右下腔
+                         (0.652, 0.416), (0.694, 0.492), (0.708, 0.580), (0.692, 0.670), (0.644, 0.748),
+                         (0.348, 0.416), (0.306, 0.492), (0.292, 0.580), (0.308, 0.670), (0.356, 0.748),
                      })
-                Fill(Pith, new EllipseGeometry(new Rect(
+                Fill(Seed, new EllipseGeometry(new Rect(
                     (x - 0.026) * size, (y - 0.020) * size, 0.052 * size, 0.040 * size)));
 
             // ---- 萼片和果梗：**跟旧图标一字不差**，只是换了个绿。
@@ -124,33 +119,24 @@ public static class TomatoIcon
     }
 
     /// <summary>
-    /// 中间那副白翅膀：一条中轴从果蒂下面一直到底，中途朝左右各张开一片，
-    /// 于是果汁被分成上下左右四腔。
+    /// 一条果汁：从果蒂下方起，贴着果壁鼓出去，再收回底部中央——一条两头尖、
+    /// 中间宽的弯虫。<paramref name="mirror"/> 翻到另一边，**一份形状画两条**。
     ///
-    /// ⚠️ **翅尖停在果汁的边上就够了**（x 到 0.185 / 0.815，正好压在果汁的边界上）：再往外扎进浅色果肉里，
-    /// 白尖对着浅底成了两根长刺，整个图标读成「星形闪光」而不是切开的果子。
-    /// 白色只在深色上出现，形状才立得住。
-    ///
-    /// ⚠️ **翅膀要向上兜**，不能左右拉平：拉平的那版四条白芒等长等角，就是个米字。
-    ///
-    /// ⚠️ 左右严格对称，中轴不歪：这是唯一一处**对称比生动重要**的地方——歪了看着
-    /// 不像切开的果子，像被咬了一口。
+    /// ⚠️ **两头都要收成尖**：两端是圆的就成了香蕉/豆子，不是果腔。
+    /// ⚠️ **外缘贴着果壁走、内缘留出中轴**：中间那条浅色不是画出来的，是两条虫之间
+    /// 剩下的果肉——这样它永远跟果壁同色，也永远不会抢戏。
     /// </summary>
-    private static Geometry Wings(Func<double, double, Point> P)
+    private static Geometry Worm(Func<double, double, Point> P, bool mirror)
     {
+        Point Q(double x, double y) => P(mirror ? 1 - x : x, y);
+
         var geo = new StreamGeometry();
         using var g = geo.Open();
-        g.BeginFigure(P(0.500, 0.262), true);
-        // 左半边，从上往下：中轴 → 那片向上兜起来的翅膀（上缘出去、下缘回来）→ 中轴到底
-        g.CubicBezierTo(P(0.478, 0.312), P(0.470, 0.382), P(0.464, 0.462));
-        g.CubicBezierTo(P(0.400, 0.416), P(0.276, 0.404), P(0.185, 0.468));   // 翅膀上缘，兜上去再到翅尖
-        g.CubicBezierTo(P(0.286, 0.502), P(0.398, 0.546), P(0.458, 0.576));   // 翅膀下缘，收回中轴
-        g.CubicBezierTo(P(0.466, 0.664), P(0.476, 0.782), P(0.500, 0.884));   // 中轴一路到底
-        // 右半边，从下往上（跟左边镜像）
-        g.CubicBezierTo(P(0.524, 0.782), P(0.534, 0.664), P(0.542, 0.576));
-        g.CubicBezierTo(P(0.602, 0.546), P(0.714, 0.502), P(0.815, 0.468));
-        g.CubicBezierTo(P(0.724, 0.404), P(0.600, 0.416), P(0.536, 0.462));
-        g.CubicBezierTo(P(0.530, 0.382), P(0.522, 0.312), P(0.500, 0.262));
+        g.BeginFigure(Q(0.528, 0.322), true);
+        g.CubicBezierTo(Q(0.700, 0.338), Q(0.818, 0.444), Q(0.812, 0.590));   // 外缘，贴着果壁
+        g.CubicBezierTo(Q(0.806, 0.712), Q(0.700, 0.800), Q(0.566, 0.822));   // 外缘，收向底部
+        g.CubicBezierTo(Q(0.610, 0.744), Q(0.638, 0.650), Q(0.628, 0.556));   // 内缘，往回上
+        g.CubicBezierTo(Q(0.620, 0.448), Q(0.578, 0.372), Q(0.528, 0.322));   // 内缘，回到起点
         g.EndFigure(true);
         return geo;
     }
