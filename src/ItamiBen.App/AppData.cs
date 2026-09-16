@@ -34,19 +34,22 @@ public static class AppData
     public static string TotalsPath() => Path.Combine(Dir, "during.json");
 
     /// <summary>
-    /// 观测库（DESIGN §9）：一秒一行的 app / title / 空闲。
-    /// **跨轮持久**——v3 的 `During` 是 checkpoint 模型，第 N 轮的秒在第 N+1 轮 Start 时
-    /// 才入账，库一清这条链就断（DECISIONS F4）。
-    /// </summary>
-    /// <summary>
-    /// 窗口标题。**只有这一处定义**（2026-09-16）。
+    /// 窗口标题。**只有这一处定义**（2026-09-16），XAML 那边用 `{x:Static}` 引过去。
     ///
-    /// ⚠️ 它是**承重**的：Windows 上第二个实例靠 `FindWindow` 按这个标题把已有窗口提到
-    /// 前台（<see cref="SingleInstance"/>）。原来 XAML 里一份、C# 里一份，
-    /// 靠人记得同步——改一边不报错，只会让「第二次双击图标」**静默地什么也不发生**。
-    /// 现在 XAML 用 `{x:Static}` 引这里，物理上不可能对不上。
+    /// 「痛みを知らせる」= **告知痛苦**。名字里的 Itami 本来就是「痛み」，v4 的核心
+    /// 想法比 v3 多一层：不只是感到痛，是**把拖延的痛摆到你眼前**。
+    ///
+    /// ⚠️ 前面不再挂 `ItamiBen — `：程序名在 Dock / 任务栏 / 关于窗口里各出现一次，
+    /// 标题里再写一遍是重复。而且主窗口是 `WindowDecorations="None"`，
+    /// **macOS 上这行字根本看不见**——它只出现在 Windows 的任务栏，
+    /// 和「ItamiBen 自己在前台」那一秒记进库里的 title 列。
+    ///
+    /// ⚠️ **它是文案，不是标识符。** 2026-09-16 之前 Windows 的单实例靠
+    /// `FindWindow` 按这串精确匹配找窗口，等于「改文案 = 静默改坏功能」。
+    /// 那条依赖已经拆了（<see cref="SingleInstance"/> 改按进程名找），
+    /// 所以这里可以随便改。**别再把它接回任何逻辑上。**
     /// </summary>
-    public const string WindowTitle = "ItamiBen — 痛みを知らせる";
+    public const string WindowTitle = "痛みを知らせる";
 
     /// <summary>
     /// 把随程序发的 `AGENT.md` 刷进运行时目录，**跟数据库放在同一个文件夹**。

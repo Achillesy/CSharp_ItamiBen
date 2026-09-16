@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -48,8 +49,8 @@ namespace ItamiBen.App;
 /// 前台，然后自己安静退出——用户的动作（双击图标 / 快捷键）总该有个反应，
 /// 而不是变成一次毫无反馈的点击。
 ///
-/// ⚠️ **只有 Windows 有「提到前台」那一步**：<c>FindWindow</c> + <c>SetForegroundWindow</c>
-/// 是 Win32 API，macOS 没有零依赖的等价物。macOS 上退化成「安静地拒绝第二个实例」
+/// ⚠️ **只有 Windows 有「提到前台」那一步**：<c>SetForegroundWindow</c> 是 Win32 API，
+/// macOS 没有零依赖的等价物。macOS 上退化成「安静地拒绝第二个实例」
 /// ——单实例保证本身仍然成立，只是少了把旧窗口叫到前面来的那点体贴。
 /// ⚠️ 这半边**没在真机上跑过**，跟 <c>ForegroundWindow.Win</c> 一样是纸面代码。
 /// </summary>
@@ -103,21 +104,49 @@ public static class SingleInstance
         }
     }
 
+    /// <summary>
+    /// 把已经在跑的那扇窗口提到前台。
+    ///
+    /// ⚠️ **不按窗口标题找。** 原来这里是 <c>FindWindow(null, AppData.WindowTitle)</c>，
+    /// 那是**整串精确匹配**：标题改一个字，这里就安静地找不着窗口，症状是
+    /// 「第二次双击图标毫无反应」——不报错，不写日志，只有用户觉得程序坏了。
+    /// 2026-09-16 用户想把标题改成日文时问「会不会找不到」，问题不在字符集
+    /// （<c>CharSet.Unicode</c> 绑的是 <c>FindWindowW</c>，日文中文一样），
+    /// 在于**标题是给人看的文案，却被当成了标识符**。文案迟早要改。
+    ///
+    /// 现在按**进程名**找，也就是 <c>AssemblyName</c>。那个名字是钉死的
+    /// （macOS 的 <c>localizedName</c> 报的就是它，库里存的、规则里匹配的都是它，
+    /// 见 csproj 顶上的警告），**永远不会因为改文案而变**。
+    /// <c>MainWindowHandle</c> 内部替我们做了 EnumWindows + 按 pid 过滤那一套，
+    /// 不用自己再 P/Invoke 两个函数。
+    /// </summary>
     [SupportedOSPlatform("windows")]
     private static void ActivateExistingWindow()
     {
-        // ⚠️ 标题**只有 AppData 一处定义**，XAML 那边用 x:Static 引的同一个常量——
-        //    原来两处各写一份、靠人记得同步，改一边不报错只会让这里安静地找不着窗口
-        var hwnd = FindWindow(null, AppData.WindowTitle);
-        if (hwnd == IntPtr.Zero) return;   // 找不到就算了，安静退出
+        try
+        {
+            // 用自己的进程名，不写字面量——两个实例是同一个二进制，名字一定对得上
+            var self = Environment.ProcessId;
+            foreach (var p in Process.GetProcessesByName(Process.GetCurrentProcess().ProcessName))
+            {
+                if (p.Id == self) continue;
 
-        const int SW_RESTORE = 9;
-        ShowWindow(hwnd, SW_RESTORE);
-        SetForegroundWindow(hwnd);
+                // ⚠️ 进程刚起来还没建窗口时这里是 0，跳过继续找下一个
+                var hwnd = p.MainWindowHandle;
+                if (hwnd == IntPtr.Zero) continue;
+
+                const int SW_RESTORE = 9;
+                ShowWindow(hwnd, SW_RESTORE);
+                SetForegroundWindow(hwnd);
+                return;
+            }
+        }
+        catch (Exception e)
+        {
+            // 提到前台是**体贴，不是功能**：失败了也得让第二个实例安静退出
+            Log.Fallback($"could not raise the running window ({e.GetType().Name}: {e.Message})");
+        }
     }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr FindWindow(string? className, string windowTitle);
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
