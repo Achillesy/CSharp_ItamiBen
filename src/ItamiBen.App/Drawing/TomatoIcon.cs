@@ -16,7 +16,7 @@ namespace ItamiBen.App;
 /// Pure vector, like the dial and the dominoes: a handful of polygons and Beziers, no
 /// bitmap asset, crisp at any size.
 ///
-/// **Colour constraint (set by the user): at most 8 colours.** Actually 6. **No outline** -- adding a black line would turn it into
+/// **Colour constraint (set by the user): at most 8 colours.** Actually 7. **No outline** -- adding a black line would turn it into
 /// an illustration. Depth comes from the brightness difference between faces, not
 /// gradients: a gradient smears into a blur at a 16px taskbar icon size, while flat colour
 /// blocks still read as a tomato even scaled down further.
@@ -34,7 +34,7 @@ namespace ItamiBen.App;
 /// </summary>
 public static class TomatoIcon
 {
-    // ---- 6 colours, not one more
+    // ---- 7 colours, not one more
     //
     // ⚠️ 果身要**闷一点的橄榄绿，不能用亮柠檬绿**（用户 2026-09-16：「太透了，像一颗葡萄」）。
     //    亮而饱和的黄绿读起来是**通透的浆果**；真正的青番茄是压着土气的、偏暗的绿。
@@ -46,6 +46,7 @@ public static class TomatoIcon
     private static readonly Color Body_ = Color.FromRgb(0x6F, 0x96, 0x33);       // 果身
     private static readonly Color BodyDark = Color.FromRgb(0x54, 0x75, 0x22);    // 右下那弯暗面
     private static readonly Color BodyLit = Color.FromRgb(0x8C, 0xB0, 0x4E);     // 左上的高光
+    private static readonly Color Stripe = Color.FromRgb(0x5D, 0x80, 0x2A);      // 深绿条纹（青番茄的品种特征）
     private static readonly Color GreenDark = Color.FromRgb(0x1C, 0x46, 0x1A);   // 萼片
     private static readonly Color Green = Color.FromRgb(0x27, 0x5E, 0x23);       // 压在上面那两片
     private static readonly Color GreenLit = Color.FromRgb(0x35, 0x77, 0x2C);    // 果梗的亮面
@@ -65,7 +66,25 @@ public static class TomatoIcon
             Fill(BodyDark, Body(P, 0.512, 0.572));
             Fill(Body_, Body(P, 0.492, 0.556));
 
+            // ---- 深绿条纹（用户 2026-09-16 要的，青番茄的品种特征）。
+            //      ⚠️ **靠裁剪贴合轮廓，不要去算每条到边缘的交点**：条纹画成一路长到
+            //      果子外面的整条，再用果身自己的形状裁掉——轮廓和条纹从此不可能对不齐。
+            using (ctx.PushGeometryClip(Body(P, 0.492, 0.556)))
+                foreach (var (mid, w, top, bottom) in new[]
+                         {
+                             // ⚠️ **宽窄、长短、起止高度全都要不齐**，而且**左右不对称**：
+                             //    整齐的一圈竖条就是南瓜。真果子的斑纹是零散的。
+                             (0.250, 0.026, 0.36, 0.86),
+                             (0.372, 0.017, 0.30, 0.78),
+                             (0.560, 0.030, 0.27, 0.90),
+                             (0.690, 0.021, 0.34, 0.82),
+                             (0.828, 0.013, 0.44, 0.74),
+                         })
+                    Fill(Stripe, Meridian(P, mid, w, top, bottom));
+
             // The upper-left highlight: a crescent of bright red
+            //      ⚠️ **画在条纹之后**：高光是表面的反光，它本来就该把底下的花纹压住；
+            //      反过来先高光后条纹，条纹会像印在玻璃上一样浮起来。
             Fill(BodyLit, Highlight(P));
 
             // ---- Sepals: a few small, pointed leaves fanning outward from the top of the
@@ -104,6 +123,40 @@ public static class TomatoIcon
         g.CubicBezierTo(P(cx - 0.440, cy + 0.250), P(cx - 0.265, cy + 0.378), P(cx, cy + 0.378));
         g.CubicBezierTo(P(cx + 0.265, cy + 0.378), P(cx + 0.440, cy + 0.250), P(cx + 0.440, cy + 0.040));
         g.CubicBezierTo(P(cx + 0.440, cy - 0.140), P(cx + 0.290, cy - 0.300), P(cx, cy - 0.300));
+        g.EndFigure(true);
+        return geo;
+    }
+
+    /// <summary>
+    /// 一道条纹：顺着果子的经线走，两头都收成尖。
+    ///
+    /// ⚠️ **两头都要停在果肉里**，别一路通到果蒂和果脐：一路通到底的等距竖条会把番茄
+    /// 画成**南瓜**——那种「一瓣一瓣」的读法全来自条纹在两极汇聚。停在中间，
+    /// 它才是长在皮上的花纹而不是瓣与瓣的分界。（2026-09-16 为这个改了两轮。）
+    ///
+    /// ⚠️ 离中轴的距离随高度按抛物线收（赤道最远、两极最近）：球面上的经线就是这样，
+    /// 画成上下一样宽的直条，果子立刻变成一个圆筒。
+    /// </summary>
+    private static Geometry Meridian(Func<double, double, Point> P, double mid, double halfWidth,
+                                     double topY, double bottomY)
+    {
+        const double axis = 0.492;
+        double Spread(double y)
+        {
+            var d = (y - 0.60) / 0.44;
+            return Math.Clamp(1 - d * d * 0.8, 0.2, 1);
+        }
+
+        var top = axis + (mid - axis) * Spread(topY);
+        var bottom = axis + (mid - axis) * Spread(bottomY);
+        var a = topY + (bottomY - topY) * 0.30;
+        var b = topY + (bottomY - topY) * 0.70;
+
+        var geo = new StreamGeometry();
+        using var g = geo.Open();
+        g.BeginFigure(P(top, topY), true);
+        g.CubicBezierTo(P(mid + halfWidth, a), P(mid + halfWidth, b), P(bottom, bottomY));
+        g.CubicBezierTo(P(mid - halfWidth, b), P(mid - halfWidth, a), P(top, topY));
         g.EndFigure(true);
         return geo;
     }
