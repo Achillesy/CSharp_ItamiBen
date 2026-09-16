@@ -466,6 +466,30 @@ public partial class MainWindow : Window
     internal string? CommandForThisOs => _rules.CommandNamed(_settings.AlarmCommand);
 
     /// <summary>
+    /// 把内存里的设置写回库。**给 <see cref="SqlWindow"/> 在跑外来 SQL 之前调。**
+    ///
+    /// ⚠️ 设置在内存里有一份、退出时整份写回，所以 SQL 改了 `setting` 的某一行，
+    /// **退出时会被内存里那份盖掉**。先 flush 让库成为唯一真相，冲突就不存在了。
+    /// </summary>
+    internal void FlushSettings() => _settings.Save();
+
+    /// <summary>
+    /// 外来 SQL 跑完之后当场重装。**不关程序**——关窗口会把正在跑的那一轮作废掉
+    /// （`OnClosing` → `Settle`），代价和「改个提醒文字」完全不成比例。
+    /// </summary>
+    internal void ReloadAfterSql()
+    {
+        _settings = Settings.Load(_store);
+        LoadConfig();
+        BuildGoals();
+        ApplyChrome();
+        RefreshGoalTotals();
+    }
+
+    /// <summary>给设置窗口的那个红按钮用。</summary>
+    internal SampleStore? Store => _store;
+
+    /// <summary>
     /// 窗口尺寸、不透明度、置顶、拖动、右键菜单——**无边框那一套**。
     ///
     /// ⚠️ **不透明度要用 `OpacityMask`，不能用 `Opacity`**（v3 的 K29，实测出来的）：

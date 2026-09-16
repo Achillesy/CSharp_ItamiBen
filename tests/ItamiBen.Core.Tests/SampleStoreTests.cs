@@ -302,3 +302,91 @@ public class StoreLedgerTests
         Assert.Equal(TimeZoneInfo.Local.GetUtcOffset(t0), rows[0].At.Offset);
     }
 }
+
+/// <summary>
+/// 外来 SQL 的护栏（DECISIONS I16）。**这组是那扇「在线修改配置」窗口能不能存在的前提**：
+/// 它最终会把一段网页 AI 写的 SQL 跑在用户的库上。
+/// </summary>
+public class ApplySqlTests
+{
+    private static SampleStore Memory()
+    {
+        var db = SampleStore.Open(":memory:");
+        db.AddTotals(new Dictionary<string, int> { ["编程"] = 57203 });
+        db.Write(new DateTimeOffset(2026, 9, 16, 10, 0, 0, TimeSpan.FromHours(8)), "Code", "x", 0);
+        return db;
+    }
+
+    [Fact]
+    public void 改配置的_SQL_跑得通_而且顺手把版本号加一()
+    {
+        using var db = Memory();
+        var before = db.ConfigVersion;
+
+        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('Coding');");
+
+        Assert.True(r.Ok);
+        Assert.Equal(before + 1, db.ConfigVersion);   // AI 忘了写那句也没关系，程序兜底
+        Assert.Contains(db.Goals(), g => g.Name == "Coding");
+    }
+
+    [Fact]
+    public void 动了账本就整个回滚_连同一起提交的配置改动()
+    {
+        using var db = Memory();
+        var version = db.ConfigVersion;
+
+        // ⚠️ 前一句是正当的配置改动，后一句动账本。**两句必须一起作废**——
+        //    只挡住后一句、放行前一句，会留下一个谁都没预期的半吊子状态
+        var r = db.ApplySql("""
+            INSERT INTO goal (name) VALUES ('Coding');
+            UPDATE total SET seconds = 0;
+            """);
+
+        Assert.False(r.Ok);
+        Assert.Contains("ledger", r.Message);
+        Assert.Equal(57203, db.Totals()["编程"]);     // 账本一秒没动
+        Assert.Empty(db.Goals());                      // 配置那一句也没落
+        Assert.Equal(version, db.ConfigVersion);       // 版本号也没动
+    }
+
+    [Fact]
+    public void 删采样也算动账本()
+    {
+        using var db = Memory();
+        Assert.False(db.ApplySql("DELETE FROM sample;").Ok);
+        Assert.Single(db.Read(DateTimeOffset.MinValue.AddDays(1), DateTimeOffset.MaxValue.AddDays(-1)));
+    }
+
+    [Fact]
+    public void 语法错就一行都不落()
+    {
+        using var db = Memory();
+        var version = db.ConfigVersion;
+
+        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('ok'); 这不是 SQL;");
+
+        Assert.False(r.Ok);
+        Assert.Empty(db.Goals());
+        Assert.Equal(version, db.ConfigVersion);
+    }
+
+    [Fact]
+    public void 导出的配置不含窗口标题也不含逐秒记录()
+    {
+        // ⚠️ 这一条是**隐私边界**：导出的东西要被贴进网页对话框。
+        //    程序名可以给（AI 写 app 正则需要），窗口标题不行——
+        //    前者泄露「装了什么」，后者泄露「在干什么」。
+        using var db = Memory();
+        db.Write(new DateTimeOffset(2026, 9, 16, 10, 0, 1, TimeSpan.FromHours(8)),
+                 "Google Chrome", "某个很私人的网页标题", 0);
+
+        var dump = db.DumpConfig(["layout"]);
+
+        Assert.DoesNotContain("某个很私人的网页标题", dump);
+        Assert.DoesNotContain("INSERT INTO sample", dump);
+        Assert.DoesNotContain("INSERT INTO title", dump);
+        Assert.Contains("Google Chrome", dump);          // 程序名要给
+        Assert.DoesNotContain("INSERT INTO app", dump);  // 但写成注释，别诱导 AI 往账本里插
+    }
+}

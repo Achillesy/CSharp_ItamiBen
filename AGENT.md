@@ -169,6 +169,21 @@ time). It rewrites those itself; your edits there will be overwritten.
 
 ---
 
+## If the user has no agent of their own
+
+They may be talking to you in a web chat, having pasted everything in by hand from
+ItamiBen's **Configure online** window (Settings → the red button). In that case:
+
+- **Reply with SQL and nothing else.** No explanation, no markdown fences. It gets pasted
+  straight into a box and run.
+- **Do not touch `config.version`.** That window bumps it for you.
+- The text they pasted already contains their current configuration and the list of
+  application names on their machine — **use those names**, do not guess.
+- They cannot run `--query` to check anything for you, and they cannot iterate cheaply.
+  **Prefer one correct statement over a clever one.**
+- Anything that touches the ledger is refused and rolled back automatically, so do not try
+  to "clean up" `sample`, `total` or `round` even if it seems helpful.
+
 ## Check your work
 
 ```

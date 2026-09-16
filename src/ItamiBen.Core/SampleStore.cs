@@ -492,6 +492,168 @@ public sealed class SampleStore : IDisposable
         tx.Commit();
     }
 
+    // ── 在线修改配置：导出、执行、账本护栏 ─────────────────────────────────
+
+    /// <summary>一次 SQL 应用的结果。</summary>
+    public readonly record struct SqlResult(bool Ok, int RowsChanged, string Message);
+
+    /// <summary>
+    /// 账本的指纹。**执行任何外来 SQL 的前后各取一次，变了就整个回滚。**
+    ///
+    /// ⚠️ 用事后核对，**不用事前审查 SQL**：想靠解析 SQL 判断「它会不会动账本」是必输的
+    /// （子查询、触发器、`DROP TABLE`、`ATTACH`）。指纹对得上才提交，这一条不依赖
+    /// 任何对 SQL 的理解。
+    /// </summary>
+    private string LedgerFingerprint()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = """
+            SELECT (SELECT COUNT(*) FROM sample) || '/' || (SELECT COUNT(*) FROM round)
+                || '/' || (SELECT COUNT(*) FROM total)
+                || '/' || (SELECT COALESCE(SUM(seconds), 0) FROM total)
+                || '/' || (SELECT COUNT(*) FROM event);
+            """;
+        return cmd.ExecuteScalar()?.ToString() ?? "";
+    }
+
+    /// <summary>把整个库复制一份出去。<c>VACUUM INTO</c> 要求目标不存在。</summary>
+    public void BackupTo(string path)
+    {
+        if (File.Exists(path)) File.Delete(path);
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "VACUUM INTO $p;";
+        cmd.Parameters.AddWithValue("$p", path);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// 执行一段外来 SQL（多半是网页 AI 写的），**全程在一个事务里**。
+    ///
+    /// 顺序是有讲究的：
+    /// <list type="number">
+    ///   <item>取账本指纹；</item>
+    ///   <item>开事务、整段执行；</item>
+    ///   <item>再取一次指纹，**对不上就整个回滚**——一行都不落；</item>
+    ///   <item>顺手把 `config.version` 加一（AI 很可能忘了写那句，而忘了的症状是
+    ///   「改了没反应」，正是这个项目最恨的那类失败）；</item>
+    ///   <item>提交。</item>
+    /// </list>
+    ///
+    /// ⚠️ **整段当一条命令跑，不按分号切**：字符串里的分号会把切分器骗过去，
+    /// 为了好看的逐条报错引入一个会切错的解析器不划算。出错时 SQLite 的异常里
+    /// 本来就带着出错的位置。
+    /// </summary>
+    public SqlResult ApplySql(string sql)
+    {
+        var before = LedgerFingerprint();
+        var changesBefore = TotalChanges();
+
+        using var tx = _db.BeginTransaction();
+        try
+        {
+            using (var cmd = _db.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = sql;
+                cmd.ExecuteNonQuery();
+            }
+
+            if (LedgerFingerprint() != before)
+            {
+                tx.Rollback();
+                return new SqlResult(false, 0,
+                    "Refused: that SQL changed the ledger (sample / round / total / event). "
+                    + "Nothing was written — the whole thing was rolled back.");
+            }
+
+            using (var bump = _db.CreateCommand())
+            {
+                bump.Transaction = tx;
+                bump.CommandText = "INSERT INTO config (id, version, changed_at, note) VALUES (1, 1, $at, 'applied SQL') "
+                                 + "ON CONFLICT(id) DO UPDATE SET version = version + 1, changed_at = $at, note = 'applied SQL';";
+                bump.Parameters.AddWithValue("$at", DateTimeOffset.Now.ToUnixTimeSeconds());
+                bump.ExecuteNonQuery();
+            }
+
+            tx.Commit();
+            return new SqlResult(true, (int)(TotalChanges() - changesBefore), "");
+        }
+        catch (Exception e)
+        {
+            try { tx.Rollback(); } catch { }
+            return new SqlResult(false, 0, e.Message);
+        }
+    }
+
+    private long TotalChanges()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT total_changes();";
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+
+    /// <summary>
+    /// 把当前配置导成一段给网页 AI 看的 SQL。
+    ///
+    /// ⚠️ **`sample` 和 `title` 一行都不进来**，这条由程序钉死、不靠用户记得删：
+    /// `title` 是用户开过的每一个窗口标题（看了什么、刷了谁、哪个文件名），
+    /// **那是要被贴进网页对话框的东西**。程序名单另给一段，因为 AI 写 `app` 正则时
+    /// 确实需要它——**程序名泄露的是「装了什么」，窗口标题泄露的是「在干什么」，
+    /// 这两者不是一个量级。**
+    ///
+    /// ⚠️ 程序名单写成**注释**而不是 `INSERT`：`app` 是账本表，写成 INSERT 会诱导
+    /// AI 往里插东西，而那会被账本护栏挡下、白跑一趟。
+    /// </summary>
+    public string DumpConfig(IReadOnlyList<string> agentEditableSettings)
+    {
+        var b = new System.Text.StringBuilder();
+        b.AppendLine($"-- ItamiBen configuration as of {DateTime.Now:yyyy-MM-dd HH:mm}, config version {ConfigVersion}.");
+        b.AppendLine("-- This is the CURRENT state, shown for reference. Do not repeat it back.");
+        b.AppendLine("-- The ledger (sample / title / round / event / total) is deliberately not included.");
+        b.AppendLine();
+
+        foreach (var g in Goals())
+        {
+            b.AppendLine($"INSERT INTO goal (name, enabled) VALUES ({Q(g.Name)}, {(g.Enabled ? 1 : 0)});");
+            foreach (var r in g.Rules)
+                b.AppendLine($"INSERT INTO rule (goal, app, title) VALUES ({Q(g.Name)}, {Q(r.App)}, {Q(r.Title)});");
+        }
+        b.AppendLine();
+        foreach (var c in Commands())
+            b.AppendLine($"INSERT INTO command (name, macos, windows) VALUES ({Q(c.Name)}, {Q(c.MacOS)}, {Q(c.Windows)});");
+        b.AppendLine();
+
+        using (var cmd = _db.CreateCommand())
+        {
+            cmd.CommandText = "SELECT cron, text, run, enabled FROM schedule ORDER BY id;";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                b.AppendLine($"INSERT INTO schedule (cron, text, run, enabled) VALUES ("
+                           + $"{Q(r.GetString(0))}, {Q(r.IsDBNull(1) ? null : r.GetString(1))}, "
+                           + $"{Q(r.IsDBNull(2) ? null : r.GetString(2))}, {r.GetInt64(3)});");
+        }
+        b.AppendLine();
+
+        var settings = Settings();
+        foreach (var key in agentEditableSettings)
+            if (settings.TryGetValue(key, out var v))
+                b.AppendLine($"INSERT INTO setting (key, value) VALUES ({Q(key)}, {Q(v)});");
+
+        b.AppendLine();
+        b.AppendLine("-- Application names this machine has actually been seen running.");
+        b.AppendLine("-- Use these to write `app` rules that really match. (Window titles are NOT listed.)");
+        using (var cmd = _db.CreateCommand())
+        {
+            cmd.CommandText = "SELECT name FROM app ORDER BY name;";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) b.AppendLine($"--   {r.GetString(0)}");
+        }
+
+        return b.ToString();
+
+        static string Q(string? v) => v is null ? "NULL" : "'" + v.Replace("'", "''") + "'";
+    }
+
     /// <summary>每个目标的终身累计秒数。</summary>
     public Dictionary<string, long> Totals()
     {

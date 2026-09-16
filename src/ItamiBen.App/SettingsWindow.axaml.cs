@@ -67,6 +67,13 @@ public partial class SettingsWindow : Window
 
         // ⚠️ 到点跑命令**仍然不持久化**（DECISIONS E8）：这里改的是 MainWindow 上那个
         //    内存字段，重启之后一律是关的。设置窗口改不了这一点，也不该能改
+        this.FindControl<Button>("ConfigureOnline")!.Click += async (_, _) =>
+        {
+            if (_owner is not { } owner) return;
+            await new SqlWindow(owner, owner.Store).ShowDialog(this);
+            ShowCommandPreview();
+        };
+
         Toggle("ExecuteOn", on => { _owner?.SetCommandArmed(on); ShowCommandPreview(); });
         ShowCommandPreview();
 

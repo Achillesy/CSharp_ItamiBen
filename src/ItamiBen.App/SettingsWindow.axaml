@@ -116,5 +116,11 @@
 
     <Button Name="OpenFolder" Content="Open config folder" Margin="0,4,0,0"
             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="0,7" />
+
+    <!-- ⚠️ 红的：这一整块是利器——它最终会把一段外来 SQL 跑在你的库上。
+         真正危险的那一下（窗口里的 Apply）更红。 -->
+    <Button Name="ConfigureOnline" Content="Configure online…" Margin="0,2,0,0"
+            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="0,7"
+            Background="#D6453F" Foreground="White" FontWeight="SemiBold" />
   </StackPanel>
 </Window>
