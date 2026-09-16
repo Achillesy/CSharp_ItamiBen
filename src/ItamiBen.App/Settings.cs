@@ -29,7 +29,7 @@ public sealed class Settings
     /// 目标名对不上了（rules.json 改过）就自然勾不上，不猜也不报错。
     /// </summary>
     [JsonPropertyName("focusMinutes")] public int? FocusMinutes { get; set; }
-    [JsonPropertyName("selectedGoals")] public List<string> SelectedGoals { get; set; } = [];
+    [JsonPropertyName("selectedGoal")] public string? SelectedGoal { get; set; }
 
     /// <summary>
     /// 日面还是夜面。**null = 跟着系统走**（第一次启动就是这个），

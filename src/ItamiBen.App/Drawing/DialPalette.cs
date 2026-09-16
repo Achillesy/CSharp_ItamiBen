@@ -11,7 +11,8 @@ namespace ItamiBen.App;
 public sealed record DialPalette(
     Color Face, Color FaceRim, Color Ink, Color Tick,
     Color BezelLit, Color BezelMid, Color BezelDark,
-    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter, Color Card)
+    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter, Color Card,
+    Color DominoTop, Color DominoFace, Color DominoSide)
 {
     /// <summary>日面：白表盘 + 木边框（照着用户给的那张实物挂钟照片调的）。</summary>
     public static readonly DialPalette Light = new(
@@ -36,7 +37,13 @@ public sealed record DialPalette(
         // （#B57C4C），淡橙会糊进木色里，而红色本来就是靠对比度选的
         AlarmsDotOuter: Color.FromRgb(0xE8, 0x6A, 0x16),
         // 控件区那块实心底色。窗口透明之后没有它，按钮和文字就直接浮在桌面上
-        Card: Color.FromRgb(0xF4, 0xF5, 0xF7));
+        Card: Color.FromRgb(0xF4, 0xF5, 0xF7),
+        // 骨牌：**木头**，比钟面的木边框浅一档，免得抢戏。镜像之后侧面落在左边、
+        // 正对左上的光，所以它是受光面——但只需要**稍微**亮一点，差太多就不像同一块木头了。
+        // DominoTop 留着但用不到：相机高度跟骨牌顶面齐平，顶面永远看不见
+        DominoTop: Color.FromRgb(0xE2, 0xC6, 0xA4),
+        DominoFace: Color.FromRgb(0xC4, 0x9E, 0x74),
+        DominoSide: Color.FromRgb(0xE6, 0xC8, 0xA4));
 
     /// <summary>
     /// 夜面。⚠️ <see cref="Break"/> **单独调亮一档**（DECISIONS D4）：
@@ -59,5 +66,8 @@ public sealed record DialPalette(
         Alarm: Color.FromRgb(0xF5, 0xD0, 0x50),
         AlarmsDot: Color.FromRgb(0xE9, 0x63, 0x5C),
         AlarmsDotOuter: Color.FromRgb(0xFA, 0x8A, 0x3C),
-        Card: Color.FromRgb(0x25, 0x2B, 0x33));
+        Card: Color.FromRgb(0x25, 0x2B, 0x33),
+        DominoTop: Color.FromRgb(0x8A, 0x6E, 0x50),
+        DominoFace: Color.FromRgb(0x6E, 0x56, 0x3C),
+        DominoSide: Color.FromRgb(0x93, 0x77, 0x57));
 }

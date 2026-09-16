@@ -7,8 +7,12 @@ namespace ItamiBen.App;
 /// <summary>标准（默认）/ 紧凑。</summary>
 public enum LayoutMode { Standard, Compact }
 
-/// <summary>一档的尺寸。**唯一定义处**——XAML 里一个都不写死，免得同一个量两处定义。</summary>
-public sealed record LayoutMetrics(double WindowWidth, double WindowHeight);
+/// <summary>
+/// 一档的尺寸。**唯一定义处**——XAML 里一个都不写死，免得同一个量两处定义。
+/// 窗口高度不在这里：它是 <c>SizeToContent="Height"</c> 自己长出来的，
+/// rules.json 有几个目标就有几行，窗口跟着走。
+/// </summary>
+public sealed record LayoutMetrics(double WindowWidth, double DialHeight, double DominoHeight);
 
 /// <summary>
 /// 窗口外观的开关，放在运行时目录的 <c>layout.json</c>。从 v3 搬过来（它的 K25）。
@@ -43,8 +47,14 @@ public static class WindowLayout
 
     private const double DefaultOpacity = DefaultOpacityPercent / 100.0;
 
-    private static readonly LayoutMetrics Standard = new(420, 700);
-    private static readonly LayoutMetrics Compact = new(340, 560);
+    private static readonly LayoutMetrics Standard = new(WindowWidth: 380, DialHeight: 330, DominoHeight: 76);
+
+    /// <summary>
+    /// 紧凑档。**292 减掉左右各 18 的留白正好是 256**，所以钟面的
+    /// <c>box = Math.Min(宽, 高)</c> 两边相等，刚好填满那一行不留空隙。
+    /// 钟面一切都从 <c>Bounds</c> 推导，所以改这一个数就等比缩放，**绘制代码一行不用动**。
+    /// </summary>
+    private static readonly LayoutMetrics Compact = new(WindowWidth: 292, DialHeight: 256, DominoHeight: 56);
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {

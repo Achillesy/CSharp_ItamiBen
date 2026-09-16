@@ -35,7 +35,11 @@ public partial class MainWindow : Window
     private const int AlarmsListRings = 2;
 
     private readonly Sampler _sampler = new();
-    private readonly List<CheckBox> _goalBoxes = [];
+    /// <summary>
+    /// 目标列表。**单选**——一轮只盯一个目标（DECISIONS C12 因此变成天然成立）。
+    /// v3 也是单选，2026-09-16 用户确认这一直就是他要的。
+    /// </summary>
+    private readonly List<RadioButton> _goalBoxes = [];
 
     /// <summary>每个目标那一行右边的累计数字，跟 <see cref="_goalBoxes"/> 一一对应。</summary>
     private readonly List<TextBlock> _goalTotals = [];
@@ -122,9 +126,14 @@ public partial class MainWindow : Window
         OpenStore();
 
         BuildGoals();
-        foreach (var b in _goalBoxes)
-            b.IsChecked = _settings.SelectedGoals.Contains((string)b.Content!);
-        ResumeRound();   // ⚠️ 排在后面：接回来的那一轮说了算，会把上面这几个勾覆盖掉
+
+        // 把上次选的那个选回来；它没了（rules.json 改过）就退回第一个——
+        // **永远有一个是选中的**，不让用户面对一个「什么都没选」的起点
+        var saved = _goalBoxes.FirstOrDefault(b => (string)b.Content! == _settings.SelectedGoal);
+        if (saved is not null) saved.IsChecked = true;
+        else if (_goalBoxes.Count > 0) _goalBoxes[0].IsChecked = true;
+
+        ResumeRound();   // ⚠️ 排在后面：接回来的那一轮说了算，会覆盖上面这个选择
 
         this.FindControl<Button>("ActionBtn")!.Click += (_, _) => OnAction();
         this.FindControl<Button>("GrantBtn")!.Click += (_, _) =>
@@ -207,7 +216,12 @@ public partial class MainWindow : Window
         var panel = this.FindControl<StackPanel>("GoalsPanel")!;
         foreach (var goal in _rules.SelectableGoals)
         {
-            var box = new CheckBox { Content = goal, VerticalAlignment = VerticalAlignment.Center };
+            var box = new RadioButton
+            {
+                Content = goal,
+                GroupName = "goal",
+                VerticalAlignment = VerticalAlignment.Center,
+            };
             box.IsCheckedChanged += (_, _) => UpdateUi();
 
             var total = new TextBlock
@@ -234,6 +248,11 @@ public partial class MainWindow : Window
         var palette = ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
         this.FindControl<DialControl>("Dial")!.Palette = palette;
         this.FindControl<Border>("CardBackdrop")!.Background = new SolidColorBrush(palette.Card);
+
+        var dominoes = this.FindControl<DominoRow>("Dominoes")!;
+        dominoes.Palette = palette;
+        dominoes.Fallen = DominoRow.FallenForToday(DateTime.Now);
+
         ApplyChrome();
     }
 
@@ -265,6 +284,10 @@ public partial class MainWindow : Window
         if (_closeItem is not null) _closeItem.Icon = ChromeIcons.Close(palette);
     }
 
+    /// <summary>当前选中的目标；一个都没选（rules.json 是空的）就是 null。</summary>
+    private string? Picked()
+        => _goalBoxes.FirstOrDefault(b => b.IsChecked == true)?.Content as string;
+
     /// <summary>置顶的**唯一入口**——图标、菜单项、设置、窗口属性一次全对齐。</summary>
     private void SetPinned(bool pinned)
     {
@@ -290,11 +313,17 @@ public partial class MainWindow : Window
     {
         var metrics = WindowLayout.Current;
         Width = metrics.WindowWidth;
-        Height = metrics.WindowHeight;
+        // ⚠️ 高度不设：SizeToContent="Height" 自己长，rules.json 有几个目标就有几行
+        this.FindControl<DialControl>("Dial")!.Height = metrics.DialHeight;
+        this.FindControl<DominoRow>("Dominoes")!.Height = metrics.DominoHeight;
 
         var mask = new SolidColorBrush(Color.FromArgb((byte)Math.Round(WindowLayout.Opacity * 255), 255, 255, 255));
         this.FindControl<DialControl>("Dial")!.OpacityMask = mask;
+        this.FindControl<DominoRow>("Dominoes")!.OpacityMask = mask;
         this.FindControl<Border>("CardBackdrop")!.OpacityMask = mask;
+
+        this.FindControl<TextBlock>("Colophon")!.Text =
+            $"ItamiBen {typeof(MainWindow).Assembly.GetName().Version?.ToString(3)}   © 2026 Achilles.Newman";
 
         Topmost = _settings.Pinned;
 
@@ -433,6 +462,10 @@ public partial class MainWindow : Window
         _alarms = LoadAlarms();
         CheckAlarmsList(now);
         RefreshAlarmsDot(now);
+
+        // 骨牌每分钟核对一次星期。挂在现成的分钟节拍上，不专门开定时器——
+        // 判断本身是一次 DayOfWeek 比较，零成本
+        this.FindControl<DominoRow>("Dominoes")!.Fallen = DominoRow.FallenForToday(now);
     }
 
     /// <summary>每分钟重读一次：这是用户手写的文件，改完不该还要重启。读不了就当没有。</summary>
@@ -741,7 +774,7 @@ public partial class MainWindow : Window
     {
         Settle(EndReason.Closed);
         _settings.FocusMinutes = _focusMinutes;
-        _settings.SelectedGoals = [.. _goalBoxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content!)];
+        _settings.SelectedGoal = Picked();
         _settings.AlarmAt = _alarm.FireAt;
         try { _settings.WindowX = Position.X; _settings.WindowY = Position.Y; }
         catch (Exception e) { Log.Error("Failed to read the window position", e); }
@@ -759,16 +792,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        var goals = _goalBoxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content!).ToList();
-        if (goals.Count == 0) return;
+        if (Picked() is not { } goal) return;
 
-        _round = new Round(DateTimeOffset.Now, _focusMinutes, goals, _rules);
+        _round = new Round(DateTimeOffset.Now, _focusMinutes, [goal], _rules);
         _written = false;
         _lastRebuiltMinute = -1;
         _lastAwaySpans = 0;
         _store?.BeginRound(_round.StartedAt, _round.FocusMinutes, _round.Goals);
         Log.Line($"round started: focus={_focusMinutes}min break={_round.BreakMinutes}min "
-               + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goals={string.Join("/", goals)}");
+               + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goal={goal}");
         UpdateUi();
     }
 
@@ -823,12 +855,14 @@ public partial class MainWindow : Window
         dial.InvalidateVisual();
 
         this.FindControl<TextBlock>("AlarmText")!.Text = FormatAlarm();
-        this.FindControl<TextBlock>("Readout")!.Text = ReadoutText();
+        var readout = this.FindControl<TextBlock>("Readout")!;
+        readout.Text = ReadoutText();
+        readout.IsVisible = readout.Text.Length > 0;
         RefreshGoalTotals();
 
         var action = this.FindControl<Button>("ActionBtn")!;
         action.Content = running ? "Give up" : "Start";
-        action.IsEnabled = running || _goalBoxes.Any(b => b.IsChecked == true);
+        action.IsEnabled = running || Picked() is not null;
 
         // ⚠️ 只有 Give up 是红的——它作废整轮。休息中**仍然是 Give up**（C8）
         action.Classes.Set("danger", running);
@@ -843,10 +877,8 @@ public partial class MainWindow : Window
     private string ReadoutText()
     {
         if (_rulesError is not null) return $"No goals: {_rulesError}";
-        if (_round is null)
-            return _rules.SelectableGoals.Count == 0
-                ? "No goals in rules.json yet."
-                : "Pick what you are allowed to do.";
+        // ⚠️ 空闲时**什么都不写**：目标列表就在下面，不需要再写一句话说明它是干什么的
+        if (_round is null) return _rules.SelectableGoals.Count == 0 ? "No goals in rules.json yet." : "";
 
         var p = _round.Project();
         return _round.Phase switch
@@ -898,9 +930,8 @@ public partial class MainWindow : Window
         //    这是最坏的一种失败：程序照跑、钟面照转，只是永远不可能达成。必须说出来
         if (_store is null)
         {
-            this.FindControl<TextBlock>("StatusText")!.Text =
-                "Cannot open samples.db — nothing is being recorded, so every round will run out. "
-                + "See itamiben.log.";
+            ShowStatus("Cannot open samples.db",
+                       "Nothing is being recorded, so every round will run out. See itamiben.log.");
             this.FindControl<Border>("StatusBar")!.Background = new SolidColorBrush(Color.FromRgb(0xC4, 0x5A, 0x28));
             this.FindControl<Button>("GrantBtn")!.IsVisible = false;
             return;
@@ -909,15 +940,27 @@ public partial class MainWindow : Window
         if (!granted)
         {
             // ⚠️ 症状是「app 名读得到、标题读不到」。第一次见很容易误判成目标 app 的问题
-            this.FindControl<TextBlock>("StatusText")!.Text =
-                "No Accessibility permission → window titles are unreadable, so title rules never match. "
-                + "Grant it in System Settings → Privacy & Security → Accessibility.";
+            ShowStatus("No Accessibility permission",
+                       "Window titles are unreadable, so title rules never match. "
+                     + "System Settings → Privacy & Security → Accessibility");
             return;
         }
 
         if (sample is { } s)
-            this.FindControl<TextBlock>("StatusText")!.Text =
-                $"{(s.App.Length == 0 ? "—" : s.App)}   {(s.Title.Length == 0 ? "(no title)" : s.Title)}";
+            ShowStatus(s.App.Length == 0 ? "—" : s.App,
+                       s.Title.Length == 0 ? "(no title)" : s.Title);
+    }
+
+    /// <summary>
+    /// 状态栏两行：**应用名居中，标题左对齐**。
+    ///
+    /// ⚠️ 两行都是单行 + 省略号截断，**绝不折行**——窗口是 `SizeToContent="Height"`，
+    /// 一折行整扇窗就变高、边框跟着跳。
+    /// </summary>
+    private void ShowStatus(string app, string title)
+    {
+        this.FindControl<TextBlock>("StatusApp")!.Text = app;
+        this.FindControl<TextBlock>("StatusTitle")!.Text = title;
     }
 
     /// <summary>
