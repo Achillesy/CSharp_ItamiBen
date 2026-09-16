@@ -35,9 +35,9 @@ namespace ItamiBen.App;
 public static class TomatoIcon
 {
     // ---- 6 colours, not one more
-    private static readonly Color Flesh     = Color.FromRgb(0xCF, 0xE3, 0x94);  // 果肉，青番茄偏黄的浅绿
-    private static readonly Color FleshDark = Color.FromRgb(0xA9, 0xC4, 0x70);  // 右下那弯暗面
-    private static readonly Color Juice     = Color.FromRgb(0x4E, 0x8E, 0x2A);  // 果汁，深绿
+    private static readonly Color Flesh     = Color.FromRgb(0xB7, 0xD1, 0x73);  // 果肉，青番茄偏黄的绿
+    private static readonly Color FleshDark = Color.FromRgb(0x98, 0xB8, 0x56);  // 右下那弯暗面
+    private static readonly Color Juice     = Color.FromRgb(0x44, 0x83, 0x22);  // 果汁，深绿
     private static readonly Color Seed      = Color.FromRgb(0xF4, 0xF8, 0xE4);  // 籽
     private static readonly Color Sepal     = Color.FromRgb(0x24, 0x60, 0x1C);  // 萼片
     private static readonly Color SepalLit  = Color.FromRgb(0x3E, 0x8A, 0x2B);  // 压在上面那两片 + 果梗
@@ -67,8 +67,8 @@ public static class TomatoIcon
             // ---- 籽：顺着虫身排一列
             foreach (var (x, y) in new[]
                      {
-                         (0.652, 0.416), (0.694, 0.492), (0.708, 0.580), (0.692, 0.670), (0.644, 0.748),
-                         (0.348, 0.416), (0.306, 0.492), (0.292, 0.580), (0.308, 0.670), (0.356, 0.748),
+                         (0.672, 0.404), (0.716, 0.490), (0.726, 0.584), (0.706, 0.678), (0.652, 0.762),
+                         (0.328, 0.404), (0.284, 0.490), (0.274, 0.584), (0.294, 0.678), (0.348, 0.762),
                      })
                 Fill(Seed, new EllipseGeometry(new Rect(
                     (x - 0.026) * size, (y - 0.020) * size, 0.052 * size, 0.040 * size)));
@@ -122,7 +122,11 @@ public static class TomatoIcon
     /// 一条果汁：从果蒂下方起，贴着果壁鼓出去，再收回底部中央——一条两头尖、
     /// 中间宽的弯虫。<paramref name="mirror"/> 翻到另一边，**一份形状画两条**。
     ///
-    /// ⚠️ **两头都要收成尖**：两端是圆的就成了香蕉/豆子，不是果腔。
+    /// ⚠️ **两头是钝的，不是尖的**（用户 2026-09-16 指出）：收成尖就成了新月，
+    /// 照片里果腔的头尾都是圆钝的。
+    ///
+    /// ⚠️ **中间那条浅色上宽下窄**（我第一版画反了）：胎座在果蒂那头最宽，
+    /// 一路收到花萼那头。所以内缘的 x **越往上离中线越远**。
     /// ⚠️ **外缘贴着果壁走、内缘留出中轴**：中间那条浅色不是画出来的，是两条虫之间
     /// 剩下的果肉——这样它永远跟果壁同色，也永远不会抢戏。
     /// </summary>
@@ -132,11 +136,13 @@ public static class TomatoIcon
 
         var geo = new StreamGeometry();
         using var g = geo.Open();
-        g.BeginFigure(Q(0.528, 0.322), true);
-        g.CubicBezierTo(Q(0.700, 0.338), Q(0.818, 0.444), Q(0.812, 0.590));   // 外缘，贴着果壁
-        g.CubicBezierTo(Q(0.806, 0.712), Q(0.700, 0.800), Q(0.566, 0.822));   // 外缘，收向底部
-        g.CubicBezierTo(Q(0.610, 0.744), Q(0.638, 0.650), Q(0.628, 0.556));   // 内缘，往回上
-        g.CubicBezierTo(Q(0.620, 0.448), Q(0.578, 0.372), Q(0.528, 0.322));   // 内缘，回到起点
+        g.BeginFigure(Q(0.596, 0.344), true);
+        g.CubicBezierTo(Q(0.628, 0.308), Q(0.678, 0.302), Q(0.716, 0.330));   // 头：钝的，不是尖的
+        g.CubicBezierTo(Q(0.812, 0.398), Q(0.834, 0.570), Q(0.810, 0.680));   // 外缘，贴着果壁
+        g.CubicBezierTo(Q(0.782, 0.780), Q(0.698, 0.828), Q(0.594, 0.842));   // 外缘，收向底部
+        g.CubicBezierTo(Q(0.554, 0.848), Q(0.528, 0.826), Q(0.528, 0.790));   // 尾：也是钝的
+        g.CubicBezierTo(Q(0.548, 0.726), Q(0.560, 0.648), Q(0.572, 0.560));   // 内缘，往回上
+        g.CubicBezierTo(Q(0.586, 0.488), Q(0.596, 0.418), Q(0.596, 0.344));   // 内缘，越往上离中线越远
         g.EndFigure(true);
         return geo;
     }
