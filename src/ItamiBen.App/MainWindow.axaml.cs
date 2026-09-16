@@ -94,6 +94,19 @@ public partial class MainWindow : Window
     /// </summary>
     private MenuItem? _pinItem;
     private MenuItem? _tickItem;
+    private MenuItem? _commandItem;
+
+    /// <summary>
+    /// 闹钟到点跑命令，开着没有。
+    ///
+    /// ⚠️ **故意不进 `settings.json`，每次启动一律是关的**（v3 的 E8）。
+    /// 持久化它是**事故**：那条命令多半是关机/重启，重启之后被上一个会话的设置拍死，
+    /// 而你根本不知道它还开着。想到点关机就必须在**本次会话里**手动打开一次。
+    ///
+    /// 做成普通字段而不是 Settings 属性，是让「不持久化」这件事**结构上做不到反面**
+    /// ——v3 是放在 Settings 里、靠 `Load` 强制复位，那要靠人记得。
+    /// </summary>
+    private bool _commandArmed;
     private MenuItem? _closeItem;
 
     /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
@@ -287,6 +300,7 @@ public partial class MainWindow : Window
         tick.Classes.Set("on", _settings.TickEnabled);
 
         if (_tickItem is not null) _tickItem.IsChecked = _settings.TickEnabled;
+        if (_commandItem is not null) _commandItem.IsChecked = _commandArmed;
 
         this.FindControl<Button>("ThemeBtn")!.Content = ChromeIcons.Theme(dark, palette);
 
@@ -377,7 +391,28 @@ public partial class MainWindow : Window
         _tickItem = new MenuItem { Header = "Ticking", ToggleType = MenuItemToggleType.CheckBox };
         _tickItem.Click += (_, _) => SetTicking(!_settings.TickEnabled);
 
-        dial.ContextMenu = new ContextMenu { ItemsSource = new[] { _tickItem, _pinItem, close } };
+        // ⚠️ 到点跑命令。**每次启动都是关的**，见 _commandArmed
+        _commandItem = new MenuItem { Header = "Run command at alarm", ToggleType = MenuItemToggleType.CheckBox };
+        _commandItem.Click += (_, _) =>
+        {
+            _commandArmed = !_commandArmed;
+
+            // ⚠️ 界面上**不显示具体命令**（用户 2026-09-16 要求）。但打开的那一刻往日志
+            //    里写一行——那条命令多半是关机，事后总得查得出「这一下到底会跑什么」。
+            //    v3 的 E14 是把命令显示在卡片上，理由是「按下开关之前有权知道按的是什么」；
+            //    这里换成日志，代价是**按之前看不到，只能事后查**。
+            if (_commandArmed)
+                Log.Line($"command armed: {_rules.CommandForThisOs() ?? "(no executeCommand for this OS)"}");
+            else
+                Log.Line("command disarmed");
+
+            ApplyChrome();
+        };
+
+        dial.ContextMenu = new ContextMenu
+        {
+            ItemsSource = new[] { _tickItem, _commandItem, _pinItem, close },
+        };
 
         this.FindControl<Button>("TickBtn")!.Click += (_, _) => SetTicking(!_settings.TickEnabled);
 
@@ -761,7 +796,17 @@ public partial class MainWindow : Window
         if (now < _alarmQuietUntil) return;      // 正在拨针，别当场响（E6）
         if (!_alarm.ShouldFire(now)) return;
 
-        _alarm.MarkFired();                       // 先消费掉再出声：响铃失败也不该让它反复响
+        _alarm.MarkFired();   // 先消费掉再动手：失败也不该让它反复触发
+
+        // ⚠️ **二选一**：开着就跑命令、不响铃（跟 v3 一致）。
+        //    响铃是「提醒你自己动手」，跑命令是「替你动手」，两件事不叠加。
+        if (_commandArmed)
+        {
+            Log.Line($"alarm fired: {_alarm.FireAt:HH:mm} → running the command");
+            Command.LaunchDetached(_rules);
+            return;
+        }
+
         Log.Line($"alarm fired: {_alarm.FireAt:HH:mm} sound={_settings.AlarmSound ?? "(none)"} ×{AlarmRings}");
         Sound.Repeat(_settings.AlarmSound, AlarmRings);
     }

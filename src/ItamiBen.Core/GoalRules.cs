@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace ItamiBen.Core;
@@ -41,6 +42,54 @@ public sealed class RulesFile
     /// 文件本身仍然是**两份**（DECISIONS A6：运行时目录跟 v3 完全隔离），共用的只是格式。
     /// </summary>
     public Dictionary<string, GoalGroup> Groups { get; init; } = [];
+
+    /// <summary>
+    /// 闹钟到点要跑的命令，按操作系统分。**一个值可以是单条字符串，也可以是一串**。
+    ///
+    /// ⚠️ **永远只执行第 0 条**：这是个收藏夹不是配置格式，想换命令就去文件里重排顺序，
+    /// **不做界面去选**（v3 的 E9）。
+    /// </summary>
+    [JsonConverter(typeof(CommandTableConverter))]
+    public Dictionary<string, IReadOnlyList<string>>? ExecuteCommand { get; init; }
+}
+
+/// <summary>
+/// <c>executeCommand</c> 怎么读：一个值**单条字符串或一串都收**，统一成列表。
+/// 操作系统名（windows / macos）大小写不敏感，跟这份文件其余部分一致。
+/// </summary>
+internal sealed class CommandTableConverter : JsonConverter<Dictionary<string, IReadOnlyList<string>>>
+{
+    public override Dictionary<string, IReadOnlyList<string>> Read(
+        ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+    {
+        var table = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        if (reader.TokenType != JsonTokenType.StartObject)
+            throw new JsonException("executeCommand must be an object keyed by OS.");
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            var os = reader.GetString()!;
+            reader.Read();
+            var list = new List<string>();
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                list.Add(reader.GetString()!);
+            }
+            else if (reader.TokenType == JsonTokenType.StartArray)
+            {
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    if (reader.TokenType == JsonTokenType.String)
+                        list.Add(reader.GetString()!);
+            }
+            else throw new JsonException($"executeCommand.{os} must be a string or an array of strings.");
+
+            table[os] = list;
+        }
+        return table;
+    }
+
+    public override void Write(Utf8JsonWriter w, Dictionary<string, IReadOnlyList<string>> v, JsonSerializerOptions o)
+        => throw new NotSupportedException("The program never writes rules.json.");
 }
 
 /// <summary>
@@ -56,6 +105,7 @@ public sealed class GoalRules
     private sealed record CompiledGroup(string Name, bool Disabled, IReadOnlyList<CompiledRule> Rules);
 
     private readonly IReadOnlyList<CompiledGroup> _groups;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<string>> _commands;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -64,10 +114,26 @@ public sealed class GoalRules
         PropertyNameCaseInsensitive = true,
     };
 
-    private GoalRules(IReadOnlyList<CompiledGroup> groups) => _groups = groups;
+    private GoalRules(IReadOnlyList<CompiledGroup> groups,
+                      IReadOnlyDictionary<string, IReadOnlyList<string>> commands)
+    {
+        _groups = groups;
+        _commands = commands;
+    }
+
+    /// <summary>
+    /// 某个操作系统的命令表。⚠️ **调用方只该用第 0 条**（v3 的 E9）——这是个常用命令的
+    /// 收藏夹，换命令靠重排文件里的顺序，不靠界面。没配就是空列表。
+    /// </summary>
+    public IReadOnlyList<string> CommandsFor(string os)
+        => _commands.TryGetValue(os, out var list) ? list : [];
+
+    /// <summary>这台机器上到点会跑的那一条；没配就是 null。</summary>
+    public string? CommandForThisOs()
+        => CommandsFor(OperatingSystem.IsWindows() ? "windows" : "macos").FirstOrDefault();
 
     /// <summary>空规则——一个目标都没有。界面在还没有 rules.json 时用它顶着。</summary>
-    public static GoalRules Empty { get; } = new([]);
+    public static GoalRules Empty { get; } = new([], new Dictionary<string, IReadOnlyList<string>>());
 
     public static GoalRules Parse(string json)
     {
@@ -93,7 +159,8 @@ public sealed class GoalRules
             groups.Add(new CompiledGroup(name, g.Disabled, rules));
         }
 
-        return new GoalRules(groups);
+        return new GoalRules(groups,
+            file.ExecuteCommand ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase));
     }
 
     private static Regex? Compile(string? pattern, string where)
