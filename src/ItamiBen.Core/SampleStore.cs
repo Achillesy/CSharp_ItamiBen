@@ -542,6 +542,14 @@ public sealed class SampleStore : IDisposable
                 cmd.ExecuteNonQuery();
             }
 
+            // ⚠️ **在 bump 之前结账。** 下面那句 `config.version` 是**程序自己的记账**，
+            //    它必然改 1 行。算进去的话这个数字**永远不可能是 0**——而
+            //    「我这句到底匹配上没有」正是它唯一该回答的问题。
+            //    2026-09-16 实测撞到：`UPDATE goal SET enabled = 0 WHERE name = ' 番茄钟 '`
+            //    （名字被网页 AI 加了前后空格）一行都没匹配，界面却报
+            //    「Applied. 1 row(s) changed」——**一次静默失败被报成了成功**。
+            var changed = (int)(TotalChanges() - changesBefore);
+
             using (var bump = _db.CreateCommand())
             {
                 bump.Transaction = tx;
@@ -552,7 +560,7 @@ public sealed class SampleStore : IDisposable
             }
 
             tx.Commit();
-            return new SqlResult(true, (int)(TotalChanges() - changesBefore), "");
+            return new SqlResult(true, changed, "");
         }
         catch (Exception e)
         {

@@ -178,11 +178,25 @@ public partial class SqlWindow : Window
         // ⚠️ 跑过就变灰，直到 SQL 被改动为止
         apply.IsEnabled = false;
 
-        result.Text = $"Applied. {r.RowsChanged} row(s) changed, configuration reloaded."
+        // ⚠️ **0 行要单独说，而且要说得难看。** 语法没错、事务提交了，从程序的角度
+        //    这就是「成功」——但用户要的事一件都没发生。2026-09-16 实测撞到：
+        //    网页 AI 写的 `WHERE name = ' 番茄钟 '` 给中文加了前后空格，一行没匹配上，
+        //    而界面报「Applied. 1 row(s) changed」（那 1 行是程序自己 bump 的版本号）。
+        //    **一次静默失败被报成了成功**，用户只能靠「我看窗口没变」才发现。
+        var headline = r.RowsChanged == 0
+            ? "Ran without error, but **nothing changed** — 0 rows matched.\n"
+              + "The statement itself is valid, so this is almost always a value that "
+              + "does not exist: extra spaces around a name, different capitalisation, "
+              + "or a row that was already removed. Compare it with the configuration above."
+            : $"Applied. {r.RowsChanged} row(s) changed, configuration reloaded.";
+
+        result.Text = headline
                     + $"{restartNote}\n\nA copy of the database from before you opened this window "
                     + $"was saved as {Path.GetFileName(backup)}. "
                     + "Apply is disabled until you change the SQL above.";
-        Events.Info("sql", $"applied, {r.RowsChanged} rows changed");
+        Events.Info("sql", r.RowsChanged == 0
+            ? "applied but nothing matched — 0 rows changed"
+            : $"applied, {r.RowsChanged} rows changed");
     }
 
     /// <summary>随程序发的那份说明。读不到就退回一句提示——**少一份说明不该让这扇窗废掉**。</summary>

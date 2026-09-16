@@ -334,6 +334,34 @@ public class ApplySqlTests
     }
 
     [Fact]
+    public void 行数只算用户那段_SQL_不含程序自己的版本号记账()
+    {
+        using var db = Memory();
+        db.ApplySql("INSERT INTO goal (name) VALUES ('番茄钟');");
+
+        var r = db.ApplySql("UPDATE goal SET enabled = 0 WHERE name = '番茄钟';");
+
+        Assert.True(r.Ok);
+        Assert.Equal(1, r.RowsChanged);   // 不是 2——bump 那一行不算在用户头上
+    }
+
+    [Fact]
+    public void 一行都没匹配上时行数是零_而不是被版本号记账垫成一()
+    {
+        // ⚠️ 2026-09-16 实测撞到的那个形状：网页 AI 给中文名加了前后空格，
+        //    `WHERE name = ' 番茄钟 '` 一行没匹配，界面却报「1 row(s) changed」。
+        //    **这个数字唯一的职责就是回答「匹配上没有」，它必须能取 0。**
+        using var db = Memory();
+        db.ApplySql("INSERT INTO goal (name) VALUES ('番茄钟');");
+
+        var r = db.ApplySql("UPDATE goal SET enabled = 0 WHERE name = ' 番茄钟 ';");
+
+        Assert.True(r.Ok);              // 语法没错，事务照常提交
+        Assert.Equal(0, r.RowsChanged); // 但一件事都没发生
+        Assert.Contains(db.Goals(), g => g.Name == "番茄钟" && g.Enabled);
+    }
+
+    [Fact]
     public void 一段里错一句就一句都不落()
     {
         using var db = Memory();
