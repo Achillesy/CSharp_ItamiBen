@@ -32,16 +32,16 @@ public static class Command
         }
         catch (Exception e)
         {
-            Log.Error("Cannot re-read rules.json for executeCommand; using the startup snapshot", e);
+            Events.Error("command", "Cannot re-read rules.json for executeCommand; using the startup snapshot", e);
         }
 
         if (rules.CommandForThisOs() is not { Length: > 0 } cmd)
         {
-            Log.Warn("Alarm fired with the command armed, but there is no executeCommand for this OS");
+            Events.Warn("command", "Alarm fired with the command armed, but there is no executeCommand for this OS");
             return;
         }
 
-        Log.Line($"running executeCommand: {cmd}");
+        Events.Info("command", $"running: {cmd}");
         RunDetached(cmd);
     }
 
@@ -59,12 +59,12 @@ public static class Command
         try
         {
             var proc = Process.Start(BuildStartInfo(cmd));
-            if (proc is null) { Log.Warn($"executeCommand did not start: {cmd}"); return; }
+            if (proc is null) { Events.Warn("command", $"did not start: {cmd}"); return; }
             _ = DrainAsync(proc, cmd);
         }
         catch (Exception e)
         {
-            Log.Error($"executeCommand failed to start: {cmd}", e);
+            Events.Error("command", $"failed to start: {cmd}", e);
         }
     }
 
@@ -114,16 +114,16 @@ public static class Command
             var stderr = await proc.StandardError.ReadToEndAsync().ConfigureAwait(false);
             await proc.WaitForExitAsync().ConfigureAwait(false);
 
-            Log.Line($"executeCommand exited with {proc.ExitCode}: {cmd}");
-            foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                Log.Line($"  out: {line.TrimEnd()}");
-            foreach (var line in stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                Log.Line($"  err: {line.TrimEnd()}");
+            // ⚠️ **退出码 0 就一个字不记**：那条命令跑成了，`running:` 那行已经说明它跑过。
+            //    只有出问题时才值得留痕——而那时 stderr 才是唯一能说明原因的东西。
+            if (proc.ExitCode != 0)
+                Events.Warn("command", $"exited {proc.ExitCode}: {cmd}"
+                                     + (stderr.Trim() is { Length: > 0 } err ? $"  err: {err}" : ""));
         }
         catch (Exception e)
         {
             // 进程可能已经把我们连同系统一起带走了，收不到输出很正常
-            Log.Error($"Could not collect the output of: {cmd}", e);
+            Events.Error("command", $"Could not collect the output of: {cmd}", e);
         }
     }
 }

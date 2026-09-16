@@ -70,7 +70,7 @@ public sealed class Sampler : IDisposable
         catch (Exception e)
         {
             // 平台层抛了 ⇒ 这一秒什么都没读到。**不猜、不沿用上一次**
-            Log.Error("ReadApp failed", e);
+            Events.Error("sampler", "ReadApp failed", e);
             Ticked?.Invoke(new Sample(DateTimeOffset.Now, "", "", InputIdle.Seconds(), "ReadApp threw"));
             return;
         }
@@ -115,7 +115,7 @@ public sealed class Sampler : IDisposable
             }
             catch (Exception e)
             {
-                Log.Error("ReadTitle failed", e);
+                Events.Error("sampler", "ReadTitle failed", e);
             }
 
             try { _stop.Token.WaitHandle.WaitOne(TickMs); }

@@ -128,15 +128,13 @@ public static class WindowLayout
             var exists = File.Exists(path);
             var text = exists ? File.ReadAllText(path) : null;
             var settings = new LayoutSettings(ParseMode(text), ParseOpacity(text));
-            Log.Line($"layout: {settings.Mode.ToString().ToLowerInvariant()}, "
-                   + $"opacity {settings.Opacity * 100:0}%"
-                   + (exists ? $" (from {path})" : " (no layout.json)"));
+
             return settings;
         }
         catch (Exception e)
         {
             // 读不到就用标准档 + 默认透明度——**绝不因为一个可选的外观开关起不来**
-            Log.Error($"Failed to read {path}; using the standard layout", e);
+            Events.Error("config", $"Failed to read {path}; using the standard layout", e);
             return new LayoutSettings(LayoutMode.Standard, DefaultOpacity);
         }
     }

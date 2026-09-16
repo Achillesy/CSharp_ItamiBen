@@ -58,7 +58,7 @@ public static class Notify
         }
         catch (Exception e)
         {
-            Log.Error($"Failed to show notification: {text}", e);
+            Events.Error("notify", $"Failed to show: {text}", e);
         }
     }
 
@@ -127,7 +127,7 @@ public static class Notify
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         var p = Process.Start(psi);
-        if (p is null) { Log.Warn($"Notify: {exe} did not start"); return; }
+        if (p is null) { Events.Warn("notify", $"{exe} did not start"); return; }
 
         // 后台收退出码和 stderr，**不阻塞**——通知弹没弹好不该拖住 UI 线程，
         // 出错了日志里查得到就够了
@@ -137,9 +137,9 @@ public static class Notify
             {
                 var stderr = await p.StandardError.ReadToEndAsync();
                 await p.WaitForExitAsync();
-                if (p.ExitCode != 0) Log.Warn($"Notify: {exe} exited with {p.ExitCode}: {stderr.Trim()}");
+                if (p.ExitCode != 0) Events.Warn("notify", $"{exe} exited with {p.ExitCode}: {stderr.Trim()}");
             }
-            catch (Exception e) { Log.Error("Notify: failed to collect process output", e); }
+            catch (Exception e) { Events.Error("notify", "failed to collect process output", e); }
         });
     }
 }

@@ -1,120 +1,78 @@
 namespace ItamiBen.App;
 
 /// <summary>
-/// 一行一拍的诊断日志，写在运行时目录的 <c>itamiben.log</c>。
+/// **最后的求救信，不是日志。**
 ///
-/// ⚠️ **这不是可选的装饰**：2026-09-15 调试探针时因为没有日志，来回问了用户好几轮
-/// 「窗口上到底写的啥」，比改代码还慢。**给程序装眼睛，比省那几行代码重要得多。**
+/// 2026-09-16 之前这里是一份正经的运行日志；现在正经的记录去了 `samples.db` 的
+/// `event` 表（见 <see cref="Events"/>）。这个文件只剩一个用处：
+/// **数据库够不着的时候，把话留在某个地方。**
 ///
-/// 写失败一律吞掉——**记不上日志绝不能把程序搞崩**。
+/// 够不着一共就那么几种：
+/// <list type="bullet">
+///   <item>观测库自己打不开（磁盘满、文件损坏、权限没了）；</item>
+///   <item>被单实例锁挡回去了，这个进程压根没开库；</item>
+///   <item>启动早期或退出之后崩了，那时候库还没挂上 / 已经关了。</item>
+/// </list>
+///
+/// 正常跑一天，这个文件**一个字节都不该长**。里面有东西 = 出事了。
+///
+/// 写失败一律吞掉——**记不上话绝不能把程序搞崩**。
 /// </summary>
 public static class Log
 {
     private static readonly Lock Gate = new();
     private static readonly string Path_ = System.IO.Path.Combine(AppData.Dir, "itamiben.log");
-
-    /// <summary>上一次运行（或上一次滚存）留下的那一份。**永远只留一份。**</summary>
     private static readonly string Old = Path_ + ".old";
 
     /// <summary>
-    /// 滚存的门槛。超过就把当前这份挪成 <see cref="Old"/>、重开一个空的。
+    /// 到这个大小就挪成 `.old`，只留一份旧的。
     ///
-    /// ⚠️ **不滚存的后果不是「文件大」，是磁盘被慢慢吃光**：这程序是要开一整天的，
-    /// 而它每分钟都写。一份 1MB、连上一份最多 2MB，到顶了就不再涨。
+    /// 这个文件本来就该是空的，门槛纯粹是**防止某个高频错误把磁盘灌满**——
+    /// 那种情况下最早那几行才有用，所以 256KB 绰绰有余。
     /// </summary>
-    private const long MaxBytes = 1 * 1024 * 1024;
+    private const long MaxBytes = 256 * 1024;
 
     /// <summary>
-    /// <see cref="Start"/> 调过没有。**没调过就一个字都不写。**
+    /// <see cref="Arm"/> 调过没有。**没调过就一个字都不写。**
     ///
-    /// ⚠️ 这不是开关，是护栏：`ItamiBen.App.Tests` 引的是 App 工程本身，测到的代码
-    /// （比如 <see cref="Platform.Sound.Duration"/> 读不到文件时）照样会调 <see cref="Warn"/>，
-    /// 于是**单元测试往用户真实的 itamiben.log 里写东西**——2026-09-16 实测撞上了，
-    /// 调试时看见日志里冒出 `itamiben-no-such-file.wav` 才发现。
+    /// ⚠️ 这不是开关，是护栏：`ItamiBen.App.Tests` 引的是 App 工程本身，被测到的代码
+    /// （比如 <see cref="Platform.Sound"/> 读不到文件时）照样会报错，而那时数据库是空的、
+    /// 会落到这里来——于是**单元测试往用户真实的 itamiben.log 里写东西**
+    /// （2026-09-16 实测撞上过，看见日志里冒出 `itamiben-no-such-file.wav` 才发现）。
     ///
-    /// 只有 App 启动时会调 <see cref="Start"/>，测试不会，所以这一条就够了。
-    /// 跟 <c>GoalTotals</c> 不碰磁盘、<c>SampleStore</c> 测试传 `:memory:` 是同一族纪律：
-    /// **测试碰不到用户的运行时目录。**
+    /// ⚠️ 挂在 <c>Program.Main</c> 的最前面，**不是挂在窗口里**：被单实例挡回去的那个
+    /// 进程根本走不到窗口，而它恰恰是最需要留句话的那一个。
     /// </summary>
-    private static bool _started;
+    private static bool _armed;
 
-    /// <summary>
-    /// 每次启动重开一个文件：调试看的永远是这一次运行，不用在几万行里找分界。
-    ///
-    /// ⚠️ **是「挪走」不是「清空」**（2026-09-16 改）。原来这里是 `File.WriteAllText`，
-    /// 于是上一次运行的日志**在下一次启动时被抹掉**——而「昨晚它自己没了，日志呢」
-    /// 正是最需要日志的那一刻。现在旧的那份改名成 `.old` 留着，一共最多两份。
-    /// </summary>
-    public static void Start()
+    public static void Arm() => _armed = true;
+
+    /// <summary>留一句话。<paramref name="text"/> 自带级别和分类，这里只管落盘。</summary>
+    public static void Fallback(string text)
     {
-        // ⚠️ 先置位再写：这个标志的含义是「现在是 App 在跑」，不是「文件写成功了」
-        _started = true;
+        if (!_armed) return;
         lock (Gate)
         {
             try
             {
                 Directory.CreateDirectory(AppData.Dir);
-                Roll(force: true);
-                File.WriteAllText(Path_,
-                    $"# ItamiBen pid={Environment.ProcessId} started {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+                Roll();
+                File.AppendAllText(Path_,
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} pid={Environment.ProcessId}  {text}\n");
             }
             catch { }
         }
     }
 
-    /// <summary>
-    /// 把当前这份挪成 <see cref="Old"/>，**只留一份旧的**。
-    ///
-    /// <paramref name="force"/> = 启动时无条件挪（换一次运行就换一份文件）；
-    /// 否则只在超过 <see cref="MaxBytes"/> 时挪。
-    ///
-    /// ⚠️ 调用方必须已经持有 <see cref="Gate"/>，而且自己负责吞异常——
-    /// **记不上日志绝不能把程序搞崩**，滚存失败更不该。
-    /// </summary>
-    private static void Roll(bool force)
+    public static void Error(string what, Exception e)
+        => Fallback($"error {what}: {e.GetType().Name} {e.Message}");
+
+    /// <summary>调用方必须已经持有 <see cref="Gate"/>，而且自己负责吞异常。</summary>
+    private static void Roll()
     {
         var f = new FileInfo(Path_);
-        if (!f.Exists) return;
-        if (!force && f.Length < MaxBytes) return;
-
+        if (!f.Exists || f.Length < MaxBytes) return;
         if (File.Exists(Old)) File.Delete(Old);
         File.Move(Path_, Old);
     }
-
-    public static void Line(string text)
-    {
-        if (!_started) return;
-        lock (Gate)
-        {
-            try
-            {
-                Roll(force: false);
-                File.AppendAllText(Path_, $"{DateTime.Now:HH:mm:ss}  {text}\n");
-            }
-            catch { }
-        }
-    }
-
-    /// <summary>
-    /// 往**已经在跑的那个实例**的日志里补一行，自己不接管这个文件。
-    ///
-    /// ⚠️ **专给被单实例锁挡回去的那个进程用**，只有一个调用方（<see cref="SingleInstance"/>）。
-    /// 它不能走 <see cref="Start"/>：那是 `File.WriteAllText`，**会把正在跑的那个实例的
-    /// 日志整份清空**——本来只想留一句话，结果把现场擦了。
-    ///
-    /// ⚠️ 也因此它绕过了 <c>_started</c> 那道闸（那道闸是拦单元测试的）。
-    /// 别给它加第二个调用方；要在 App 里记日志就用 <see cref="Line"/>。
-    /// </summary>
-    public static void Aside(string text)
-    {
-        lock (Gate)
-        {
-            try { File.AppendAllText(Path_, $"{DateTime.Now:HH:mm:ss}  {text}\n"); }
-            catch { }
-        }
-    }
-
-    public static void Warn(string text) => Line($"WARN  {text}");
-
-    public static void Error(string what, Exception e) => Line($"ERROR {what}: {e.GetType().Name} {e.Message}");
 }

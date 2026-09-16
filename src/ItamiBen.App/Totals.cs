@@ -20,7 +20,7 @@ public static class Totals
         }
         catch (Exception e)
         {
-            Log.Error("Failed to read during.json", e);
+            Events.Error("totals", "Failed to read during.json", e);
             return GoalTotals.Parse(null);
         }
     }
@@ -39,7 +39,7 @@ public static class Totals
         catch (Exception e)
         {
             // 写不进去也不能崩——那些秒已经丢了，再把程序带走是雪上加霜
-            Log.Error("Failed to write during.json", e);
+            Events.Error("totals", "Failed to write during.json", e);
         }
     }
 }

@@ -251,16 +251,24 @@ Not product features — they render and exit, and the normal startup path never
 them:
 
 ```bash
-ItamiBen --dump-samples [from] [to]        # samples.db as TSV; defaults to today
+ItamiBen --query samples  [from] [to]      # one row per second, as TSV
+ItamiBen --query events   [from] [to]      # alarms, reminders, commands, failures
+ItamiBen --query rounds   [from] [to]      # which rounds ran and how they ended
+ItamiBen --query minutes  [from] [to]      # each round minute by minute, red ones explained
 ItamiBen --dial-specimens <out dir>        # the dial rendered off-screen at key states
 ItamiBen --export-icon    <out.ico>        # Windows icon
 ItamiBen --export-iconset <out.iconset>    # macOS, then iconutil -c icns
 ```
 
-`--dump-samples` exists because the log deliberately does **not** repeat the observations:
-`at`, `app`, `title` and `idle` are columns in `samples.db`, and everything derived from
-them (focused, slack, the verdict) is a pure function of those, replayed identically every
-minute. Putting them in the log too would be a second copy that drifts.
+**There is no running log.** `samples.db` is the record, so when something looks wrong you
+query it. `itamiben.log` exists only for what cannot reach the database — the database
+itself failing to open, a second instance being turned away, a crash during startup. On a
+normal day that file stays empty; anything in it means something went wrong.
+
+`--query minutes` is the one that answers "why didn't this minute count": it replays the
+round out of the database and names the window that produced the red. ⚠️ It uses the
+**current** `rules.json`, so if you have edited your rules since, old rounds will not match
+what the program decided at the time.
 
 `--dial-specimens` renders the dial to PNGs at a handful of key states, for a human to
 eyeball the geometry — the dial lives in the UI layer where unit tests can't reach it, and

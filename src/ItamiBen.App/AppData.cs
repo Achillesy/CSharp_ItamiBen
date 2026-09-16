@@ -90,7 +90,7 @@ public static class AppData
         }
         catch (Exception e)
         {
-            Log.Error("Failed to open the config folder", e);
+            Events.Error("ui", "Failed to open the config folder", e);
         }
     }
 }

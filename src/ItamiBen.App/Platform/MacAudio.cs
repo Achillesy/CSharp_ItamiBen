@@ -71,7 +71,7 @@ internal static class MacAudio
         }
         catch (Exception e)
         {
-            Log.Error($"Playback failed: {path}", e);
+            Events.Error("sound", $"Playback failed: {path}", e);
         }
     }
 
@@ -95,12 +95,12 @@ internal static class MacAudio
         // CFURL 要的是文件系统表示（UTF-8 字节，不需要结尾 0，长度另外传）
         var bytes = Encoding.UTF8.GetBytes(path);
         var url = CFURLCreateFromFileSystemRepresentation(IntPtr.Zero, bytes, bytes.Length, false);
-        if (url == IntPtr.Zero) { Log.Warn($"Could not create CFURL for {path}"); return 0; }
+        if (url == IntPtr.Zero) { Events.Warn("sound", $"Could not create CFURL for {path}"); return 0; }
 
         try
         {
             var status = AudioServicesCreateSystemSoundID(url, out var id);
-            if (status != 0) { Log.Warn($"Could not create SystemSoundID (status {status}) for {path}"); return 0; }
+            if (status != 0) { Events.Warn("sound", $"Could not create SystemSoundID (status {status}) for {path}"); return 0; }
             return id;
         }
         finally

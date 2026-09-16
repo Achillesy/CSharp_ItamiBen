@@ -115,7 +115,7 @@ public sealed class Settings
         }
         catch (Exception e)
         {
-            Log.Error("Failed to read settings.json", e);
+            Events.Error("settings", "Failed to read settings.json", e);
         }
 
         // 没挑过音色就自动挑一个：两个平台的候选写在一张表里，反正只有一边的文件存在。
@@ -146,7 +146,7 @@ public sealed class Settings
         }
         catch (Exception e)
         {
-            Log.Error("Failed to write settings.json", e);
+            Events.Error("settings", "Failed to write settings.json", e);
         }
     }
 }

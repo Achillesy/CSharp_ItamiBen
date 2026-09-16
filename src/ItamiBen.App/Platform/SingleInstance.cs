@@ -89,7 +89,7 @@ public static class SingleInstance
         {
             // ⚠️ **准备阶段出意外就放行**：单实例是便利，不是安全边界。
             //    让程序起来，比让它因为一个锁文件起不来强。
-            Log.Aside($"single-instance check skipped ({e.GetType().Name}: {e.Message})");
+            Log.Fallback($"single-instance check skipped ({e.GetType().Name}: {e.Message})");
             return true;
         }
 
@@ -107,7 +107,7 @@ public static class SingleInstance
         catch (UnauthorizedAccessException e)
         {
             // 权限问题不等于有人在跑（目录只读、被安全软件挡住……），同样放行
-            Log.Aside($"single-instance check skipped ({e.GetType().Name}: {e.Message})");
+            Log.Fallback($"single-instance check skipped ({e.GetType().Name}: {e.Message})");
             return true;
         }
     }

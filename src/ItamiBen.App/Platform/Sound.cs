@@ -93,7 +93,7 @@ public static class Sound
     public static void Play(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
-        if (Resolve(name) is not { } path) { Log.Warn($"Sound file not found: {name}"); return; }
+        if (Resolve(name) is not { } path) { Events.Warn("sound", $"Sound file not found: {name}"); return; }
         PlayFile(path);
     }
 
@@ -115,7 +115,7 @@ public static class Sound
     public static void Repeat(string? name, int times)
     {
         if (string.IsNullOrWhiteSpace(name) || times <= 0) return;
-        if (Resolve(name) is not { } path) { Log.Warn($"Sound file not found: {name}"); return; }
+        if (Resolve(name) is not { } path) { Events.Warn("sound", $"Sound file not found: {name}"); return; }
         if (times == 1) { PlayFile(path); return; }
 
         var gap = (Duration(path) ?? FallbackGap) + Cushion;
@@ -183,7 +183,7 @@ public static class Sound
         }
         catch (Exception e)
         {
-            Log.Warn($"Could not read the length of {path}: {e.Message}");
+            Events.Warn("sound", $"Could not read the length of {path}: {e.Message}");
             return null;
         }
     }
@@ -207,7 +207,7 @@ public static class Sound
         }
         catch (Exception e)
         {
-            Log.Warn($"Could not parse an audio header: {e.Message}");
+            Events.Warn("sound", $"Could not parse an audio header: {e.Message}");
             return null;
         }
     }

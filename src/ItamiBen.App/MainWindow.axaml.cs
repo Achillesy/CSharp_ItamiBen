@@ -189,7 +189,6 @@ public partial class MainWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
 
-        Log.Start();
         LoadRules();
         _totals = Totals.Load();
         OpenStore();
@@ -210,7 +209,7 @@ public partial class MainWindow : Window
             // ⚠️ 平台层整层包在 try 里：2026-09-15 这个按钮把整个 app 搞崩过一次
             // （SIGSEGV in CFGetTypeID）。根因已修，但**读不到权限不该把程序带走**。
             try { ForegroundWindow.RequestTitlePermission(); }
-            catch (Exception e) { Log.Error("RequestTitlePermission failed", e); }
+            catch (Exception e) { Events.Error("permission", "RequestTitlePermission failed", e); }
         };
 
         // 读回时刻只为了显示黄针残影，**不激活**——关着程序时错过的闹钟不补响（v3 的 E7）
@@ -225,7 +224,6 @@ public partial class MainWindow : Window
         };
 
         _alarm.Restore(_settings.AlarmAt);
-        Log.Line($"alarm restored: at={_settings.AlarmAt:yyyy-MM-dd HH:mm} sound={_settings.AlarmSound ?? "(none)"}");
 
         // ⚠️ 拨针挂在**钟面本身**上，没有独立按钮（v3 的 E4：Button 内部会把
         //    PointerPressed 标 Handled，挂在钟面上的普通订阅收不到）。
@@ -281,7 +279,6 @@ public partial class MainWindow : Window
         try
         {
             _rules = GoalRules.Parse(File.ReadAllText(path));
-            Log.Line($"rules loaded from {path}: {string.Join(", ", _rules.SelectableGoals)}");
         }
         catch (Exception e)
         {
@@ -289,7 +286,7 @@ public partial class MainWindow : Window
             //    空规则匹配一切 = 约束当场归零，那正是这个程序唯一的卖点
             _rules = GoalRules.Empty;
             _rulesError = $"{Path.GetFileName(path)}: {e.Message}";
-            Log.Error($"Failed to load {path}", e);
+            Events.Error("rules", $"Failed to load {path}", e);
         }
     }
 
@@ -432,9 +429,6 @@ public partial class MainWindow : Window
     internal void SetCommandArmed(bool on)
     {
         _commandArmed = on;
-        Log.Line(on
-            ? $"command armed: {_rules.CommandForThisOs() ?? "(no executeCommand for this OS)"}"
-            : "command disarmed");
         ApplyChrome();
     }
 
@@ -570,7 +564,6 @@ public partial class MainWindow : Window
                                .FirstOrDefault(a => a.Contains(new PixelPoint(x, y)));
             if (area == default)
             {
-                Log.Line($"saved window position ({x},{y}) is off-screen — centring instead");
                 return;
             }
 
@@ -584,7 +577,7 @@ public partial class MainWindow : Window
         }
         catch (Exception e)
         {
-            Log.Error("Failed to restore the window position", e);
+            Events.Error("window", "Failed to restore the window position", e);
         }
     }
 
@@ -773,7 +766,7 @@ public partial class MainWindow : Window
         }
         catch (Exception e)
         {
-            Log.Error("Failed to read alarms.cron", e);
+            Events.Error("cron", "Failed to read alarms.cron", e);
             return [];
         }
     }
@@ -794,7 +787,7 @@ public partial class MainWindow : Window
         if (due.Count == 0) return;
 
         foreach (var e in due)
-            Log.Line($"alarms.cron fired {e.At:HH:mm} [{e.Expression}] {e.Text}");
+            Events.Info("cron", $"{e.At:HH:mm} [{e.Expression}] {e.Text}");
 
         // 条数超出的部分缀在**时间行**末尾（`23:55  +2`），不占新的一行——多一行会把
         // 下面的卡片顶下去
@@ -874,35 +867,6 @@ public partial class MainWindow : Window
     /// 跟当前这个环对一次账。⚠️ **恢复那条路要传 false**：那时手里的环是刚构造出来的
     /// 空壳，跟重建结果必然不同，对账只会吐出一条假警告。
     /// </param>
-    /// <summary>
-    /// 刚过去那一分钟的构成，外加「红在哪扇窗口上」。
-    ///
-    /// ⚠️ **只在这一分钟没满格时才写**：满格的分钟没有任何可解释的东西，写出来只是噪音。
-    /// 于是日志有了一个好性质——**你做得越好，它越安静**；翻开日志看到的每一行，
-    /// 都是当时确实发生了什么的那几分钟。
-    ///
-    /// ⚠️ 归因**只做诊断，永不回流判定**，而且跟判定调的是**同一个 `Judgment`、
-    /// 同一批行、同一张 `AwayMap`**——所以「为什么」永远跟「算没算」一致。
-    /// 别在这儿另写一套匹配，两边分家之后日志会**理直气壮地给出错误的解释**，
-    /// 比没有更糟。
-    /// </summary>
-    private void LogMinute(Round rebuilt, IReadOnlyList<Observation> rows, AwayMap away,
-                           Round live, DateTimeOffset now)
-    {
-        var justPassed = TimeGrid.PreviousMinute(now);
-        // ⚠️ 索引算式在 `Round.CellAt` 里，**这里不自己减**——v3 就是在调用方算错索引，
-        //    结果那行日志一次都没打出来过
-        if (rebuilt.CellAt(justPassed) is not { } cell) return;
-        if (cell.FocusedSeconds >= 60) return;   // 满格的分钟没什么可说的
-
-        var why = OffTaskAttribution.Biggest(rows, away, live.Goals, _rules, justPassed) is { } who
-            ? $"  ← {who.Seconds}s [{who.App}] {who.Title}"
-            : "";
-
-        Log.Line($"minute {justPassed:HH:mm}  focus={cell.FocusedSeconds,-3} off={cell.OffTaskSeconds,-3} "
-               + $"away={cell.AwaySeconds,-3} blank={cell.UnrecordedSeconds,-3} {cell.Tier}{why}");
-    }
-
     private void Rebuild(DateTimeOffset now, bool compare = true)
     {
         if (_round is not { } live || _store is null) return;
@@ -930,28 +894,23 @@ public partial class MainWindow : Window
             //
             // 头一版把两者都打成 "有秒没写进库"，实机第一次跨门槛就报了一条假警告
             // （live=532 → db=353，正好 179 秒）。**一个会说谎的自检比没有自检更糟。**
-            if (compare && rebuilt.FocusedSeconds != live.FocusedSeconds)
-            {
-                if (away.Spans.Count > _lastAwaySpans)
-                    Log.Line($"retroactive away: focused {live.FocusedSeconds}s → {rebuilt.FocusedSeconds}s "
-                           + $"（跨过门槛，之前那段被追认成离开；away={away.Spans.Count}）");
-                else
-                    Log.Warn($"rebuild mismatch: live={live.FocusedSeconds}s db={rebuilt.FocusedSeconds}s "
-                           + "— 区间条数没变却对不上，说明真的有秒没写进库");
-            }
+            //
+            // ⚠️ ① 一个字都不记：它**每一轮都会发生**，是设计本身，记了就是噪音。
+            //    只有 ② 才值得留痕——那说明真有秒丢了。
+            if (compare
+                && rebuilt.FocusedSeconds != live.FocusedSeconds
+                && away.Spans.Count == _lastAwaySpans)
+                Events.Warn("db", $"rebuild mismatch: live={live.FocusedSeconds}s db={rebuilt.FocusedSeconds}s "
+                                + "— 区间条数没变却对不上，说明真的有秒没写进库");
             _lastAwaySpans = away.Spans.Count;
 
-            Log.Line($"rebuilt from db: minute={rebuilt.CurrentMinute,-4} focused={rebuilt.FocusedSeconds,-5} "
-                   + $"slack={rebuilt.SlackSeconds,-5} rows={rows.Count,-5} away={away.Spans.Count} "
-                   + $"phase={rebuilt.Phase}");
 
-            LogMinute(rebuilt, rows, away, live, now);
             _round = rebuilt;
         }
         catch (Exception e)
         {
             // 重建失败就继续用实时那个环——读不了库不该把正在跑的一轮毁掉
-            Log.Error("Failed to rebuild the round from samples.db", e);
+            Events.Error("db", "Failed to rebuild the round from samples.db", e);
         }
     }
 
@@ -981,7 +940,7 @@ public partial class MainWindow : Window
         catch (ArgumentException e)
         {
             // 目标被禁用/删掉了。**不猜、不降级**——宁可这一轮作废
-            Log.Error($"Cannot resume the round started at {rec.StartedAt:HH:mm}", e);
+            Events.Error("db", $"Cannot resume the round started at {rec.StartedAt:HH:mm}", e);
             _store.EndRound(rec.StartedAt, DateTimeOffset.Now, nameof(EndReason.Closed));
             _round = null;
             return;
@@ -998,14 +957,10 @@ public partial class MainWindow : Window
 
         if (_round?.Ending is { } reason)
         {
-            Log.Line($"resumed round from {rec.StartedAt:HH:mm} had already ended: {reason}");
             Settle(reason);
         }
         else
         {
-            Log.Line($"resumed round from {rec.StartedAt:HH:mm}: focus={rec.FocusMinutes}min "
-                   + $"focused={_round?.FocusedSeconds}s slack={_round?.SlackSeconds}s "
-                   + $"goals={string.Join("/", rec.Goals)}");
         }
     }
 
@@ -1015,13 +970,22 @@ public partial class MainWindow : Window
         {
             _store = SampleStore.Open(AppData.SamplesPath());
             _recorder = new Recorder(_store, () => (_last.App, _last.Title), () => _last.Idle);
-            var (apps, titles, samples) = _store.Counts;
-            Log.Line($"samples.db opened: {samples} samples, {apps} apps, {titles} titles, "
-                   + $"oldest={_store.Oldest:yyyy-MM-dd HH:mm:ss} newest={_store.Newest:yyyy-MM-dd HH:mm:ss}");
+
+            // 库开起来了，从这一刻起要记的事都进 `event` 表，不再落文本（见 Events）
+            Events.Bind(_store);
+
+            // ⚠️ **每次启动记一行，这是唯一破例记「正常事件」的地方**：
+            //    sample 只在专注阶段才写，所以采样流里到处是空档。少了这一行，
+            //    「那段时间没在跑」和「在跑但没录」**长得一模一样**——而这恰恰是
+            //    回头查问题时第一个要分清的。一天几行，不算噪音。
+            var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "?";
+            Events.Info("start", $"v{version} pid={Environment.ProcessId}");
         }
         catch (Exception e)
         {
             // 录不上也不能崩：环会退化成「一秒都没采到」，但程序照跑
+            // ⚠️ **这一条只能落文本**：库都没打开，事件表压根写不进去——
+            //    这正是那份「最后的求救信」存在的全部理由
             Log.Error("Failed to open samples.db", e);
         }
     }
@@ -1076,7 +1040,6 @@ public partial class MainWindow : Window
         // ⚠️ 拨针要留痕：它的后果（响铃）可能几小时后才发作，到时候「这闹钟哪来的」
         //    完全无从查起。2026-09-16 实测就撞上一次——日志里只有 `alarm fired`，
         //    查不出是谁把它从 15:32 拨到 10:22 的
-        Log.Line($"alarm set to {_alarm.FireAt:yyyy-MM-dd HH:mm} (wheel {direction * notches * step:+#;-#;0} min)");
         e.Handled = true;
         UpdateUi();
     }
@@ -1100,12 +1063,12 @@ public partial class MainWindow : Window
         //    响铃是「提醒你自己动手」，跑命令是「替你动手」，两件事不叠加。
         if (_commandArmed)
         {
-            Log.Line($"alarm fired: {_alarm.FireAt:HH:mm} → running the command");
+            Events.Info("alarm", $"{_alarm.FireAt:HH:mm} fired → running the command");
             Command.LaunchDetached(_rules);
             return;
         }
 
-        Log.Line($"alarm fired: {_alarm.FireAt:HH:mm} sound={_settings.AlarmSound ?? "(none)"} ×{AlarmRings}");
+        Events.Info("alarm", $"{_alarm.FireAt:HH:mm} fired, sound={_settings.AlarmSound ?? "(none)"} ×{AlarmRings}");
         Sound.Repeat(_settings.AlarmSound, AlarmRings);
     }
 
@@ -1131,15 +1094,15 @@ public partial class MainWindow : Window
             {
                 _signals.Add(PosixSignalRegistration.Create(signal, ctx =>
                 {
-                    Log.Line($"{ctx.Signal} received — settling before exit");
+                    Events.Info("stop", $"{ctx.Signal} received — settling before exit");
                     try { Dispatcher.UIThread.Invoke(OnExit); }
-                    catch (Exception e) { Log.Error("Failed to settle on signal", e); }
+                    catch (Exception e) { Events.Error("stop", "Failed to settle on signal", e); }
                     // Cancel = false：照常让进程退出，我们只是抢在它之前把账写完
                 }));
             }
             catch (Exception e)
             {
-                Log.Error($"Cannot hook {signal}", e);
+                Events.Error("stop", $"Cannot hook {signal}", e);
             }
         }
     }
@@ -1161,9 +1124,12 @@ public partial class MainWindow : Window
         {
             _settings.WindowX = at.X;
             _settings.WindowY = at.Y;
-            Log.Line($"window position saved: {at.X},{at.Y}");
         }
         _settings.Save();
+
+        // ⚠️ **先解绑再关库**：解绑之后再出的事会落回文本，而不是往一个已经关掉的
+        //    连接上写——那会抛，而抛在退出路径上最难查
+        Events.Unbind();
         _store?.Dispose();
     }
 
@@ -1183,8 +1149,6 @@ public partial class MainWindow : Window
         _lastAwaySpans = 0;
         _lastPhase = RoundPhase.Focusing;
         _store?.BeginRound(_round.StartedAt, _round.FocusMinutes, _round.Goals);
-        Log.Line($"round started: focus={_focusMinutes}min break={_round.BreakMinutes}min "
-               + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goal={goal}");
         UpdateUi();
     }
 
@@ -1257,8 +1221,6 @@ public partial class MainWindow : Window
         Totals.Save(_totals);
         _written = true;
 
-        Log.Line($"round settled: {_round.Ending} focused={_round.FocusedSeconds}s "
-               + $"by goal=[{string.Join(", ", _round.FocusedSecondsByGoal.Select(kv => $"{kv.Key}:{kv.Value}s"))}]");
     }
 
     // ── 显示 ────────────────────────────────────────────────────────────────
@@ -1323,7 +1285,7 @@ public partial class MainWindow : Window
     {
         bool granted;
         try { granted = ForegroundWindow.TitlePermissionGranted; }
-        catch (Exception e) { Log.Error("TitlePermissionGranted failed", e); return; }
+        catch (Exception e) { Events.Error("permission", "TitlePermissionGranted failed", e); return; }
 
         this.FindControl<Button>("GrantBtn")!.IsVisible = !granted;
         this.FindControl<Border>("StatusBar")!.Background = new SolidColorBrush(

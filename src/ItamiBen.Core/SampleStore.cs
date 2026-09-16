@@ -76,6 +76,18 @@ public sealed class SampleStore : IDisposable
               ended_at      INTEGER,               -- NULL = 还在跑
               end_reason    TEXT
             );
+            -- 值得记一笔的事。⚠️ **凡是能从 sample / round 推出来的，这里一律不记**
+            -- （DECISIONS I11）：那就成了第二份副本，而副本迟早跟正本对不上。
+            -- 这张表只放**别处留不下痕迹**的东西：闹钟响了、提醒到点了、命令跑了、
+            -- 出错了。正常跑一轮，它一行都不该长。
+            -- ⚠️ `at` 不是主键：同一秒可以有好几件事。
+            CREATE TABLE IF NOT EXISTS event (
+              at    INTEGER NOT NULL,
+              level TEXT NOT NULL,                 -- info / warn / error
+              kind  TEXT NOT NULL,                 -- alarm / cron / command / stop / ...
+              text  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS event_at ON event(at);
             """);
 
         return new SampleStore(db);
@@ -171,6 +183,14 @@ public sealed class SampleStore : IDisposable
     /// </summary>
     public readonly record struct RoundRecord(DateTimeOffset StartedAt, int FocusMinutes, IReadOnlyList<string> Goals);
 
+    /// <summary>`round` 表的一行，含结束信息。`EndedAt` 为 null = 还在跑。</summary>
+    public readonly record struct FinishedRound(DateTimeOffset StartedAt, int FocusMinutes,
+                                                IReadOnlyList<string> Goals,
+                                                DateTimeOffset? EndedAt, string? EndReason);
+
+    /// <summary>`event` 表的一行。时刻已在边界上归一成本地时间。</summary>
+    public readonly record struct EventRow(DateTimeOffset At, string Level, string Kind, string Text);
+
     /// <summary>
     /// 开一轮。
     ///
@@ -216,6 +236,65 @@ public sealed class SampleStore : IDisposable
             DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
             r.GetInt32(1),
             r.GetString(2).Split('\n', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
+    /// 记一笔事。⚠️ **能从 `sample` / `round` 推出来的东西一律别往这儿写**
+    /// （DECISIONS I11）——那是第二份副本，副本迟早跟正本对不上。
+    ///
+    /// 写失败一律吞掉：**记不上账绝不能把程序搞崩**，跟日志同一条原则。
+    /// </summary>
+    public void Note(DateTimeOffset at, string level, string kind, string text)
+    {
+        try
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = "INSERT INTO event (at, level, kind, text) VALUES ($at, $l, $k, $t);";
+            cmd.Parameters.AddWithValue("$at", at.ToUnixTimeSeconds());
+            cmd.Parameters.AddWithValue("$l", level);
+            cmd.Parameters.AddWithValue("$k", kind);
+            cmd.Parameters.AddWithValue("$t", text);
+            cmd.ExecuteNonQuery();
+        }
+        catch { }
+    }
+
+    /// <summary>一段时间里开过的轮次（按起点算落不落在区间里），按时间先后。</summary>
+    public List<FinishedRound> Rounds(DateTimeOffset from, DateTimeOffset to)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT started_at, focus_minutes, goals, ended_at, end_reason FROM round "
+                        + "WHERE started_at >= $from AND started_at < $to ORDER BY started_at;";
+        cmd.Parameters.AddWithValue("$from", from.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$to", to.ToUnixTimeSeconds());
+
+        var list = new List<FinishedRound>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(new FinishedRound(
+                DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
+                r.GetInt32(1),
+                r.GetString(2).Split('\n', StringSplitOptions.RemoveEmptyEntries),
+                r.IsDBNull(3) ? null : DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(3)).ToLocalTime(),
+                r.IsDBNull(4) ? null : r.GetString(4)));
+        return list;
+    }
+
+    /// <summary>一段时间里记过的事，按时间先后。</summary>
+    public List<EventRow> Events(DateTimeOffset from, DateTimeOffset to)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT at, level, kind, text FROM event WHERE at >= $from AND at < $to ORDER BY at;";
+        cmd.Parameters.AddWithValue("$from", from.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$to", to.ToUnixTimeSeconds());
+
+        var list = new List<EventRow>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(new EventRow(
+                DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
+                r.GetString(1), r.GetString(2), r.GetString(3)));
+        return list;
     }
 
     /// <summary>

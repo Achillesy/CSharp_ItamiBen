@@ -222,15 +222,22 @@ pwsh pack-windows.ps1       # → dist\ItamiBen-<版本>-win-x64.exe（需要 In
 **不是产品功能**——跑完就退，正常启动路径根本不经过它们：
 
 ```bash
-ItamiBen --dump-samples [起] [止]           # 把 samples.db 按 TSV 打出来，默认今天
+ItamiBen --query samples  [起] [止]         # 一秒一行的原始观测
+ItamiBen --query events   [起] [止]         # 闹钟 / 提醒 / 命令 / 出错
+ItamiBen --query rounds   [起] [止]         # 开过哪些轮、怎么结束的
+ItamiBen --query minutes  [起] [止]         # 每一轮逐分钟的构成，红的还给出是哪扇窗口
 ItamiBen --dial-specimens <输出目录>        # 钟面在几个关键状态下的离屏样张
 ItamiBen --export-icon    <输出.ico>        # Windows 图标
 ItamiBen --export-iconset <输出.iconset>    # macOS，再 iconutil -c icns
 ```
 
-`--dump-samples` 存在的理由：日志**刻意不重复观测数据**——`at` / `app` / `title` / `idle`
-本来就是 `samples.db` 的列，而由它们推出来的东西（专注秒数、余量、判定结果）全是纯函数，
-每分钟重放出来一模一样。**在日志里再记一份就是第二份副本，而副本迟早跟正本对不上。**
+**这个程序没有运行日志。** `samples.db` 就是记录，出了问题直接查它。
+`itamiben.log` 只剩一个用处：**装不下在数据库里的那些话**——库自己打不开、被单实例挡回去、
+启动早期就崩了。正常跑一天它一个字节都不长；**里面有东西 = 出事了**。
+
+`--query minutes` 是回答「这一分钟为什么没算」的那个：它从库里把那一轮重放一遍，
+并指出红是哪扇窗口造成的。⚠️ 它用的是**当前**的 `rules.json`，所以你要是改过规则，
+回头看老轮次会跟当时的判定对不上。
 
 `--dial-specimens` 把钟面在几个关键状态下渲成 PNG 供人眼检查——钟面活在界面层，
 单元测试够不到，而半径、角度、图层顺序这类问题真的只能靠看图抓。

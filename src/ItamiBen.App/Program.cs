@@ -8,6 +8,11 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // ⚠️ **挂在最前面，不是挂在窗口里**：被单实例挡回去的那个进程根本走不到窗口，
+        //    而它恰恰是最需要留句话的那一个。测试从不走 Main，所以这道闸同时也是
+        //    「单元测试别往用户真实的 itamiben.log 里写东西」的护栏。
+        Log.Arm();
+
         // 界面对用户是沉默的，所以**崩溃的原因更要留得下来**——否则程序就是凭空消失，
         // 谁也说不清发生了什么
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -24,12 +29,11 @@ internal static class Program
         //    不冲突：A3 禁的是 v3 那种独立的 `itami` 工具，这里只是两个跑完就退的开关。
         //    图标仍然是**代码画出来的**，仓库里一张位图都没有——这条规矩从钟面一路管到这儿。
         // ⚠️ **这个出口排在最前面，而且一点 Avalonia 都不碰**：它只读 SQLite。
-        //    删掉每秒那行日志之后（2026-09-16），观测数据只在 samples.db 里——
-        //    那就必须留一条**不用装 SQLite 工具也能把它读出来**的路，
-        //    否则「观测归数据库」在没有工具的机器上等于「观测没了」。
-        if (args is ["--dump-samples", ..])
+        //    2026-09-16 起观测和事件都只在 samples.db 里（DECISIONS I11），
+        //    这条路就是「出了问题直接查数据库」的那个入口。
+        if (args is ["--query", var what, ..])
         {
-            DumpSamples(args.Length > 1 ? args[1] : null, args.Length > 2 ? args[2] : null);
+            Query.Run(what, args.Length > 2 ? args[2] : null, args.Length > 3 ? args[3] : null);
             return;
         }
 
@@ -61,37 +65,11 @@ internal static class Program
             // ⚠️ **不能用 Log.Line**：日志还没 Start，那句会被静默丢掉；
             //    而 Log.Start 是整份重写，会把**正在跑的那个实例**的日志擦干净。
             //    Aside 只追加一行，落在对方的日志里，正好是想要的。
-            Log.Aside($"another instance (pid {Environment.ProcessId}) tried to start — exiting");
+            Log.Fallback($"another instance (pid {Environment.ProcessId}) tried to start — exiting");
             return;
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
-
-    /// <summary>
-    /// 把 <c>samples.db</c> 的一段观测按 TSV 打到标准输出：`时刻 空闲 app 标题`。
-    ///
-    /// 不给区间就是**今天**。时刻按本地时区（<see cref="Core.SampleStore"/> 在边界上
-    /// 已经归一过了，这里不用再转）。
-    ///
-    /// ⚠️ 程序正开着也能读：SQLite 走 WAL，读不挡写。
-    /// </summary>
-    private static void DumpSamples(string? from, string? to)
-    {
-        var path = AppData.SamplesPath();
-        if (!File.Exists(path)) { Console.Error.WriteLine($"no samples.db at {path}"); return; }
-
-        var start = Parse(from) ?? new DateTimeOffset(DateTime.Today, DateTimeOffset.Now.Offset);
-        var end = Parse(to) ?? start.AddDays(1);
-
-        using var db = Core.SampleStore.Open(path);
-        var rows = db.Read(start, end);
-        Console.WriteLine($"# {path}  {start:yyyy-MM-dd HH:mm} → {end:yyyy-MM-dd HH:mm}  ({rows.Count} rows)");
-        foreach (var o in rows)
-            Console.WriteLine($"{o.At:yyyy-MM-dd HH:mm:ss}\t{o.IdleSeconds}\t{o.App}\t{o.Title}");
-
-        static DateTimeOffset? Parse(string? s)
-            => DateTimeOffset.TryParse(s, out var t) ? t : null;
     }
 
     // Avalonia 需要它保持这个签名和可见性（设计器和 XAML 编译器会找它）
