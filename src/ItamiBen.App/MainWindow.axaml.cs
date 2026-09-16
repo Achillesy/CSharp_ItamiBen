@@ -145,6 +145,16 @@ public partial class MainWindow : Window
     /// </summary>
     private PixelPoint? _lastPosition;
 
+    /// <summary>
+    /// 「窗口停下来了吗」的计时器。拖动中每动一下都把它往后推，250ms 没动过 = 松手了。
+    ///
+    /// ⚠️ **为什么要等停下来，不能一边拖一边夹**：见 <see cref="ClampIntoScreen"/>。
+    /// </summary>
+    private readonly DispatcherTimer _settle = new() { Interval = TimeSpan.FromMilliseconds(250) };
+
+    /// <summary>正在由 <see cref="ClampIntoScreen"/> 挪窗口。挪出来的 `PositionChanged` 不算用户拖的。</summary>
+    private bool _clamping;
+
     /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
     private readonly List<IDisposable> _signals = [];
 
@@ -246,6 +256,16 @@ public partial class MainWindow : Window
             // 还没显示出来时是 (0,0)，那不是真实位置
             if (e.Point is { X: 0, Y: 0 }) return;
             _lastPosition = e.Point;
+
+            // 自己挪的不算拖动，否则夹一次就再排一次 settle，来回震荡
+            if (_clamping) return;
+            _settle.Stop();
+            _settle.Start();
+        };
+        _settle.Tick += (_, _) =>
+        {
+            _settle.Stop();
+            ClampIntoScreen();
         };
 
         HookSignals();
@@ -552,15 +572,60 @@ public partial class MainWindow : Window
                 return;
             }
 
-            Position = new PixelPoint(
-                Math.Clamp(x, area.X, Math.Max(area.X, area.Right - 80)),
-                Math.Clamp(y, area.Y, Math.Max(area.Y, area.Bottom - 80)));
+            Position = new PixelPoint(x, y);
             WindowStartupLocation = WindowStartupLocation.Manual;
+
+            // ⚠️ 真正的夹回要等 `Opened`：原生窗口没建出来之前 `FrameSize` 和
+            //    `Screens.ScreenFromWindow` 都不可靠，而这两样正是 ClampIntoScreen 要用的。
+            //    **夹回只有一份实现**——上面那个 `Contains` 只负责「这块屏还在不在」。
+            Opened += (_, _) => ClampIntoScreen();
         }
         catch (Exception e)
         {
             Log.Error("Failed to restore the window position", e);
         }
+    }
+
+    /// <summary>
+    /// 松手之后把窗口整个拉回屏幕可用区域内（v3 的用户 2026-08-08 提的：向上拖出屏幕
+    /// 会被系统弹回来，希望左/右/下也一样）。macOS 和 Windows 都只替我们管了上边缘，
+    /// 另外三边得自己来——**无边框窗口连标题栏都没有，推出去就再也够不着了**。
+    ///
+    /// 拉回的目标是「窗口目前主要待在哪块屏」的**工作区**（<c>ScreenFromWindow</c>，
+    /// 工作区 = 扣掉菜单栏 / 任务栏 / Dock 之后的部分），**不是所有屏幕拼起来的大矩形**：
+    /// 多屏排布可能不是一个完整矩形，拿外接矩形去判断会把两块屏之间的空洞也算成合法位置。
+    ///
+    /// ⚠️ **为什么必须等拖动停下来再拉，不能一边拖一边拉**：一边拖一边拉的话，窗口
+    /// 永远被摁在当前这块屏的边界内，就永远到不了「一半以上落在另一块屏上」那个状态，
+    /// 而 <c>ScreenFromWindow</c> 正是按这个判断该归哪块屏的——结果是**窗口再也拖不到
+    /// 第二块显示器上去**。v3 的用户是双屏，这条不是理论风险。所以拖动过程中随便它跨屏、
+    /// 出界，松手之后（<see cref="_settle"/>）再归位。
+    ///
+    /// ⚠️ 坐标单位要小心：<c>Position</c> 和 <c>Screen.WorkingArea</c> 是**物理像素**，
+    /// 而 <c>FrameSize</c> / <c>ClientSize</c> 是**与 DPI 无关的逻辑单位**，两者差一个
+    /// <c>Screen.Scaling</c>。不换算的话，在缩放不是 100% 的屏幕上会算错窗口多大。
+    /// </summary>
+    private void ClampIntoScreen()
+    {
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null) return;
+
+        var area = screen.WorkingArea;
+        var size = PixelSize.FromSize(FrameSize ?? ClientSize, screen.Scaling);
+
+        // 窗口比工作区还大时，Math.Max 保证下界不会反超上界（Math.Clamp 那样会直接抛）——
+        // 这种情况下贴着左上角，宁可右边 / 下边露出去，也不要把左上角推出屏幕。
+        var x = Math.Clamp(Position.X, area.X, Math.Max(area.X, area.Right - size.Width));
+        var y = Math.Clamp(Position.Y, area.Y, Math.Max(area.Y, area.Bottom - size.Height));
+        if (x == Position.X && y == Position.Y) return;
+
+        _clamping = true;
+        try
+        {
+            Position = new PixelPoint(x, y);
+            _lastPosition = Position;   // 存进 settings.json 的要是夹回之后的位置
+        }
+        finally { _clamping = false; }
     }
 
     // ── 每一拍 ──────────────────────────────────────────────────────────────
