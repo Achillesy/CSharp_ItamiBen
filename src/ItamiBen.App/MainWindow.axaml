@@ -38,18 +38,21 @@
                  HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                  Text="Pick what you are allowed to do." />
 
-      <!-- 小目标：勾选，可多选。内容来自 rules.json -->
-      <WrapPanel Name="GoalsPanel" HorizontalAlignment="Center" />
-
-      <!-- ⚠️ 档位只有 10 / 25 / 50，别往上加（DECISIONS C6） -->
-      <StackPanel Name="TierPanel" Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center" />
-
       <!-- ⚠️ 休息期间它**不变成 Start**（DECISIONS C8）：不给「一口气连干三轮」的捷径 -->
-      <Button Name="ActionBtn" Content="Start" Padding="0,9"
-              HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+      <Button Name="ActionBtn" Classes="start" Content="Start" />
 
-      <TextBlock Name="TotalsText" FontSize="12" Opacity="0.75"
-                 HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+      <!--
+        时长。**没有说明、没有标签、连数字都不显示**（v3 的用户 2026-07-27 定：
+        整个意义就在于靠猜）。只有刻度，自己拖。
+        ⚠️ 范围 10~50、步长 5——别往上加（DECISIONS C6：再往上会出现理论上
+        不可能完成的设定）。
+      -->
+      <Slider Name="Minutes" Margin="2,4,2,0"
+              Minimum="10" Maximum="50" TickFrequency="5"
+              IsSnapToTickEnabled="True" TickPlacement="BottomRight" Value="25" />
+
+      <!-- 小目标：一行一个，右边是累计小时。内容来自 rules.json -->
+      <StackPanel Name="GoalsPanel" Spacing="2" />
 
       <Border Name="StatusBar" CornerRadius="4" Padding="8,6">
         <DockPanel LastChildFill="True">

@@ -25,6 +25,13 @@ public sealed class Settings
     public string? AlarmSound { get; set; }
 
     /// <summary>
+    /// 上次选的专注时长和目标。**纯粹是省事**：开程序不用每次重新挑一遍。
+    /// 目标名对不上了（rules.json 改过）就自然勾不上，不猜也不报错。
+    /// </summary>
+    [JsonPropertyName("focusMinutes")] public int? FocusMinutes { get; set; }
+    [JsonPropertyName("selectedGoals")] public List<string> SelectedGoals { get; set; } = [];
+
+    /// <summary>
     /// 日面还是夜面。**null = 跟着系统走**（第一次启动就是这个），
     /// 点过主题图标之后才会钉死成 true / false。
     /// </summary>

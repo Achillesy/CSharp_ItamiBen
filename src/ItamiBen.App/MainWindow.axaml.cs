@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Layout;
+using Avalonia.Controls.Primitives;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using System.Runtime.InteropServices;
@@ -21,15 +23,6 @@ namespace ItamiBen.App;
 public partial class MainWindow : Window
 {
     /// <summary>
-    /// 界面上给的三个档位。
-    ///
-    /// ⚠️ **别往上加档**（DECISIONS C6）：难度曲线是从达成截止线自然长出来的，
-    /// 50 分钟就已经要求效率 ≥45.5%；再往上会出现理论上不可能完成的设定。
-    /// 结构上限是 <see cref="Round.MaxFocusMinutes"/>，那是边界不是推荐值。
-    /// </summary>
-    private static readonly int[] Tiers = [10, 25, 50];
-
-    /// <summary>
     /// 闹钟响几遍。**4 遍**（v3 的 E11）：它是这个程序里**唯一没有第二次机会**的声音
     /// ——响完什么都不留（黄针不动、不弹窗），走个神就错过了。间隔 = 音频文件自己的长度。
     /// </summary>
@@ -43,7 +36,9 @@ public partial class MainWindow : Window
 
     private readonly Sampler _sampler = new();
     private readonly List<CheckBox> _goalBoxes = [];
-    private readonly List<RadioButton> _tierButtons = [];
+
+    /// <summary>每个目标那一行右边的累计数字，跟 <see cref="_goalBoxes"/> 一一对应。</summary>
+    private readonly List<TextBlock> _goalTotals = [];
 
     private GoalRules _rules = GoalRules.Empty;
     private string? _rulesError;
@@ -127,8 +122,9 @@ public partial class MainWindow : Window
         OpenStore();
 
         BuildGoals();
-        BuildTiers();
-        ResumeRound();
+        foreach (var b in _goalBoxes)
+            b.IsChecked = _settings.SelectedGoals.Contains((string)b.Content!);
+        ResumeRound();   // ⚠️ 排在后面：接回来的那一轮说了算，会把上面这几个勾覆盖掉
 
         this.FindControl<Button>("ActionBtn")!.Click += (_, _) => OnAction();
         this.FindControl<Button>("GrantBtn")!.Click += (_, _) =>
@@ -140,6 +136,16 @@ public partial class MainWindow : Window
         };
 
         // 读回时刻只为了显示黄针残影，**不激活**——关着程序时错过的闹钟不补响（v3 的 E7）
+        var minutes = this.FindControl<Slider>("Minutes")!;
+        minutes.Value = _settings.FocusMinutes ?? 25;
+        _focusMinutes = (int)minutes.Value;
+        minutes.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != RangeBase.ValueProperty) return;
+            _focusMinutes = (int)Math.Round(minutes.Value);
+            UpdateUi();
+        };
+
         _alarm.Restore(_settings.AlarmAt);
         Log.Line($"alarm restored: at={_settings.AlarmAt:yyyy-MM-dd HH:mm} sound={_settings.AlarmSound ?? "(none)"}");
 
@@ -192,37 +198,34 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 目标列表：一行一个，**左边勾选框、右边累计小时**（跟 v3 一致）。
+    /// rules.json 有几个目标就有几行，窗口高度跟着走。
+    /// </summary>
     private void BuildGoals()
     {
-        var panel = this.FindControl<WrapPanel>("GoalsPanel")!;
+        var panel = this.FindControl<StackPanel>("GoalsPanel")!;
         foreach (var goal in _rules.SelectableGoals)
         {
-            var box = new CheckBox { Content = goal, Margin = new Thickness(0, 0, 14, 0) };
+            var box = new CheckBox { Content = goal, VerticalAlignment = VerticalAlignment.Center };
             box.IsCheckedChanged += (_, _) => UpdateUi();
-            _goalBoxes.Add(box);
-            panel.Children.Add(box);
-        }
-    }
 
-    private void BuildTiers()
-    {
-        var panel = this.FindControl<StackPanel>("TierPanel")!;
-        foreach (var minutes in Tiers)
-        {
-            var btn = new RadioButton
+            var total = new TextBlock
             {
-                Content = $"{minutes} min",
-                GroupName = "focus",
-                IsChecked = minutes == _focusMinutes,
-                Tag = minutes,
+                FontSize = 12,
+                Opacity = 0.75,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right,
             };
-            btn.IsCheckedChanged += (_, _) =>
-            {
-                if (btn.IsChecked == true) _focusMinutes = (int)btn.Tag!;
-                UpdateUi();
-            };
-            _tierButtons.Add(btn);
-            panel.Children.Add(btn);
+
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            row.Children.Add(box);
+            Grid.SetColumn(total, 1);
+            row.Children.Add(total);
+
+            _goalBoxes.Add(box);
+            _goalTotals.Add(total);
+            panel.Children.Add(row);
         }
     }
 
@@ -593,7 +596,7 @@ public partial class MainWindow : Window
 
         foreach (var b in _goalBoxes) b.IsChecked = rec.Goals.Contains((string)b.Content!);
         _focusMinutes = rec.FocusMinutes;
-        foreach (var b in _tierButtons) b.IsChecked = (int)b.Tag! == rec.FocusMinutes;
+        this.FindControl<Slider>("Minutes")!.Value = rec.FocusMinutes;
 
         if (_round?.Ending is { } reason)
         {
@@ -737,6 +740,8 @@ public partial class MainWindow : Window
     private void OnExit()
     {
         Settle(EndReason.Closed);
+        _settings.FocusMinutes = _focusMinutes;
+        _settings.SelectedGoals = [.. _goalBoxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content!)];
         _settings.AlarmAt = _alarm.FireAt;
         try { _settings.WindowX = Position.X; _settings.WindowY = Position.Y; }
         catch (Exception e) { Log.Error("Failed to read the window position", e); }
@@ -819,15 +824,18 @@ public partial class MainWindow : Window
 
         this.FindControl<TextBlock>("AlarmText")!.Text = FormatAlarm();
         this.FindControl<TextBlock>("Readout")!.Text = ReadoutText();
-        this.FindControl<TextBlock>("TotalsText")!.Text = FormatTotals();
+        RefreshGoalTotals();
 
         var action = this.FindControl<Button>("ActionBtn")!;
         action.Content = running ? "Give up" : "Start";
         action.IsEnabled = running || _goalBoxes.Any(b => b.IsChecked == true);
 
-        // 提交之后目标和档位锁死——**一轮开始就不能再改**，规则是你事先写的
+        // ⚠️ 只有 Give up 是红的——它作废整轮。休息中**仍然是 Give up**（C8）
+        action.Classes.Set("danger", running);
+
+        // 提交之后目标和时长锁死——**一轮开始就不能再改**，规则是你事先写的
         foreach (var b in _goalBoxes) b.IsEnabled = !running;
-        foreach (var b in _tierButtons) b.IsEnabled = !running;
+        this.FindControl<Slider>("Minutes")!.IsEnabled = !running;
 
         UpdateStatus(sample);
     }
@@ -856,22 +864,24 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// **显示 = 文件里的总数 + 本轮实时累计**（DESIGN §4.5）。用小时+分钟，
-    /// 于是它天然每分钟才动一次——格子每分钟才封盘，秒级跳动是噪声。
+    /// 每个目标那一行右边的累计。**显示 = 文件里的总数 + 本轮实时累计**（DESIGN §4.5）。
+    ///
+    /// ⚠️ 格式跟 v3 一致：**小时、两位小数、不带单位**（`15.88`）。
+    /// 账本里存的是整数秒（C7：1 Hz 采样，更细的单位是假精度），显示时才除 3600——
+    /// 而且要写成 <c>3600.0</c>，整数除法会把小数位悄悄吃掉。
+    ///
+    /// ⚠️ **纯显示求和，一个字都不写**：`during.json` 只在受控退出时被写一次。
     /// </summary>
-    private string FormatTotals()
+    private void RefreshGoalTotals()
     {
-        var names = _totals.Goals.Union(_rules.SelectableGoals, StringComparer.Ordinal).ToList();
-        if (names.Count == 0) return "";
-
         var live = _written ? null : _round?.FocusedSecondsByGoal;
-        var parts = names
-            .Select(g => (Goal: g, Seconds: _totals[g] + (live?.GetValueOrDefault(g) ?? 0)))
-            .Where(x => x.Seconds > 0)
-            .Select(x => $"{x.Goal} {Hm(x.Seconds)}");
 
-        var text = string.Join("   ", parts);
-        return text.Length == 0 ? "" : text;
+        for (var i = 0; i < _goalBoxes.Count && i < _goalTotals.Count; i++)
+        {
+            var goal = (string)_goalBoxes[i].Content!;
+            var seconds = _totals[goal] + (live?.GetValueOrDefault(goal) ?? 0);
+            _goalTotals[i].Text = (seconds / 3600.0).ToString("F2");
+        }
     }
 
     private void UpdateStatus(Sample? sample)
