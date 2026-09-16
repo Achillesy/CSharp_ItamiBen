@@ -260,7 +260,7 @@ public partial class MainWindow : Window
         // ⚠️ 关窗和 Cmd+Q 是两条不同的路，但**执行的是同一个写入动作**（C5）
         Closing += OnClosing;
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.ShutdownRequested += (_, _) => OnExit();
+            desktop.ShutdownRequested += (_, _) => OnExit("shutdown requested");
 
         PositionChanged += (_, e) =>
         {
@@ -1166,8 +1166,9 @@ public partial class MainWindow : Window
             {
                 _signals.Add(PosixSignalRegistration.Create(signal, ctx =>
                 {
-                    Events.Info("stop", $"{ctx.Signal} received — settling before exit");
-                    try { Dispatcher.UIThread.Invoke(OnExit); }
+                    // ⚠️ **这里不再自己写 stop 事件**：那条记录归 OnExit 统一写，
+                    //    否则「有没有留下痕迹」就取决于走的是哪条退出路（见 OnExit 的注释）
+                    try { Dispatcher.UIThread.Invoke(() => OnExit($"{ctx.Signal} received")); }
                     catch (Exception e) { Events.Error("stop", "Failed to settle on signal", e); }
                     // Cancel = false：照常让进程退出，我们只是抢在它之前把账写完
                 }));
@@ -1194,10 +1195,20 @@ public partial class MainWindow : Window
     /// **改动作废了一条前提，而那条前提只写在注释里。** 所以现在靠一个显式的标志，
     /// 不再靠「里面每一步碰巧都能重跑」。
     /// </summary>
-    private void OnExit()
+    private void OnExit(string why)
     {
         if (_exited) return;
         _exited = true;
+
+        // ⚠️ **stop 事件必须写在这里，不能写在某一条退出路上。**
+        //    2026-09-16 实测发现：它原来只写在 POSIX 信号处理器里，于是
+        //    `pkill` / 关机能留下记录，而**点 × / Cmd+Q 什么都不留**。
+        //    症状是 `event` 表里历史上每一条 stop 都是 `SIGTERM received`，
+        //    一条手动关闭都没有——而那恰恰是用户最常用的关法。
+        //    查「程序上次是怎么没的」时，缺记录和「被 kill -9 了」长得一模一样。
+        //    对照 AW 的窗口时间线才看出来：18:43:58 焦点离开 ItamiBen 之后它
+        //    再没出现过（= 手动关掉了），而库里那一刻是空白。
+        Events.Info("stop", $"{why} — settling before exit");
 
         Settle(EndReason.Closed);
         _settings.FocusMinutes = _focusMinutes;
@@ -1264,7 +1275,7 @@ public partial class MainWindow : Window
     {
         if (_closeApproved || _round is not { Ending: null } || _asking)
         {
-            OnExit();
+            OnExit("window closed");
             return;
         }
 
