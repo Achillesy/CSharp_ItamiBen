@@ -8,14 +8,16 @@ namespace ItamiBen.App;
 /// 单实例限制。
 ///
 /// **v4 比 v3 更需要它。** v3 的判定数据在 ActivityWatch 那边，本程序基本只读；
-/// v4 自己**每秒往 <c>samples.db</c> 写一行**，退出时还要整份重写 <c>during.json</c>
-/// 和 <c>settings.json</c>。两个实例同时跑的后果：
+/// v4 自己**每秒往库里写一行**，还要记轮次、设置和累计。两个实例同时跑的后果：
 ///
 /// <list type="bullet">
-///   <item><c>during.json</c> / <c>settings.json</c> 是**整份重写**——后退出的那个把先
-///   退出的那个盖掉，**一整轮的累计秒数凭空消失，而且不报错**。</item>
+///   <item>设置是**整份写回**的（<see cref="Settings.Save"/> → <c>PutSettings(Flatten())</c>），
+///   后退出的那个把先退出的那个盖掉，**而且不报错**。配置搬进库并没有消掉这一条——
+///   变的是载体，没变的是「一次写全部」。</item>
 ///   <item><c>round</c> 表用 <c>INSERT OR REPLACE</c>（`started_at` 抹到整分），同一分钟
 ///   里两边各按一次 Start，后写的把前一个的目标和时长覆盖掉。</item>
+///   <item>两边各自结算一轮，同一段时间**在 <c>total</c> 里被加了两次**——
+///   加法本身是库里原子的 <c>seconds + n</c>，拦不住「加两遍」。</item>
 ///   <item>闹钟响两遍，**到点的命令跑两次**。</item>
 /// </list>
 ///

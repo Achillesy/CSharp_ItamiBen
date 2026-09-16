@@ -4,7 +4,8 @@ using ItamiBen.Core;
 namespace ItamiBen.App.Platform;
 
 /// <summary>
-/// 闹钟到点要跑的那条命令（`rules.json` 的 `executeCommand`）。从 v3 搬过来，跟 AW 无关。
+/// 闹钟到点要跑的那条命令：`setting.alarmCommand` 记的是名字，正文在库的 `command` 表里。
+/// 从 v3 搬过来，跟 AW 无关。
 ///
 /// **永远只执行第 0 条**（v3 的 E9）：那是个常用命令的收藏夹，不是配置格式——
 /// 想换命令就去文件里重排顺序，**不做界面去选**。
@@ -40,8 +41,8 @@ public static class Command
     /// 把**这一条**命令原样交给 shell 跑，起完就返回。
     ///
     /// ⚠️ 从 <see cref="LaunchDetached"/> 里拆出来，**只为了能测**：
-    /// `LaunchDetached` 到点会去**现读 rules.json**，而在这台机器上那份文件里
-    /// `executeCommand.macos[0]` 就是重启命令——测试要是调它，当场把机器重启了。
+    /// `LaunchDetached` 取的是这台机器上真实配置里的命令，而那条命令就是重启
+    /// （`command` 表里 `alarm` 那行）——测试要是调它，当场把机器重启了。
     /// 拆开之后测试只喂一条自己写的无害命令，走的却是同一条起进程的代码，
     /// 引号那条路径一个字节都没绕开。
     /// </summary>

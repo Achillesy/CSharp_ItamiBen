@@ -106,6 +106,11 @@ Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
 **库里本来就存着你实际用过的每一个程序名**，所以它可以拿现实来校对自己写的规则，
 而不是靠猜。
 
+**手边没有能改文件的智能体？** 设置里那个红色的 **Configure online** 按钮走的是同一条路，
+只是换成网页对话：它把你当前的配置显示出来（**可编辑**——不想外传的行自己删掉），
+你写一句想要什么，一个按钮把 `AGENT.md` + 配置 + 你的需求一起复制到剪贴板，
+粘给任意网页 AI，再把它给的 SQL 贴回来。执行之前它会先把整个库备份一份。
+
 你当然也可以自己用任何 SQLite 工具打开它。`AGENT.md` 人也读得懂，只是它默认你想知道细节。
 
 ## 你的文件
@@ -140,18 +145,20 @@ Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
 
 1. 选定的系统音**响 4 遍**（专注相关的那三声只响 2 遍——它们各自都在屏幕上留下了一个
    看得回来的状态；闹钟响完什么都不留）。
-2. **只有**右键菜单里的「Run command at alarm」开着时，才会跑 `executeCommand` 里
-   当前系统的**第 0 条**。
+2. **只有**右键菜单里的「Run command at alarm」开着时，才会跑 `alarmCommand`
+   这个设置**指名**的那条命令。
 
-```json
-"executeCommand": {
-  "macos":   ["pmset displaysleepnow", "osascript -e 'tell application \"System Events\" to sleep'"],
-  "windows": ["rundll32.exe user32.dll,LockWorkStation", "shutdown /s /t 0"]
-}
+命令是表里的行，一个平台一列，闹钟**按名字**引用它：
+
+```sql
+INSERT INTO command (name, macos, windows) VALUES
+  ('sleep', 'pmset sleepnow', 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+INSERT INTO setting (key, value) VALUES ('alarmCommand', '"sleep"')
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 ```
 
-⚠️ **永远只跑第 0 条。** 这是个常用命令的**收藏夹，不是配置格式**：想换就重排顺序，
-**刻意不做界面去选**。
+⚠️ **可执行的文本只住在 `command` 表里。** 闹钟和计划表都只存名字、不存正文，
+所以「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
 
 ⚠️ **那个开关每次启动都是关的。** 持久化它是事故：重启之后被上一个会话的关机命令拍死，
 而你根本不知道它还开着。

@@ -213,6 +213,8 @@ ItamiBen's **Configure online** window (Settings → the red button). In that ca
   hours and history, and they cannot be rebuilt.
 - Everything you send is written to `itamiben.log` alongside what the user asked for,
   whether it worked or not. That is for them, not against you — but write accordingly.
+- The window reports how many rows **your** statement changed. **`0 rows` means nothing
+  matched** — the SQL was valid but the value did not exist. It is not a success.
 
 ## Check your work
 
@@ -296,6 +298,11 @@ much as defaults** — change them, disable them, or delete them freely.
 
 ## Things that will bite you
 
+- **Padding a name with spaces.** `WHERE name = ' Pomodoro '` matches nothing, reports no
+  error, and looks exactly like success. Copy names **byte for byte** from the configuration
+  you were given — never retype them, and never add the spaces some styles put around CJK
+  text. This has already happened once: `UPDATE goal SET enabled = 0 WHERE name = ' 番茄钟 '`
+  changed zero rows while the window said it had applied.
 - **Not bumping `config.version`.** The user concludes nothing happened.
 - **Writing a regex for one platform only.** No error, no warning, just red.
 - **Deleting a goal instead of disabling it.** Its rules cascade away and its hours orphan.

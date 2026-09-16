@@ -10,7 +10,7 @@ namespace ItamiBen.Core;
 /// （<c>Away</c> 画空心虚线框，<c>Unread</c> 什么都不画）；**判定层面它们等价**。
 ///
 /// ⚠️ **这里没有「前台是 ItamiBen 自己」这一档**（2026-09-16 用户拍板删的，DECISIONS C9）。
-/// 盯着自己的钟面就是跑偏，跟盯着别的什么一样——想让它算专注，去 rules.json 里
+/// 盯着自己的钟面就是跑偏，跟盯着别的什么一样——想让它算专注，去库里的 `rule` 表
 /// 自己写一条规则，这是配置不是特例。
 /// </summary>
 public enum SecondOutcome : byte

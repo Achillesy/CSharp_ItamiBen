@@ -109,7 +109,7 @@ public partial class SettingsWindow : Window
 
         preview.Text = _owner?.CommandForThisOs is { Length: > 0 } cmd
             ? cmd
-            : "(no executeCommand for this OS in rules.json)";
+            : "(no command for this OS — check `alarmCommand` and the `command` table)";
     }
 
     /// <summary>卡片底色跟着主题走。取钟面调色板里的值，不新增色号。</summary>

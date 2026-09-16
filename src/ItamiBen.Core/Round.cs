@@ -101,7 +101,7 @@ public sealed class Round
     /// <param name="now">按 Start 的那一刻传。内部会 <see cref="TimeGrid.FloorToMinute"/>（代价见那里）。</param>
     /// <param name="focusMinutes">承诺的专注分钟数，提交后锁死。</param>
     /// <param name="goals">勾选的目标，**按勾选顺序**——一秒同时命中多个时算给排在前面的那个。</param>
-    /// <param name="rules">规则，**开始时锁定**：中途改 rules.json 不影响正在跑的这一轮。</param>
+    /// <param name="rules">规则，**开始时锁定**：中途改配置不影响正在跑的这一轮。</param>
     public Round(DateTimeOffset now, int focusMinutes, IReadOnlyList<string> goals, GoalRules rules)
     {
         if (focusMinutes < 1)
@@ -113,7 +113,7 @@ public sealed class Round
             throw new ArgumentException("A round needs at least one goal; with none, no second could ever count.", nameof(goals));
         foreach (var goal in goals)
             if (!rules.IsSelectable(goal))
-                throw new ArgumentException($"Goal \"{goal}\" is not a selectable goal in rules.json.", nameof(goals));
+                throw new ArgumentException($"Goal \"{goal}\" is not a selectable goal.", nameof(goals));
 
         StartedAt = TimeGrid.FloorToMinute(now);
         FocusMinutes = focusMinutes;

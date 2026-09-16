@@ -37,7 +37,7 @@ internal static class Query
     public static void Run(string what, string? from, string? to)
     {
         var path = AppData.DbPath();
-        if (!File.Exists(path)) { Console.Error.WriteLine($"no samples.db at {path}"); return; }
+        if (!File.Exists(path)) { Console.Error.WriteLine($"no database at {path}"); return; }
 
         var start = Parse(from) ?? new DateTimeOffset(DateTime.Today, DateTimeOffset.Now.Offset);
         var end = Parse(to) ?? start.AddDays(1);

@@ -124,6 +124,12 @@ The agent will need write access to that folder once. Everything else it can wor
 actually been seen using, so the agent can check its own rules against reality instead of
 guessing.
 
+**No agent that can touch your files?** Settings → the red **Configure online** button
+does the same job through a web chat: it shows you your current configuration (editable —
+delete anything you would rather not send), you write what you want, one button copies
+`AGENT.md` + your configuration + your request to the clipboard, and you paste the SQL that
+comes back. It takes a copy of the database before it applies anything.
+
 You can of course open the database yourself with any SQLite tool. `AGENT.md` is readable
 by humans too; it just assumes you want the details.
 
@@ -165,17 +171,21 @@ When it fires:
    twice — they each leave something on screen you can look at afterwards; the alarm leaves
    nothing).
 2. If — and only if — **Run command at alarm** is switched on in the right-click menu,
-   entry `#0` of `executeCommand` for this OS runs.
+   the command named by the `alarmCommand` setting runs.
 
-```json
-"executeCommand": {
-  "macos":   ["pmset displaysleepnow", "osascript -e 'tell application \"System Events\" to sleep'"],
-  "windows": ["rundll32.exe user32.dll,LockWorkStation", "shutdown /s /t 0"]
-}
+Commands are rows in one table, one column per platform, and the alarm refers to one **by
+name**:
+
+```sql
+INSERT INTO command (name, macos, windows) VALUES
+  ('sleep', 'pmset sleepnow', 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+INSERT INTO setting (key, value) VALUES ('alarmCommand', '"sleep"')
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 ```
 
-⚠️ **Only entry #0 ever runs.** It is a shortlist, not a configuration format: to change
-the command, reorder the list. There is deliberately no UI for picking one.
+⚠️ **Executable text lives only in `command`.** The alarm and the schedule both refer to
+commands by name, never by text, so "what can this machine be made to run automatically" is
+answerable by looking in exactly one place.
 
 ⚠️ **The switch is off every time the program starts.** Persisting it is an accident
 waiting to happen — you restart, and last session's shutdown command kills the machine

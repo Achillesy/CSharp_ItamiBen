@@ -110,7 +110,7 @@ internal sealed class CommandTableConverter : JsonConverter<Dictionary<string, I
     }
 
     public override void Write(Utf8JsonWriter w, Dictionary<string, IReadOnlyList<string>> v, JsonSerializerOptions o)
-        => throw new NotSupportedException("The program never writes rules.json.");
+        => throw new NotSupportedException("Configuration is written through the database, not this type.");
 }
 
 /// <summary>
@@ -165,7 +165,7 @@ public sealed class GoalRules
 
     /// <summary>这台机器上到点会跑的那一条；没配就是 null。</summary>
 
-    /// <summary>空规则——一个目标都没有。界面在还没有 rules.json 时用它顶着。</summary>
+    /// <summary>空规则——一个目标都没有。界面在库还没打开时用它顶着。</summary>
     public static GoalRules Empty { get; } = new([], new Dictionary<string, (string?, string?)>(), null, null);
 
     /// <summary>
@@ -285,7 +285,7 @@ public sealed class GoalRules
         }
     }
 
-    /// <summary>界面上可勾选的目标（禁用的不出现）。顺序就是 rules.json 里的书写顺序。</summary>
+    /// <summary>界面上可勾选的目标（禁用的不出现）。顺序就是 `goal.position`。</summary>
     public IReadOnlyList<string> SelectableGoals
         => _groups.Where(g => !g.Disabled).Select(g => g.Name).ToList();
 

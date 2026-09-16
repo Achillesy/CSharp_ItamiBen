@@ -982,7 +982,7 @@ public partial class MainWindow : Window
         catch (Exception e)
         {
             // 重建失败就继续用实时那个环——读不了库不该把正在跑的一轮毁掉
-            Events.Error("db", "Failed to rebuild the round from samples.db", e);
+            Events.Error("db", "Failed to rebuild the round from the database", e);
         }
     }
 
@@ -1058,7 +1058,7 @@ public partial class MainWindow : Window
             // 录不上也不能崩：环会退化成「一秒都没采到」，但程序照跑
             // ⚠️ **这一条只能落文本**：库都没打开，事件表压根写不进去——
             //    这正是那份「最后的求救信」存在的全部理由
-            Log.Error("Failed to open samples.db", e);
+            Log.Error("Failed to open the database", e);
         }
     }
 
@@ -1391,7 +1391,7 @@ public partial class MainWindow : Window
         //    这是最坏的一种失败：程序照跑、钟面照转，只是永远不可能达成。必须说出来
         if (_store is null)
         {
-            ShowStatus("Cannot open samples.db",
+            ShowStatus("Cannot open the database",
                        "Nothing is being recorded, so every round will run out. See itamiben.log.");
             this.FindControl<Border>("StatusBar")!.Background = new SolidColorBrush(Color.FromRgb(0xC4, 0x5A, 0x28));
             this.FindControl<Button>("GrantBtn")!.IsVisible = false;

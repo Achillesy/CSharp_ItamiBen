@@ -61,7 +61,7 @@ public partial class SqlWindow : Window
         var result = this.FindControl<TextBlock>("Result")!;
 
         config.Text = store?.DumpConfig(AgentKeys) ?? "-- the database is not open";
-        request.Watermark = RequestTemplate;
+        request.PlaceholderText = RequestTemplate;
 
         this.FindControl<Button>("CopyAll")!.Click += async (_, _) =>
         {
