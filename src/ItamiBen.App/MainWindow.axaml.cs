@@ -463,6 +463,8 @@ public partial class MainWindow : Window
         // ⚠️ 高度不设：SizeToContent="Height" 自己长，rules.json 有几个目标就有几行
         this.FindControl<DialControl>("Dial")!.Height = metrics.DialHeight;
         this.FindControl<DominoRow>("Dominoes")!.Height = metrics.DominoHeight;
+        // ⚠️ 骨牌行的边距**分档**，不在 XAML 里写死（见 LayoutMetrics.DominoMargin）
+        this.FindControl<Grid>("DominoRowCell")!.Margin = metrics.DominoMargin;
 
         var mask = new SolidColorBrush(Color.FromArgb((byte)Math.Round(WindowLayout.Opacity * 255), 255, 255, 255));
         this.FindControl<DialControl>("Dial")!.OpacityMask = mask;

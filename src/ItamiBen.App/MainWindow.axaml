@@ -44,7 +44,8 @@
     </Grid>
 
     <!-- ── 第 1 行：骨牌（= 星期几）+ 提示条 + 齿轮 ────────────────────── -->
-    <Grid Name="DominoRowCell" Grid.Row="1" Margin="0,2,0,-4">
+    <!-- ⚠️ Margin 由 ApplyLayout 按档设（LayoutMetrics.DominoMargin），这里不写死 -->
+    <Grid Name="DominoRowCell" Grid.Row="1">
       <local:DominoRow Name="Dominoes" />
 
       <!--

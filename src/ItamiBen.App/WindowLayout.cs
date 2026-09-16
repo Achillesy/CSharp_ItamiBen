@@ -1,3 +1,4 @@
+using Avalonia;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -14,9 +15,21 @@ public enum LayoutMode { Standard, Compact }
 /// </summary>
 /// <param name="BannerMaxLines">提示条最多列几条，同时也是 <c>TextBlock.MaxLines</c>。</param>
 /// <param name="BannerMaxWidth">提示条正文的折行宽度。</param>
+/// <param name="DominoMargin">
+/// 骨牌行的外边距，**下边是负的**（v3 的 K16）。
+///
+/// ⚠️ **必须分档，不能在 XAML 里写死一个数**（2026-09-16 用户报「骨牌底部陷进下面的
+/// 卡片里」就是写死的后果）：两档的骨牌高度不一样（76 / 56），而骨牌的底线画在
+/// <c>H * 0.965</c> 上，所以「底线到控件下沿还剩多少」两档也不一样——负边距正是
+/// 用来把这段差额吃掉的，它**跟 DominoRow 的 0.965 和底边那道渐变淡出绑在一起**，
+/// 一档一个值。
+///
+/// ⚠️ 紧凑档的**上**边距特意放大到 8（标准档 2）：提示条跟骨牌叠在同一格里，
+/// 紧凑档只让排一行，得给它留出高度。
+/// </param>
 public sealed record LayoutMetrics(
     double WindowWidth, double DialHeight, double DominoHeight,
-    int BannerMaxLines, double BannerMaxWidth);
+    int BannerMaxLines, double BannerMaxWidth, Thickness DominoMargin);
 
 /// <summary>
 /// 窗口外观的开关，放在运行时目录的 <c>layout.json</c>。从 v3 搬过来（它的 K25）。
@@ -51,14 +64,20 @@ public static class WindowLayout
 
     private const double DefaultOpacity = DefaultOpacityPercent / 100.0;
 
-    private static readonly LayoutMetrics Standard = new(WindowWidth: 380, DialHeight: 330, DominoHeight: 76, BannerMaxLines: 2, BannerMaxWidth: 280);
+    private static readonly LayoutMetrics Standard = new(
+        WindowWidth: 380, DialHeight: 330, DominoHeight: 76,
+        BannerMaxLines: 2, BannerMaxWidth: 280,
+        DominoMargin: new Thickness(0, 2, 0, -4));
 
     /// <summary>
     /// 紧凑档。**292 减掉左右各 18 的留白正好是 256**，所以钟面的
     /// <c>box = Math.Min(宽, 高)</c> 两边相等，刚好填满那一行不留空隙。
     /// 钟面一切都从 <c>Bounds</c> 推导，所以改这一个数就等比缩放，**绘制代码一行不用动**。
     /// </summary>
-    private static readonly LayoutMetrics Compact = new(WindowWidth: 292, DialHeight: 256, DominoHeight: 56, BannerMaxLines: 1, BannerMaxWidth: 220);
+    private static readonly LayoutMetrics Compact = new(
+        WindowWidth: 292, DialHeight: 256, DominoHeight: 56,
+        BannerMaxLines: 1, BannerMaxWidth: 220,
+        DominoMargin: new Thickness(0, 8, 0, -3));
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
