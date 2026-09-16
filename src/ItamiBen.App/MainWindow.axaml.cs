@@ -800,8 +800,14 @@ public partial class MainWindow : Window
         ShowBanner($"{head.At:HH:mm}{extra}", head.Text,
                    new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0).AddMinutes(1));
 
+        // 系统通知：**无条件，而且一条事件一个、永远不合并**（v3 的用户 2026-09-03 点名）。
+        // ⚠️ 它跟上面那条提示条**并存，不是二选一**：提示条保证屏幕上一定看得见，
+        //    但它有硬高度上限、多出来的只剩一个 `+N`；**通知中心这一份才是不丢内容的**，
+        //    而且关掉程序也还能翻回来。
+        foreach (var e in due) Platform.Notify.Show(e.Text);
+
         // ⚠️ 这个开关**只管响不响铃**（v3 的 J6）：上面那条「检查清单 → 挑出到点的 →
-        //    提示条 + 日志」的主链路**无条件每分钟都走**，不受它控制。
+        //    提示条 + 系统通知 + 日志」的主链路**无条件每分钟都走**，不受它控制。
         //    关掉它只是消音，不是让提醒消失
         if (_settings.AlarmsEnabled) Sound.Repeat(_settings.AlarmsSound, AlarmsListRings);
     }
