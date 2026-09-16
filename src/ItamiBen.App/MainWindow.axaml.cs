@@ -71,6 +71,17 @@ public partial class MainWindow : Window
     private long _lastTickSecond = -1;
 
     /// <summary>
+    /// 刚才那一秒是不是**跑偏**。跑偏的判据必须是 <c>== OffTask</c>，
+    /// ⚠️ **不能写成「不是 Focused」**（v3 的 N4）：那样「人不在」「读不到」「自身豁免」
+    /// 也会算跑偏——锁个屏钟面就永远闪下去，而账本那段时间一秒都没扣，
+    /// **屏幕跟账本对着说反话**。
+    /// </summary>
+    private bool _drifting;
+
+    /// <summary>钟面此刻是不是反着的。跑偏期间每秒翻一次。</summary>
+    private bool _inverted;
+
+    /// <summary>
     /// 上一次重建时算出来的离开区间条数。
     /// **用来分辨「对账对不上」的两种原因**——见 <see cref="Rebuild"/> 里那段。
     /// </summary>
@@ -260,14 +271,23 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyTheme()
+    private void ApplyTheme() => ApplyPalette();
+
+    /// <summary>
+    /// 把当前该用的调色板铺下去。**跑偏时钟面翻成半反色**——只翻盘面 / 刻度 / 指针，
+    /// 色环、木框、淡蓝块、小红圈一概不翻（那是账本本身，翻了就把语义拆了）。
+    /// </summary>
+    private void ApplyPalette()
     {
-        var palette = ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
+        var dark = ActualThemeVariant == ThemeVariant.Dark;
+        var normal = dark ? DialPalette.Dark : DialPalette.Light;
+        var palette = _inverted ? normal.WithFaceFrom(dark ? DialPalette.Light : DialPalette.Dark) : normal;
+
         this.FindControl<DialControl>("Dial")!.Palette = palette;
-        this.FindControl<Border>("CardBackdrop")!.Background = new SolidColorBrush(palette.Card);
+        this.FindControl<Border>("CardBackdrop")!.Background = new SolidColorBrush(normal.Card);
 
         var dominoes = this.FindControl<DominoRow>("Dominoes")!;
-        dominoes.Palette = palette;
+        dominoes.Palette = normal;   // ⚠️ 骨牌不跟着翻：它压根不在钟面上
         dominoes.Fallen = DominoRow.FallenForToday(DateTime.Now);
 
         ApplyChrome();
@@ -288,8 +308,9 @@ public partial class MainWindow : Window
     /// </summary>
     private void ApplyChrome()
     {
-        var palette = ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
+        // ⚠️ 图标用**不翻**的那一档：它们坐在钟面外面，跟着闪会变成另一种干扰
         var dark = ActualThemeVariant == ThemeVariant.Dark;
+        var palette = dark ? DialPalette.Dark : DialPalette.Light;
 
         var pin = this.FindControl<Button>("PinBtn")!;
         pin.Content = ChromeIcons.Pin(_settings.Pinned, palette);
@@ -299,7 +320,7 @@ public partial class MainWindow : Window
         tick.Content = ChromeIcons.Speaker(_settings.TickEnabled, palette);
         tick.Classes.Set("on", _settings.TickEnabled);
 
-        if (_tickItem is not null) _tickItem.IsChecked = _settings.TickEnabled;
+        if (_tickItem is not null) _tickItem.IsChecked = _settings.ForceTicking;
         if (_commandItem is not null) _commandItem.IsChecked = _commandArmed;
 
         this.FindControl<Button>("ThemeBtn")!.Content = ChromeIcons.Theme(dark, palette);
@@ -329,12 +350,32 @@ public partial class MainWindow : Window
     /// ——包括正在响的闹钟。而 `ApplyChrome` 有好几个调用点（换主题、点图钉），
     /// 放进去就等于「点一下图钉把正在响的闹钟掐了」。
     /// </summary>
-    private void SetTicking(bool on)
+    internal void SetTicking(bool on)
     {
         _settings.TickEnabled = on;
         if (!on) Tick.Stop();
         ApplyChrome();
     }
+
+    /// <summary>无条件滴答的唯一入口——菜单那一项和设置窗口那张卡走的是同一条路。</summary>
+    internal void SetForceTicking(bool on)
+    {
+        _settings.ForceTicking = on;
+        if (!on) Tick.Stop();
+        ApplyChrome();
+    }
+
+    /// <summary>到点跑命令的唯一入口。⚠️ 仍然**不持久化**（E8），设置窗口也改不了这一点。</summary>
+    internal void SetCommandArmed(bool on)
+    {
+        _commandArmed = on;
+        Log.Line(on
+            ? $"command armed: {_rules.CommandForThisOs() ?? "(no executeCommand for this OS)"}"
+            : "command disarmed");
+        ApplyChrome();
+    }
+
+    internal bool CommandArmed => _commandArmed;
 
     /// <summary>
     /// 窗口尺寸、不透明度、置顶、拖动、右键菜单——**无边框那一套**。
@@ -389,26 +430,16 @@ public partial class MainWindow : Window
         _pinItem = new MenuItem { Header = "Keep on top", ToggleType = MenuItemToggleType.CheckBox };
         _pinItem.Click += (_, _) => SetPinned(!_settings.Pinned);
 
-        _tickItem = new MenuItem { Header = "Ticking", ToggleType = MenuItemToggleType.CheckBox };
-        _tickItem.Click += (_, _) => SetTicking(!_settings.TickEnabled);
+        // ⚠️ 菜单里这一项是 **Force**（无条件响），跟喇叭图标不是同一个开关：
+        //    喇叭挂**跑偏才响**。两个开关合起来才是完整语义
+        _tickItem = new MenuItem { Header = "Force ticking", ToggleType = MenuItemToggleType.CheckBox };
+        _tickItem.Click += (_, _) => SetForceTicking(!_settings.ForceTicking);
 
         // ⚠️ 到点跑命令。**每次启动都是关的**，见 _commandArmed
         _commandItem = new MenuItem { Header = "Run command at alarm", ToggleType = MenuItemToggleType.CheckBox };
-        _commandItem.Click += (_, _) =>
-        {
-            _commandArmed = !_commandArmed;
-
-            // ⚠️ 界面上**不显示具体命令**（用户 2026-09-16 要求）。但打开的那一刻往日志
-            //    里写一行——那条命令多半是关机，事后总得查得出「这一下到底会跑什么」。
-            //    v3 的 E14 是把命令显示在卡片上，理由是「按下开关之前有权知道按的是什么」；
-            //    这里换成日志，代价是**按之前看不到，只能事后查**。
-            if (_commandArmed)
-                Log.Line($"command armed: {_rules.CommandForThisOs() ?? "(no executeCommand for this OS)"}");
-            else
-                Log.Line("command disarmed");
-
-            ApplyChrome();
-        };
+        // ⚠️ 界面上**不显示具体命令**（用户 2026-09-16 要求），改成打开那一刻写日志——
+        //    那条命令多半是关机，事后总得查得出「这一下到底会跑什么」
+        _commandItem.Click += (_, _) => SetCommandArmed(!_commandArmed);
 
         dial.ContextMenu = new ContextMenu
         {
@@ -421,8 +452,8 @@ public partial class MainWindow : Window
         //    PointerExited——气泡会卡在对话框上面，关掉对话框还赖着不走。齿轮本来也不用解释
         this.FindControl<Button>("SettingsBtn")!.Click += async (_, _) =>
         {
-            await new SettingsWindow(_settings).ShowDialog(this);
-            ApplyChrome();   // 音色改了不影响图标，但改了音量要让滴答立刻用新值
+            await new SettingsWindow(_settings, this).ShowDialog(this);
+            ApplyChrome();
         };
 
         this.FindControl<Button>("PinBtn")!.Click += (_, _) => SetPinned(!_settings.Pinned);
@@ -485,6 +516,11 @@ public partial class MainWindow : Window
                 //    会先画成红格——每分钟从库重建时 AwayMap 会跨行回溯，把它们纠正成
                 //    空白。v3 对这个「回溯改写」有同样的行为，是语义不是 bug
                 var j = round.Observe(s.At, s.App, s.Title, s.Idle >= AwayMap.ThresholdSeconds);
+
+                // ⚠️ 只在**专注阶段**闪：休息期间跑偏不算跑偏
+                _drifting = round.Phase == RoundPhase.Focusing
+                         && j?.Outcome == SecondOutcome.OffTask;
+
                 if (j is { } judged)
                     Log.Line($"{judged.Outcome,-10} focused={round.FocusedSeconds,-5} slack={round.SlackSeconds,-5} "
                            + $"idle={_last.Idle,-5} app={s.App,-18} title={s.Title}");
@@ -504,6 +540,11 @@ public partial class MainWindow : Window
             if (_round?.Ending is { } reason) Settle(reason);
         }
 
+        // ⚠️ **不在专注阶段就一定不跑偏**，必须在这里显式清掉：`_drifting` 只在
+        //    「专注阶段记下一秒」那条路上更新，休息阶段那条路不碰它——留着上一个值
+        //    就会**整个休息期间一直闪**。没有正在跑的一轮同理。
+        if (_round is not { Phase: RoundPhase.Focusing }) _drifting = false;
+
         // ⚠️ 整分钟那一串排在闹钟**之前**（v3 的 J10）：两边都要出声时，
         //    Windows 的 winmm 是单通道、后响的会掐断先响的，而闹钟响完什么都不留、
         //    清单响完还留着一分钟的提示条 —— 所以让闹钟赢。
@@ -513,12 +554,23 @@ public partial class MainWindow : Window
             OnMinute(s.At.LocalDateTime);
         }
 
-        // 滴答：一秒一下。**一直响，不是跑偏才响**——后者是提示音，跟 D1 冲突
         var second = s.At.ToUnixTimeSeconds();
-        if (_settings.TickEnabled && second != _lastTickSecond)
+        if (second != _lastTickSecond)
         {
             _lastTickSecond = second;
-            Tick.Play(s.At.Second, _settings.TickVolume);
+
+            // ⚠️ **两个开关，不是一个**：喇叭图标挂**跑偏**，菜单/设置里那个 Force
+            //    无条件响。合起来就是 v3 那一句。
+            if (_settings.ForceTicking || (_settings.TickEnabled && _drifting))
+                Tick.Play(s.At.Second, _settings.TickVolume);
+
+            // 跑偏就让钟面**一秒一翻**。⚠️ 是「翻」不是「设成反色」：
+            // 稳定反着的钟面看两分钟就变成壁纸了，抓不住眼睛；**闪**才抓得住
+            // （v3 的用户 2026-08-29 撤掉「5 秒一次」那版的全部理由）。
+            // 一秒一翻 = 完整周期 2 秒 = 0.5 Hz，远在光敏性癫痫的 3 Hz 风险区间之外。
+            // 不跑偏就立刻回到用户设的那一档，不留半个相位。
+            _inverted = _drifting && !_inverted;
+            ApplyPalette();
         }
 
         CheckAlarm();
@@ -585,7 +637,11 @@ public partial class MainWindow : Window
 
         ShowBanner(string.Join('\n', due.Select(e => $"{e.At:HH:mm}   {e.Text}")),
                    new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0).AddMinutes(1));
-        Sound.Repeat(_settings.AlarmsSound, AlarmsListRings);
+
+        // ⚠️ 这个开关**只管响不响铃**（v3 的 J6）：上面那条「检查清单 → 挑出到点的 →
+        //    提示条 + 日志」的主链路**无条件每分钟都走**，不受它控制。
+        //    关掉它只是消音，不是让提醒消失
+        if (_settings.AlarmsEnabled) Sound.Repeat(_settings.AlarmsSound, AlarmsListRings);
     }
 
     private void RefreshAlarmsDot(DateTime now)

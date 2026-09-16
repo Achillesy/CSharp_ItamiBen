@@ -39,11 +39,22 @@ public sealed class Settings
     public bool? DarkTheme { get; set; }
 
     /// <summary>
-    /// 滴答声开着没有。
-    /// ⚠️ **v4 只有「一直响」这一种**（环境音）；v3 那种「跑偏才响」是提示音，
-    /// 跟 D1 / E4 冲突，没搬。
+    /// **跑偏时滴答**（桌面上那个喇叭图标管的就是它）。
+    ///
+    /// ⚠️ 跟 <see cref="ForceTicking"/> 是两个开关，合起来是：
+    /// <c>ticking = ForceTicking || (TickEnabled &amp;&amp; 正在跑偏)</c>。
+    /// 喇叭挂跑偏，菜单里那个「Force ticking」挂设置——两者不是一回事。
     /// </summary>
     [JsonPropertyName("tickEnabled")] public bool TickEnabled { get; set; }
+
+    /// <summary>
+    /// **无条件滴答**：不看任何判据，一直响。那才是 force 的字面意思。
+    /// 跟 <see cref="TickEnabled"/> 是两个开关：那个只在**跑偏**时响。
+    /// </summary>
+    [JsonPropertyName("forceTicking")] public bool ForceTicking { get; set; }
+
+    /// <summary>alarms.cron 到点响不响铃。⚠️ 只管**响不响**——检查清单那条主链路无条件每分钟都做。</summary>
+    [JsonPropertyName("alarmsEnabled")] public bool AlarmsEnabled { get; set; } = true;
 
     /// <summary>滴答音量 0~100。音色是合成的，没有可挑的（见 <see cref="Platform.Tick"/>）。</summary>
     [JsonPropertyName("tickVolume")] public int TickVolume { get; set; } = 35;

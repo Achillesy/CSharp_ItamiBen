@@ -1,47 +1,85 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ItamiBen.App.SettingsWindow"
-        Title="ItamiBen Settings"
-        Width="340" SizeToContent="Height"
+        Title="Settings"
+        Width="380"
+        SizeToContent="Height"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        CanMinimize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Topmost="True">
 
-  <!--
-    ⚠️ 这扇窗**有边框**（跟主窗口相反）：它是模态对话框，开着的时候主窗口点不动，
-       没有标题栏就连关都关不掉。无边框那套只属于主窗口。
-    ⚠️ 这里只放**需要挑值**的东西（音色、音量）。开关（滴答 / 到点跑命令 / 置顶）
-       全在钟面右键菜单上——同一个状态别摆两个地方，会分家。
-  -->
-  <StackPanel Margin="18" Spacing="14">
+  <!-- ⚠️ **Topmost 必须设**：主窗口可能被用户钉住（置顶），普通模态窗会**整个沉到它
+       下面**——屏幕上什么都不出现，点齿轮看着像没反应。v3 2026-07-28 实际撞到过。
+       模态窗本来就该压在一切之上，所以直接钉死。
 
-    <TextBlock Text="Settings" FontSize="22" FontWeight="Bold" />
+       ⚠️ **CanMinimize="False" 不能省**（v3 用户报过的 bug）：这扇窗是 ShowDialog 出来
+       的，最小化不只是把它藏起来——模态开着的整段时间主窗口都是禁用的，而它又
+       ShowInTaskbar="False"，最小化之后任务栏里连个能点回来的条目都没有。
+       净效果：主窗口上每个按钮都死了，而且看不出原因。
+       ⚠️ `CanResize="False"` **不蕴含**这一条，Avalonia 的 CanMinimize 默认就是 True。 -->
 
-    <StackPanel Spacing="4">
-      <TextBlock Text="Alarm" FontWeight="SemiBold" />
-      <TextBlock Text="The yellow hand. Scroll on the dial to set it."
-                 FontSize="11" Opacity="0.65" TextWrapping="Wrap" />
-      <ComboBox Name="AlarmSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
-    </StackPanel>
+  <Window.Styles>
+    <!-- 一张卡 = 一个设置。⚠️ **一个字说明都没有**（v3 用户 2026-07-28 定）：
+         只有标题和控件，剩下的留给猜——跟主窗口滑块不显示数字是同一条。 -->
+    <Style Selector="Border.card">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="16,14" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </Window.Styles>
 
-    <StackPanel Spacing="4">
-      <TextBlock Text="Reminders" FontWeight="SemiBold" />
-      <TextBlock Text="alarms.cron — the red ring on the dial."
-                 FontSize="11" Opacity="0.65" TextWrapping="Wrap" />
-      <ComboBox Name="AlarmsSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
-    </StackPanel>
+  <StackPanel Margin="22,18,22,20" Spacing="12">
 
-    <StackPanel Spacing="4">
-      <TextBlock Text="Ticking" FontWeight="SemiBold" />
-      <TextBlock Text="Volume. The timbre is synthesized — there is nothing to choose. Turn it on from the dial's right-click menu."
-                 FontSize="11" Opacity="0.65" TextWrapping="Wrap" />
-      <Slider Name="TickVolume" Minimum="0" Maximum="100" TickFrequency="10"
-              IsSnapToTickEnabled="True" TickPlacement="BottomRight" />
-    </StackPanel>
+    <TextBlock Text="Settings" FontSize="26" FontWeight="Bold" Margin="0,0,0,6" />
 
-    <Button Name="OpenFolder" Content="Open config folder"
+    <!-- 卡片顺序照 v3：Force Ticking 打头、Command 收尾。
+         滴答是钟自己的事、最常动；Command 是唯一会对机器动手的一条，放最后。 -->
+    <Border Name="CardTick" Classes="card">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="title" Text="Force ticking" />
+          <ToggleSwitch Name="ForceOn" Grid.Column="1" VerticalAlignment="Center"
+                        OnContent="On" OffContent="Off" />
+        </Grid>
+        <Slider Name="TickVol" Minimum="0" Maximum="100" TickFrequency="10"
+                IsSnapToTickEnabled="True" HorizontalAlignment="Stretch" />
+      </StackPanel>
+    </Border>
+
+    <Border Name="CardAlarm" Classes="card">
+      <StackPanel Spacing="12">
+        <TextBlock Classes="title" Text="Alarm" />
+        <ComboBox Name="AlarmSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+      </StackPanel>
+    </Border>
+
+    <Border Name="CardAlarms" Classes="card">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="title" Text="Alarms" />
+          <ToggleSwitch Name="AlarmsOn" Grid.Column="1" VerticalAlignment="Center"
+                        OnContent="On" OffContent="Off" />
+        </Grid>
+        <ComboBox Name="AlarmsSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+      </StackPanel>
+    </Border>
+
+    <Border Name="CardCommand" Classes="card">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="title" Text="Command" />
+        <ToggleSwitch Name="ExecuteOn" Grid.Column="1" VerticalAlignment="Center"
+                      OnContent="On" OffContent="Off" />
+      </Grid>
+    </Border>
+
+    <Button Name="OpenFolder" Content="Open config folder" Margin="0,4,0,0"
             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="0,7" />
-
-    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-               Text="rules.json, alarms.cron and layout.json all live there. They are yours to write — ItamiBen only reads them." />
   </StackPanel>
 </Window>

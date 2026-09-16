@@ -70,4 +70,27 @@ public sealed record DialPalette(
         DominoTop: Color.FromRgb(0x8A, 0x6E, 0x50),
         DominoFace: Color.FromRgb(0x6E, 0x56, 0x3C),
         DominoSide: Color.FromRgb(0x93, 0x77, 0x57));
+
+    /// <summary>
+    /// 跑偏闪烁用的**半反色调色板**：只把**钟面、刻度、指针**换成另一档，其余原样保留。
+    ///
+    /// 翻的五个：<see cref="Face"/>、<see cref="FaceRim"/>、<see cref="Ink"/>
+    /// （数字 + 时针分针 + 轴心）、<see cref="Tick"/>、<see cref="Sweep"/>（秒针）。
+    ///
+    /// **不翻的，以及为什么**：
+    /// <list type="bullet">
+    ///   <item>木边框——换的是表盘的照明，不是换一只钟；</item>
+    ///   <item>色环的绿 / 红、淡蓝休息块、闹钟黄针、提醒小红圈——**那是账本本身**，
+    ///         反了就把「绿 = 专注、红 = 跑偏」这套语义拆了；</item>
+    ///   <item>骨牌——它压根不在钟面上。</item>
+    /// </list>
+    /// </summary>
+    public DialPalette WithFaceFrom(DialPalette other) => this with
+    {
+        Face = other.Face,
+        FaceRim = other.FaceRim,
+        Ink = other.Ink,
+        Tick = other.Tick,
+        Sweep = other.Sweep,
+    };
 }
