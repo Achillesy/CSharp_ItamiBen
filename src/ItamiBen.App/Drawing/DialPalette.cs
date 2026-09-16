@@ -11,7 +11,7 @@ namespace ItamiBen.App;
 public sealed record DialPalette(
     Color Face, Color FaceRim, Color Ink, Color Tick,
     Color BezelLit, Color BezelMid, Color BezelDark,
-    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter)
+    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter, Color Card)
 {
     /// <summary>日面：白表盘 + 木边框（照着用户给的那张实物挂钟照片调的）。</summary>
     public static readonly DialPalette Light = new(
@@ -34,7 +34,9 @@ public sealed record DialPalette(
         AlarmsDot: Color.FromRgb(0xD6, 0x45, 0x3F),
         // 同一分钟不止一条时外圈换橙。⚠️ 取值要偏艳橙：这个标记的圆心压在木框上
         // （#B57C4C），淡橙会糊进木色里，而红色本来就是靠对比度选的
-        AlarmsDotOuter: Color.FromRgb(0xE8, 0x6A, 0x16));
+        AlarmsDotOuter: Color.FromRgb(0xE8, 0x6A, 0x16),
+        // 控件区那块实心底色。窗口透明之后没有它，按钮和文字就直接浮在桌面上
+        Card: Color.FromRgb(0xF4, 0xF5, 0xF7));
 
     /// <summary>
     /// 夜面。⚠️ <see cref="Break"/> **单独调亮一档**（DECISIONS D4）：
@@ -56,5 +58,6 @@ public sealed record DialPalette(
         Sweep: Color.FromRgb(0xB8, 0xC4, 0xD0),
         Alarm: Color.FromRgb(0xF5, 0xD0, 0x50),
         AlarmsDot: Color.FromRgb(0xE9, 0x63, 0x5C),
-        AlarmsDotOuter: Color.FromRgb(0xFA, 0x8A, 0x3C));
+        AlarmsDotOuter: Color.FromRgb(0xFA, 0x8A, 0x3C),
+        Card: Color.FromRgb(0x25, 0x2B, 0x33));
 }

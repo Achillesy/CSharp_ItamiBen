@@ -24,6 +24,18 @@ public sealed class Settings
     [JsonPropertyName("alarmSound")]
     public string? AlarmSound { get; set; }
 
+    /// <summary>窗口是不是一直压在最上面。默认**开**——它是一只挂钟，挡住了就没用了。</summary>
+    [JsonPropertyName("pinned")]
+    public bool Pinned { get; set; } = true;
+
+    /// <summary>
+    /// 上次窗口停在哪。⚠️ **读回来的坐标不能直接信**：显示器拔掉、分辨率改了、
+    /// 外接屏断开之后，上次那个位置可能整个落在屏幕外，无边框窗口就再也找不着也够不着了。
+    /// 所以恢复之后必须过一遍夹取（`MainWindow.ClampIntoScreen`）。
+    /// </summary>
+    [JsonPropertyName("windowX")] public int? WindowX { get; set; }
+    [JsonPropertyName("windowY")] public int? WindowY { get; set; }
+
     /// <summary>alarms.cron 到点的音色。跟闹钟分开挑，好让两者听起来不一样。</summary>
     [JsonPropertyName("alarmsSound")]
     public string? AlarmsSound { get; set; }

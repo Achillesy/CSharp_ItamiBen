@@ -1,0 +1,16 @@
+// ItamiBen 的窗口外观。把这个文件拷到运行时目录并改名 layout.json：
+//   macOS    ~/Library/Application Support/ItamiBen/layout.json
+//   Windows  %LOCALAPPDATA%\ItamiBen\layout.json
+//
+// ⚠️ 用户手写，程序只读不写。注释、尾逗号、键名大小写都不挑。
+// ⚠️ **只在启动时读一次**，运行中改了要重启才生效。
+// ⚠️ 别写进 settings.json——那个文件程序随时整份重写，手改会被覆盖掉。
+{
+  // standard（默认，420×700）| compact（340×560）
+  "layout": "standard",
+
+  // 不透明度百分比，10~100。⚠️ 写错、超范围、没写一律**强制 90**，不是夹到边界
+  // ——夹到边界会让「我写了 5」和「我写了 10」看起来一样，你以为生效了其实没有。
+  // 只有钟面和控件区的底色跟着淡；按钮和文字保持实心，否则低透明度下没法读。
+  "opacity": 90,
+}

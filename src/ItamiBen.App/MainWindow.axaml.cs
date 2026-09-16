@@ -140,6 +140,7 @@ public partial class MainWindow : Window
         //    PointerPressed 标 Handled，挂在钟面上的普通订阅收不到）。
         this.FindControl<DialControl>("Dial")!.PointerWheelChanged += OnAlarmWheel;
 
+        ApplyLayout();
         ApplyTheme();
         ActualThemeVariantChanged += (_, _) => ApplyTheme();
 
@@ -211,8 +212,97 @@ public partial class MainWindow : Window
     }
 
     private void ApplyTheme()
-        => this.FindControl<DialControl>("Dial")!.Palette =
-            ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
+    {
+        var palette = ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
+        this.FindControl<DialControl>("Dial")!.Palette = palette;
+        this.FindControl<Border>("CardBackdrop")!.Background = new SolidColorBrush(palette.Card);
+    }
+
+    /// <summary>
+    /// 窗口尺寸、不透明度、置顶、拖动、右键菜单——**无边框那一套**。
+    ///
+    /// ⚠️ **不透明度要用 `OpacityMask`，不能用 `Opacity`**（v3 的 K29，实测出来的）：
+    /// Avalonia 里 `Visual.Opacity` 是**逐个绘制操作**各自半透，不是「整个控件先合成
+    /// 成一层再降透」。钟面那块白是画在木色**实心圆盘**之上的，逐笔半透会让木色透过
+    /// 钟面混上来，出来是米黄——v3 的用户一眼看出「表盘泛黄」。headless 实测
+    /// `Opacity=0.5` 时白面净区是 (207,189,176,A=201)，`OpacityMask=0.5` 是
+    /// (255,255,255,A=127)。<br/>
+    /// 顺带的好处：控件的 `Opacity` 保持 1，**命中测试完全不受影响**（拖钟面照常）。
+    ///
+    /// ⚠️ 只给**钟面**和**卡片底色**套：按钮和文字保持实心，低透明度下才读得了。
+    /// </summary>
+    private void ApplyLayout()
+    {
+        var metrics = WindowLayout.Current;
+        Width = metrics.WindowWidth;
+        Height = metrics.WindowHeight;
+
+        var mask = new SolidColorBrush(Color.FromArgb((byte)Math.Round(WindowLayout.Opacity * 255), 255, 255, 255));
+        this.FindControl<DialControl>("Dial")!.OpacityMask = mask;
+        this.FindControl<Border>("CardBackdrop")!.OpacityMask = mask;
+
+        Topmost = _settings.Pinned;
+
+        var dial = this.FindControl<DialControl>("Dial")!;
+
+        // ⚠️ 拖动挂在**钟面**上，不是整扇窗口——卡片里全是按钮，挂上去会跟点击打架。
+        //    实际可拖范围是**圆的不是方的**：Avalonia 对自绘控件的命中测试是按真正画过
+        //    的绘制操作逐个判的，所以四个角（画过一笔都没有的透明区）拖不动，而圆盘
+        //    外沿再往外一点点能拖——那儿画着钟投在墙上的影子。这是 v3 实测的结论，
+        //    用户看过之后认为圆形更好，没有去 override 成方的。
+        dial.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+            BeginMoveDrag(e);   // ⚠️ 只能在**按下那一刻**调，等「松开算不算点击」判完就来不及了
+        };
+
+        // 没有标题栏就没有系统菜单，这是唯一能关窗口的地方。只有两项，不做成一整套窗口菜单。
+        // 走 Close() 而不是直接退进程——跟点 × 完全同一条路径（会走 OnExit 落盘）。
+        var close = new MenuItem { Header = "Close window" };
+        close.Click += (_, _) => Close();
+
+        var pin = new MenuItem { Header = "Keep on top", ToggleType = MenuItemToggleType.CheckBox, IsChecked = Topmost };
+        pin.Click += (_, _) =>
+        {
+            _settings.Pinned = !_settings.Pinned;
+            Topmost = _settings.Pinned;
+            pin.IsChecked = _settings.Pinned;
+        };
+
+        dial.ContextMenu = new ContextMenu { ItemsSource = new[] { pin, close } };
+
+        RestoreWindowPosition();
+    }
+
+    /// <summary>
+    /// 把上次的位置放回去。⚠️ **必须夹回屏幕内**：显示器拔掉、分辨率改了之后，上次
+    /// 那个位置可能整个落在屏幕外，而无边框窗口连标题栏都没有，**再也找不着也够不着**。
+    /// 夹不住就干脆居中。
+    /// </summary>
+    private void RestoreWindowPosition()
+    {
+        if (_settings.WindowX is not { } x || _settings.WindowY is not { } y) return;
+
+        try
+        {
+            var area = Screens.All.Select(sc => sc.WorkingArea)
+                               .FirstOrDefault(a => a.Contains(new PixelPoint(x, y)));
+            if (area == default)
+            {
+                Log.Line($"saved window position ({x},{y}) is off-screen — centring instead");
+                return;
+            }
+
+            Position = new PixelPoint(
+                Math.Clamp(x, area.X, Math.Max(area.X, area.Right - 80)),
+                Math.Clamp(y, area.Y, Math.Max(area.Y, area.Bottom - 80)));
+            WindowStartupLocation = WindowStartupLocation.Manual;
+        }
+        catch (Exception e)
+        {
+            Log.Error("Failed to restore the window position", e);
+        }
+    }
 
     // ── 每一拍 ──────────────────────────────────────────────────────────────
 
@@ -591,6 +681,8 @@ public partial class MainWindow : Window
     {
         Settle(EndReason.Closed);
         _settings.AlarmAt = _alarm.FireAt;
+        try { _settings.WindowX = Position.X; _settings.WindowY = Position.Y; }
+        catch (Exception e) { Log.Error("Failed to read the window position", e); }
         _settings.Save();
         _store?.Dispose();
     }

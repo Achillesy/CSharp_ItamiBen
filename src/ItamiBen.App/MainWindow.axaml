@@ -3,16 +3,35 @@
         xmlns:local="clr-namespace:ItamiBen.App"
         x:Class="ItamiBen.App.MainWindow"
         Title="ItamiBen"
-        Width="420" Height="700"
-        MinWidth="360" MinHeight="560"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent">
+
+  <!--
+    ⚠️ 无边框 + 透明底是**整扇主窗口**的属性，不是另开一扇挂件——功能一个不变，
+    只是外框和窗口底色没了。宽高由 layout.json 那一档决定（WindowLayout），
+    XAML 里不写死，免得同一个量两处定义。
+
+    ⚠️ 没有标题栏之后：拖窗口靠钟面（左键），关窗口靠钟面上的右键菜单。
+       两者挂在同一个控件上互不影响——一个认左键、一个是 ContextMenu。
+  -->
 
   <!--
     ⚠️ 界面文字一律英文（CLAUDE.md），目标名除外——那是用户自己在 rules.json 里写的。
   -->
   <DockPanel Margin="14">
 
-    <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,12,0,0">
+    <!--
+      控件区要有一块**实心底色**垫着：窗口透明之后，按钮和文字会直接浮在桌面上，
+      什么背景都可能，读不了。
+      ⚠️ 底色跟内容**分成两层**：低透明度下只有底色跟着淡，按钮和文字保持实心
+      ——挡住后面的是那块底色，不是细细的文字，把文字一起调淡就没法读了。
+    -->
+    <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0">
+      <Border Name="CardBackdrop" CornerRadius="10" />
+      <StackPanel Spacing="10" Margin="12,12,12,12">
 
       <!-- 三段读数的文字版。⚠️ 用分钟不用秒：格子每分钟才封盘，秒级跳动是噪声（DESIGN §4.5） -->
       <TextBlock Name="Readout" FontSize="17" FontWeight="SemiBold"
@@ -38,7 +57,8 @@
           <TextBlock Name="StatusText" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
         </DockPanel>
       </Border>
-    </StackPanel>
+      </StackPanel>
+    </Grid>
 
     <!--
       钟面 + 叠在左上角的闹钟时刻。

@@ -29,6 +29,13 @@ It is a **standard crontab** — Vixie semantics, no dialect of its own — and 
 column is text, never a command. See `alarms.cron.example`. The next one within twelve
 hours shows up as a small red ring on the dial.
 
+## Looks
+
+The window has no frame and floats on top, so it sits on your desktop like a wall clock
+rather than a program. Drag it by the dial; right-click the dial to unpin or close it.
+Drop a `layout.json` next to your rules to make it smaller or see-through —
+see `layout.json.example`.
+
 ## Requirements
 
 - .NET 10 runtime (SDK to build)
