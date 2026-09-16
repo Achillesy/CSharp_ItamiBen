@@ -1,11 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Encodings.Web;
 
 namespace ItamiBen.Core;
 
 /// <summary>
-/// 每个目标的累计专注秒数——<c>during.json</c> 的内容。
+/// 每个目标的累计专注秒数。
+///
+/// ⚠️ **账本本身住在 `samples.db` 的 `total` 表里**（2026-09-16 起，DECISIONS I13）；
+/// 这个类只是它在内存里的读数视图。<see cref="Parse"/> 留着**只为迁移**——
+/// 把老的 `during.json` 搬进库那一次，格式是：
 ///
 /// <code>
 /// { "goals": { "编程": { "seconds": 57203 } } }
@@ -43,13 +46,6 @@ public sealed class GoalTotals
         PropertyNameCaseInsensitive = true,
     };
 
-    private static readonly JsonSerializerOptions WriteOpts = new()
-    {
-        WriteIndented = true,
-        // 目标名是中文，默认编码器会把它转义成 \uXXXX——文件是给人看的，别转
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     private readonly Dictionary<string, long> _seconds = new(StringComparer.Ordinal);
 
     /// <summary>某个目标已落盘的累计秒数。没有这条记录就是 0。</summary>
@@ -58,7 +54,20 @@ public sealed class GoalTotals
     /// <summary>文件里出现过的目标，按名字排序——写出来的文件顺序稳定，diff 才好看。</summary>
     public IReadOnlyList<string> Goals => [.. _seconds.Keys.OrderBy(k => k, StringComparer.Ordinal)];
 
-    /// <summary>文件不存在 / 是空的 / 读坏了，一律当空账本——**记不上时间绝不能把程序搞崩**。</summary>
+    /// <summary>从库里读回来的读数。</summary>
+    public static GoalTotals Of(IReadOnlyDictionary<string, long> byGoal)
+    {
+        var totals = new GoalTotals();
+        foreach (var (goal, seconds) in byGoal)
+            if (seconds > 0)
+                totals._seconds[goal] = seconds;
+        return totals;
+    }
+
+    /// <summary>
+    /// 老 `during.json` 的解析，**只给迁移用**。
+    /// 文件不存在 / 是空的 / 读坏了，一律当空账本——**记不上时间绝不能把程序搞崩**。
+    /// </summary>
     public static GoalTotals Parse(string? json)
     {
         var totals = new GoalTotals();
@@ -93,10 +102,4 @@ public sealed class GoalTotals
         _seconds[goal] = _seconds.GetValueOrDefault(goal) + seconds;
     }
 
-    public string ToJson()
-    {
-        var file = new File_();
-        foreach (var goal in Goals) file.Goals[goal] = new Entry { Seconds = _seconds[goal] };
-        return JsonSerializer.Serialize(file, WriteOpts);
-    }
 }

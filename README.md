@@ -109,17 +109,20 @@ All under `~/Library/Application Support/ItamiBen/` (macOS) or `%APPDATA%\ItamiB
 | `rules.json` | **you.** The program only ever reads it. A default ships inside the app. |
 | `alarms.cron` | **you.** Optional. Re-read once a minute. |
 | `layout.json` | **you.** Optional. Read once at startup. |
-| `during.json` | the program. Accumulated hours per goal — the number beside each goal. |
-| `samples.db` | the program. Observations, rounds, events **and settings**. |
+| `samples.db` | the program. Observations, rounds, events, settings **and the hours ledger**. |
 | `itamiben.log` | the program. Only what could not reach the database; normally empty. |
 
 Comments and trailing commas are allowed in the three files you write.
 
-The split is the point: **the three you write, the program only ever reads; everything the
-program writes, you only ever read.** Sounds, window position, alarm time and so on used to
-live in a `settings.json`; they are rows in `samples.db` now, because you never hand-edited
-them and one fewer file is one fewer thing to keep consistent. An existing `settings.json`
-is imported once and renamed to `settings.json.migrated`.
+The split is the point: **three files you write, one database the program writes, and a log
+that stays empty.** Sounds, window position, alarm time and the per-goal hours used to live
+in a `settings.json` and a `during.json`; they are rows in `samples.db` now, because you
+never hand-edited them and one fewer file is one fewer thing to keep consistent. Existing
+copies are imported once and renamed to `*.migrated`.
+
+The hours ledger gained something in the move: a finished round is now **added** in the
+database (`seconds = seconds + n`) instead of the whole file being rewritten. If the write
+fails, that round's minutes are lost — but every hour you had before it is untouched.
 
 ### rules.json
 

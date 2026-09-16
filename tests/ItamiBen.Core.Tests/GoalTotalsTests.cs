@@ -43,33 +43,31 @@ public class GoalTotalsTests
         Assert.Equal(10, t["编程"]);
     }
 
+    /// <summary>
+    /// 老 `during.json` 还读得回来——**这是迁移那一次唯一的入口**，
+    /// 读错了就是几十上百个小时凭空消失（DECISIONS I13）。
+    /// </summary>
     [Fact]
-    public void 写出来再读回去还是同一份账()
+    public void 老的_during_json_还读得回来()
     {
-        var t = new GoalTotals();
-        t.Add("编程", 57203);
-        t.Add("读书", 42);
+        var t = GoalTotals.Parse("""
+            { "goals": { "编程": { "seconds": 57203 }, "读书": { "seconds": 42 } } }
+            """);
 
-        var back = GoalTotals.Parse(t.ToJson());
-        Assert.Equal(57203, back["编程"]);
-        Assert.Equal(42, back["读书"]);
+        Assert.Equal(57203, t["编程"]);
+        Assert.Equal(42, t["读书"]);
+        Assert.Equal(["编程", "读书"], t.Goals);
     }
 
     [Fact]
-    public void 中文目标名不转义因为这个文件是给人看的()
+    public void 从库里读回来的读数()
     {
-        var t = new GoalTotals();
-        t.Add("编程", 1);
-        Assert.Contains("编程", t.ToJson());
-    }
+        var t = GoalTotals.Of(new Dictionary<string, long> { ["编程"] = 57203, ["读书"] = 0 });
 
-    [Fact]
-    public void 目标顺序稳定这样diff才好看()
-    {
-        var t = new GoalTotals();
-        t.Add("读书", 1);
-        t.Add("编程", 1);
-        Assert.Equal(t.ToJson(), GoalTotals.Parse(t.ToJson()).ToJson());
+        Assert.Equal(57203, t["编程"]);
+        Assert.Equal(0, t["读书"]);
+        // 0 秒的目标不开账：库里不该有它，读回来也不该凭空多一个
+        Assert.Equal(["编程"], t.Goals);
     }
 
     [Fact]

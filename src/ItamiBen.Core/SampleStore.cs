@@ -99,6 +99,15 @@ public sealed class SampleStore : IDisposable
               key   TEXT PRIMARY KEY,
               value TEXT NOT NULL
             );
+            -- 每个目标的终身累计秒数（原来的 during.json）。
+            -- ⚠️ 这是**账本**，跟上面几张表不是一个量级：观测丢了还能重新采，
+            -- 这里丢了就是几十上百个小时凭空消失。所以加法走
+            -- `UPDATE ... seconds + $n` 的 upsert，**在库里原子地加**，
+            -- 而不是「读出来、加一加、整份写回去」——后者中途没了就全丢。
+            CREATE TABLE IF NOT EXISTS total (
+              goal    TEXT PRIMARY KEY,
+              seconds INTEGER NOT NULL
+            );
             """);
 
         return new SampleStore(db);
@@ -268,6 +277,61 @@ public sealed class SampleStore : IDisposable
             cmd.ExecuteNonQuery();
         }
         catch { }
+    }
+
+    /// <summary>每个目标的终身累计秒数。</summary>
+    public Dictionary<string, long> Totals()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT goal, seconds FROM total;";
+        var map = new Dictionary<string, long>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) map[r.GetString(0)] = r.GetInt64(1);
+        return map;
+    }
+
+    /// <summary>
+    /// 把这一轮的秒数**加**到各目标头上，一个事务。
+    ///
+    /// ⚠️ **是加，不是写**：读出来在内存里加完再整份写回，中途进程没了就把之前所有的
+    /// 累计一起带走。这里让数据库自己加，最坏情况是这一轮没加上，**已有的账一分不少**。
+    /// </summary>
+    public void AddTotals(IReadOnlyDictionary<string, int> byGoal)
+    {
+        using var tx = _db.BeginTransaction();
+        using var cmd = _db.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "INSERT INTO total (goal, seconds) VALUES ($g, $s) "
+                        + "ON CONFLICT(goal) DO UPDATE SET seconds = seconds + excluded.seconds;";
+        var g = cmd.Parameters.Add("$g", Microsoft.Data.Sqlite.SqliteType.Text);
+        var sec = cmd.Parameters.Add("$s", Microsoft.Data.Sqlite.SqliteType.Integer);
+        foreach (var (goal, seconds) in byGoal)
+        {
+            if (seconds <= 0) continue;   // 0 秒不开新账（C5：不写空记录）
+            g.Value = goal;
+            sec.Value = seconds;
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+
+    /// <summary>整批**覆盖**累计值。只给迁移用——正常路径一律走 <see cref="AddTotals"/>。</summary>
+    public void PutTotals(IReadOnlyDictionary<string, long> byGoal)
+    {
+        using var tx = _db.BeginTransaction();
+        using var cmd = _db.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "INSERT INTO total (goal, seconds) VALUES ($g, $s) "
+                        + "ON CONFLICT(goal) DO UPDATE SET seconds = excluded.seconds;";
+        var g = cmd.Parameters.Add("$g", Microsoft.Data.Sqlite.SqliteType.Text);
+        var sec = cmd.Parameters.Add("$s", Microsoft.Data.Sqlite.SqliteType.Integer);
+        foreach (var (goal, seconds) in byGoal)
+        {
+            g.Value = goal;
+            sec.Value = seconds;
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     /// <summary>所有设置。没写过就是空的。</summary>

@@ -191,12 +191,12 @@ public partial class MainWindow : Window
         AvaloniaXamlLoader.Load(this);
 
         LoadRules();
-        _totals = Totals.Load();
         OpenStore();
 
         // ⚠️ **必须排在 OpenStore 后面**：设置住在库里（I12）。库要是打不开，
         //    这里拿到的是一套默认值——程序照样跑，只是记不住上次的选择。
         _settings = Settings.Load(_store);
+        _totals = Totals.Load(_store);
 
         BuildGoals();
 
@@ -1222,8 +1222,10 @@ public partial class MainWindow : Window
         _store?.EndRound(_round.StartedAt, _round.EndedAt ?? DateTimeOffset.Now,
                          (_round.Ending ?? reason).ToString());
 
+        // ⚠️ **先落库再更新内存**：反过来的话，落库那一步炸了，界面上的数字已经涨了，
+        //    而账本里没有——下次启动数字自己缩回去，看着像程序把时间吃了
+        Totals.Add(_store, _round.FocusedSecondsByGoal);
         _totals.Add(_round.FocusedSecondsByGoal);
-        Totals.Save(_totals);
         _written = true;
 
     }
