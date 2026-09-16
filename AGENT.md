@@ -16,9 +16,9 @@ SQLite is in WAL mode, readers and writers do not block each other.
 
 ---
 
-## The one rule that matters most
+## The two rules that matter most
 
-**After any change, bump the config version:**
+**1. After any change, bump the config version:**
 
 ```sql
 UPDATE config SET version = version + 1, changed_at = unixepoch(), note = 'what you did';
@@ -26,6 +26,22 @@ UPDATE config SET version = version + 1, changed_at = unixepoch(), note = 'what 
 
 ItamiBen checks that number once a minute and reloads. **Without this the user sees no
 effect until they restart**, decides your change did not work, and asks you to do it again.
+
+**2. Record what you did, and what you were asked for:**
+
+```sql
+INSERT INTO applied_sql (at, request, statement, ok, rows_changed, message)
+VALUES (unixepoch(), 'what the user asked you for, in their words',
+        'the statements you ran', 1, 0, NULL);
+```
+
+This is the only record of why the configuration looks the way it does. The results of your
+change are in the database; **the change itself is not** — nothing can reconstruct it later.
+Three weeks from now "why is this goal here?" has no other answer, and the user did not
+write it, you did.
+
+⚠️ `applied_sql` is the **one** ledger table you are expected to write to, and only ever by
+`INSERT`. Never UPDATE or DELETE it — a record that can erase itself is not a record.
 
 ---
 
@@ -47,9 +63,11 @@ effect until they restart**, decides your change did not work, and asks you to d
 `sample` · `app` · `title` · `round` · `event` · `total` · `applied_sql`
 
 `total` is the user's lifetime hours per goal — tens or hundreds of hours that cannot be
-recovered. `sample` is one row per second of observation. `applied_sql` is the record of
-every statement ever applied by hand, including the ones that were refused. **Read them if
-it helps you answer a question; never UPDATE or DELETE.**
+recovered. `sample` is one row per second of observation. **Read them if it helps you answer
+a question; never UPDATE or DELETE.**
+
+`applied_sql` is the exception: you **append** one row to it for every change you make (rule
+2 above), and never modify it otherwise.
 
 Any statement that changes one of these is refused and the whole thing is rolled back —
 including whatever legitimate configuration changes were in the same batch.
