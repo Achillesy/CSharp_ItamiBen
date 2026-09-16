@@ -17,62 +17,69 @@ Where your files live
 
     %APPDATA%\ItamiBen\
 
-    rules.json     You write this; the program only ever reads it. A default
-                   one ships next to ItamiBen.exe — copy it here to edit.
-    alarms.cron    Optional reminder list, standard crontab format, re-read
-                   once a minute. Column 6 is reminder text, never a command.
-    layout.json    Optional: window size tier ("standard" / "compact") and
-                   opacity.
-    settings.json  The program rewrites this whole file. Edit it only while
-                   ItamiBen is not running.
-    during.json    Accumulated hours per goal.
-    samples.db     One row per second, kept across rounds. This is what lets
-                   the program pick a round back up after a crash.
-    itamiben.log   This run's log. The previous run is itamiben.log.old.
-
-Comments and trailing commas are allowed in the three files you write.
+    ItamiBen.sqlite3  Everything: your configuration (goals, rules, commands,
+                      schedule) and your history (observations, sessions, the
+                      hours ledger).
+    AGENT.md          Written for an AI, not for you. Refreshed every launch.
+    itamiben.log      Every configuration change ever applied -- what was asked
+                      for, what ran, whether it worked. Plain text.
 
 
-rules.json
-==========
+Configuring it: ask an AI
+=========================
 
-    {
-      "Groups": {
-        "编程": {
-          "Rules": [
-            { "App": "^(Code|claude)(\.exe)?$" },
-            { "Title": "GitHub" }
-          ]
-        }
-      }
-    }
+There are no configuration files. Goals, matching rules, the command list and
+the schedule are rows in the database above, and they are meant to be written
+by an AI, not by hand.
 
-App and Title are regular expressions, and they are CASE SENSITIVE. A rule with
-both must match both. A goal matches if ANY of its rules match.
+If you have a coding assistant with access to your files, point it at that
+folder and say what you want:
 
-The one trap worth knowing: the same rules file on macOS sees "Code", while
-Windows sees "Code.exe" — write both forms if you use the file on both.
+    Read AGENT.md and set ItamiBen up so only VS Code counts as work.
+
+    Read AGENT.md and have ItamiBen remind me to stand up every hour between
+    9 and 6 on weekdays.
+
+If you do not have one, open Settings (the gear) and press the red
+"Configure online" button. It shows you your current configuration, lets you
+write what you want in plain words, and copies the whole lot to your clipboard.
+Paste that into any web AI, bring the answer back, and press Apply.
+
+WARNING: that clipboard text contains your goal names, your reminder texts and
+the list of applications on this machine. Delete anything you would rather not
+share before you copy -- the box is editable. Window titles and per-second
+history are never included.
+
+
+Rules, and the one trap worth knowing
+=====================================
+
+A rule matches the foreground application name, the window title, or both, with
+regular expressions. They are CASE SENSITIVE, and the two platforms report
+different names: Windows sees "Code.exe" where macOS sees "Code". A rule written
+for the wrong one matches nothing at all and does not error -- the ring simply
+stays red. The AI is told this, and it can check against the application names
+ItamiBen has actually seen on this machine.
 
 ItamiBen gets no special treatment: looking at its own dial counts as off-task,
-exactly like looking at anything else. If you want staring at the clock to
-count, write a rule for it.
+exactly like looking at anything else.
 
 
 The alarm's command
 ===================
 
-rules.json can carry an executeCommand section — a shortlist of commands per
-operating system. When the alarm fires, ItamiBen runs entry #0 for this OS,
-but ONLY if you switched "Run command at alarm" on in the right-click menu,
-and that switch is OFF every time the program starts. To change which command
-runs, reorder the list in rules.json.
+The command list is a table in the database. When the alarm fires, ItamiBen runs
+the one named by the alarmCommand setting -- but ONLY if you switched "Run
+command at alarm" on in the right-click menu, and that switch is OFF every time
+the program starts.
 
-Settings shows you the exact command text before you flip the switch. It is
-usually a shutdown command; you have a right to know what you are arming.
+Settings shows you the exact command before you flip the switch. It is usually a
+shutdown command; you have a right to know what you are arming.
 
 
 When something looks wrong
 ==========================
 
-The window will not tell you. That is deliberate. %APPDATA%\ItamiBen\itamiben.log
-is where you look.
+The window will not tell you. That is deliberate.
+
+Hand %APPDATA%\ItamiBen\itamiben.log to an AI and say what you expected.

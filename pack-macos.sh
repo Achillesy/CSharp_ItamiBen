@@ -39,8 +39,9 @@ echo "==> 装配 bundle"
 
 echo "==> 装 .dmg"
 ln -s /Applications "$STAGE/dmg/Applications"
-mkdir -p "$STAGE/dmg/Examples"
-cp alarms.cron.example layout.json.example rules.json "$STAGE/dmg/Examples/"
+# ⚠️ **没有示例配置文件了**（2026-09-16 起配置住在库里，DECISIONS I15）。
+#    改放 AGENT.md：装之前就能读到「怎么让智能体改配置」。
+cp AGENT.md "$STAGE/dmg/"
 
 # ⚠️ 这份 Read Me 是**面向用户的文档之一**（另外两份是 README.md 和 installer/README.txt）。
 #    用户可见的行为变了，三份都要跟着改——v3 漏过一次。
@@ -60,17 +61,13 @@ Requires the .NET 10 Runtime (not the SDK)
 
     https://dotnet.microsoft.com/download/dotnet/10.0
 
-If .NET is missing, double-clicking the app says
-"You must install .NET to run this application".
-
 
 First launch: Gatekeeper
 ========================
 
 This build is not notarized by Apple. The first time you open it, macOS will
 say it is from an unidentified developer -- right-click (or Control-click)
-ItamiBen.app and choose "Open", then confirm once. After that it opens
-normally, including by double-click.
+ItamiBen.app and choose "Open", then confirm once.
 
 
 Then: grant Accessibility  (this one is not optional)
@@ -83,36 +80,41 @@ silently never matches, and the ring turns red while you are working.
 
     System Settings -> Privacy & Security -> Accessibility -> enable ItamiBen
 
-The app tells you the same thing in its own window, with a button that opens
-that pane for you. No restart needed: the next sample picks it up.
+The app says the same thing in its own window, with a button that opens that
+pane for you. No restart needed: the next sample picks it up.
 
 
-Your files
-==========
+Configuring it: ask an AI
+=========================
 
-    ~/Library/Application Support/ItamiBen/
+There are no configuration files. Goals, matching rules, the command list and
+the schedule are rows in one database, and they are meant to be written by an
+AI, not by hand:
 
-    rules.json     you write this; the program only ever reads it.
-                   A default one ships inside the app -- copy it here to edit.
-    alarms.cron    optional reminder list, standard crontab format, read once
-                   a minute. See Examples/alarms.cron.example.
-    layout.json    optional: window size tier and opacity.
-                   See Examples/layout.json.example.
-    settings.json  the program rewrites this whole file. Edit it only while
-                   ItamiBen is not running.
-    during.json    accumulated hours per goal.
-    samples.db     one row per second, kept across rounds.
-    itamiben.log   this run's log; the previous run is itamiben.log.old.
+    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
 
-Comments and trailing commas are allowed in the three files you write.
+Next to it sits AGENT.md -- written for the AI, not for you. A copy is in this
+disk image if you want to look first.
+
+If you have a coding assistant with access to your files, point it at that
+folder and say what you want:
+
+    Read AGENT.md and set ItamiBen up so only VS Code counts as work.
+
+If you do not, open Settings (the gear) and press the red "Configure online"
+button. It shows you your current configuration, lets you write what you want
+in plain words, and copies the whole lot to your clipboard. Paste that into any
+web AI, bring the answer back, and press Apply.
 
 
-The window never explains itself
-================================
+When something looks wrong
+==========================
 
-That is deliberate. Nothing pops up, nothing nags -- there is only the red on
-the ring, and the rest block being pushed further away. When something looks
-wrong, itamiben.log is where you look.
+Hand itamiben.log to an AI and say what you expected. It records every
+configuration change ever applied -- what was asked for, what ran, whether it
+worked. It is plain text.
+
+The window itself never explains anything. That is deliberate.
 NOTE
 
 mkdir -p dist
