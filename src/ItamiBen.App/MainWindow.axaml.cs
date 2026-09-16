@@ -610,9 +610,17 @@ public partial class MainWindow : Window
         var running = _round is { Ending: null };
 
         dial.AlarmMinutes = _alarm.Position;
-        dial.Cells = _round?.Cells ?? [];
-        dial.StartedAt = _round?.StartedAt;
-        dial.Projection = _round?.Project();
+
+        // ⚠️ **一轮终结，环就清空**（DESIGN §4.4：空闲那一行画的是「—」）。
+        //    休息中 `Ending` 还是 null，所以淡蓝块照常留着——要清的只是**终结之后**。
+        //
+        //    别留着「让人再看一眼成绩」：真的分针还在走，而环是冻在起点那一圈上的，
+        //    扫一眼极容易读成「现在正在走这圈」。成绩留在文字上就够了
+        //    （`Done. 10 min of focus.` + 目标后面的累计）。空盘是下一轮的邀请。
+        var live = _round is { Ending: null };
+        dial.Cells = live ? _round!.Cells : [];
+        dial.StartedAt = live ? _round!.StartedAt : null;
+        dial.Projection = live ? _round!.Project() : null;
         dial.InvalidateVisual();
 
         this.FindControl<TextBlock>("AlarmText")!.Text = FormatAlarm();
