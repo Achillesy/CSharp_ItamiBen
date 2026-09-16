@@ -50,4 +50,24 @@
     <Content Include="..\..\rules.json" Link="rules.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    发布时删掉所有 .pdb。
+
+    ⚠️ **不是为了「干净」，是量出来的**：不删的话 publish 目录 127MB，删完 27MB。
+    大头是 SkiaSharp / HarfBuzz 三个平台的 native 符号，单 libSkiaSharp.pdb 就上百 MB。
+
+    本工程自己那两个 pdb 也一起删（几十 KB，无所谓）：`Log.Error` 记的是异常类型和
+    消息、不是调用栈，现在没有任何东西读它们。哪天真想在 Release 日志里看行号，
+    那是改 `Log.Error` 的事，**到时候再把本工程的 pdb 从这里排除**。
+
+    ⚠️ 只在 Publish 之后跑，`dotnet build` 和调试完全不受影响。
+  -->
+  <Target Name="StripPdbFromPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_PdbToStrip Include="$(PublishDir)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_PdbToStrip)" ContinueOnError="true" />
+    <Message Importance="high" Text="Stripped @(_PdbToStrip->Count()) .pdb file(s) (see StripPdbFromPublish in the csproj)" />
+  </Target>
+
 </Project>

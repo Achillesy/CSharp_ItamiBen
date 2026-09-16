@@ -53,9 +53,29 @@ foundation for this job, and this is the rebuild.)
 
 ```bash
 dotnet build ItamiBen.slnx
-dotnet test ItamiBen.slnx
-dotnet run --project src/ItamiBen.App
+dotnet test  ItamiBen.slnx
+./run-macos.sh              # 编译 → 打成 .app → 签名 → 启动
+./run-macos.sh --run-only   # 只启动，不编译不重签
 ```
+
+⚠️ **macOS 上别用 `dotnet run`，也别直接跑 `bin/` 里的裸二进制。** 辅助功能授权是按
+「应用」记账的，裸二进制拿不到，症状是**只能读到应用名、读不到窗口标题**——一半的
+规则从此静默失效，而且不报错。必须走 `run-macos.sh` 打出来的 `.app`。
+
+## Releases
+
+```bash
+./pack-macos.sh             # → dist/ItamiBen-<版本>-macOS-<arch>.dmg
+pwsh pack-windows.ps1       # → dist\ItamiBen-<版本>-win-x64.exe（需要 Inno Setup 6）
+```
+
+两边都是**依赖框架**的，需要目标机器上已经装好 .NET 10 Runtime（不是 SDK）。
+Windows 的安装包会自己检测并提出替用户下载；macOS 的 `.dmg` 在 Read Me 里说明。
+
+版本号只有一个出处：`Directory.Build.props` 的 `<Version>`。
+
+⚠️ **Windows 那一半到现在一次都没在真机上跑过**，`pack-windows.ps1` 和
+`installer/ItamiBen.iss` 都是纸面代码。
 
 ## Layout
 
