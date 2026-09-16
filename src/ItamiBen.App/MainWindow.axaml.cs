@@ -303,6 +303,7 @@ public partial class MainWindow : Window
         if (_commandItem is not null) _commandItem.IsChecked = _commandArmed;
 
         this.FindControl<Button>("ThemeBtn")!.Content = ChromeIcons.Theme(dark, palette);
+        this.FindControl<Button>("SettingsBtn")!.Content = ChromeIcons.Gear(palette);
 
         if (_pinItem is not null) _pinItem.IsChecked = _settings.Pinned;
         if (_closeItem is not null) _closeItem.Icon = ChromeIcons.Close(palette);
@@ -415,6 +416,14 @@ public partial class MainWindow : Window
         };
 
         this.FindControl<Button>("TickBtn")!.Click += (_, _) => SetTicking(!_settings.TickEnabled);
+
+        // ⚠️ 齿轮**不挂 Tooltip**（v3 的 E10）：点开的是模态窗，模态一起来按钮就再也收不到
+        //    PointerExited——气泡会卡在对话框上面，关掉对话框还赖着不走。齿轮本来也不用解释
+        this.FindControl<Button>("SettingsBtn")!.Click += async (_, _) =>
+        {
+            await new SettingsWindow(_settings).ShowDialog(this);
+            ApplyChrome();   // 音色改了不影响图标，但改了音量要让滴答立刻用新值
+        };
 
         this.FindControl<Button>("PinBtn")!.Click += (_, _) => SetPinned(!_settings.Pinned);
         this.FindControl<Button>("ThemeBtn")!.Click += (_, _) =>

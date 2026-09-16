@@ -97,6 +97,7 @@
       <StackPanel Name="ChromeRow" Orientation="Horizontal" Spacing="0"
                   HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,2,0">
         <Button Name="TickBtn" Classes="chrome" />
+        <Button Name="SettingsBtn" Classes="chrome" />
         <Button Name="ThemeBtn" Classes="chrome" />
         <Button Name="PinBtn" Classes="chrome" />
       </StackPanel>

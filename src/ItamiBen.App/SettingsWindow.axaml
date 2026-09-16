@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ItamiBen.App.SettingsWindow"
+        Title="ItamiBen Settings"
+        Width="340" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <!--
+    ⚠️ 这扇窗**有边框**（跟主窗口相反）：它是模态对话框，开着的时候主窗口点不动，
+       没有标题栏就连关都关不掉。无边框那套只属于主窗口。
+    ⚠️ 这里只放**需要挑值**的东西（音色、音量）。开关（滴答 / 到点跑命令 / 置顶）
+       全在钟面右键菜单上——同一个状态别摆两个地方，会分家。
+  -->
+  <StackPanel Margin="18" Spacing="14">
+
+    <TextBlock Text="Settings" FontSize="22" FontWeight="Bold" />
+
+    <StackPanel Spacing="4">
+      <TextBlock Text="Alarm" FontWeight="SemiBold" />
+      <TextBlock Text="The yellow hand. Scroll on the dial to set it."
+                 FontSize="11" Opacity="0.65" TextWrapping="Wrap" />
+      <ComboBox Name="AlarmSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+    </StackPanel>
+
+    <StackPanel Spacing="4">
+      <TextBlock Text="Reminders" FontWeight="SemiBold" />
+      <TextBlock Text="alarms.cron — the red ring on the dial."
+                 FontSize="11" Opacity="0.65" TextWrapping="Wrap" />
+      <ComboBox Name="AlarmsSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+    </StackPanel>
+
+    <StackPanel Spacing="4">
+      <TextBlock Text="Ticking" FontWeight="SemiBold" />
+      <TextBlock Text="Volume. The timbre is synthesized — there is nothing to choose. Turn it on from the dial's right-click menu."
+                 FontSize="11" Opacity="0.65" TextWrapping="Wrap" />
+      <Slider Name="TickVolume" Minimum="0" Maximum="100" TickFrequency="10"
+              IsSnapToTickEnabled="True" TickPlacement="BottomRight" />
+    </StackPanel>
+
+    <Button Name="OpenFolder" Content="Open config folder"
+            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="0,7" />
+
+    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+               Text="rules.json, alarms.cron and layout.json all live there. They are yours to write — ItamiBen only reads them." />
+  </StackPanel>
+</Window>

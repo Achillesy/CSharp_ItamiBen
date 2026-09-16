@@ -111,6 +111,32 @@ public static class ChromeIcons
     }
 
     /// <summary>
+    /// 齿轮（设置）。八颗齿 + 中间一个孔，用 EvenOdd 填充规则把孔挖出来。
+    ///
+    /// 跟喇叭、图钉一样是**算出来的**：齿廓那 32 个点由三个数推出来（外半径、内半径、
+    /// 齿宽），不是字体字形。
+    ///
+    /// 它没有开关态，所以不收 bool：设置窗口开着的时候这个按钮本来就被模态挡住了，
+    /// 不存在「现在是不是开着」这个需要表达的状态。
+    /// </summary>
+    public static Control Gear(DialPalette? palette = null)
+    {
+        var (ink, halo) = Pens(palette);
+
+        const string Outer = "M 14.91,6.85 L 14.91,9.15 L 12.98,9.49 L 12.58,10.47 L 13.70,12.07 L 12.07,13.70 L 10.47,12.58 L 9.49,12.98 L 9.15,14.91 L 6.85,14.91 L 6.51,12.98 L 5.53,12.58 L 3.93,13.70 L 2.30,12.07 L 3.42,10.47 L 3.02,9.49 L 1.09,9.15 L 1.09,6.85 L 3.02,6.51 L 3.42,5.53 L 2.30,3.93 L 3.93,2.30 L 5.53,3.42 L 6.51,3.02 L 6.85,1.09 L 9.15,1.09 L 9.49,3.02 L 10.47,3.42 L 12.07,2.30 L 13.70,3.93 L 12.58,5.53 L 12.98,6.51 Z";
+        const string Hole = "M 5.70,8.00 A 2.30,2.30 0 1 0 10.30,8.00 A 2.30,2.30 0 1 0 5.70,8.00 Z";
+
+        var geo = Geometry.Parse(Outer + " " + Hole);
+        if (geo is PathGeometry pg) pg.FillRule = FillRule.EvenOdd;
+
+        var canvas = new Canvas { Width = Box, Height = Box };
+        // 这份 EvenOdd 几何体的描边会把外沿和中间那个孔的边缘一起描到，两处都有光晕
+        canvas.Children.Add(new Path { Data = geo, Stroke = halo, StrokeThickness = 1.4, StrokeJoin = PenLineJoin.Round });
+        canvas.Children.Add(new Path { Data = geo, Fill = ink });
+        return canvas;
+    }
+
+    /// <summary>
     /// 主题。日间是太阳（实心日轮 + 八根光芒），夜间是月亮——**一块饼干被咬掉一口**
     /// 的形状，斜着躺。
     /// </summary>
