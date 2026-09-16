@@ -205,6 +205,20 @@ public sealed class Round
         return new MinuteCell(index, _focused[index], _sampled[index], _away[index]);
     }
 
+    /// <summary>
+    /// **某一个时刻落在哪一格**。落在这一轮之外（早于开始、或超出两小时环）就返回 null。
+    ///
+    /// ⚠️ 索引算式放在这里、而不是让调用方自己减一遍：v3 那行「这一分钟有多少秒跑偏」
+    /// 的日志正是**调用方自己算索引算错了**（取了 `cells[^1]`，指向承诺弧的投影尾），
+    /// 读到的永远是 0——**整个生产历史里一次都没打出来过**，而「零匹配」看起来跟
+    /// 「一直没跑偏」一模一样。算式只有一行，但它必须**只有一份、而且被测住**。
+    /// </summary>
+    public MinuteCell? CellAt(DateTimeOffset at)
+    {
+        var index = (int)Math.Floor((TimeGrid.FloorToMinute(at) - StartedAt).TotalMinutes);
+        return index < 0 || index >= RingMinutes ? null : Cell(index);
+    }
+
     /// <summary>整整 120 格，一格不少——环是一开始就整个存在的，不是长出来的。</summary>
     public IReadOnlyList<MinuteCell> Cells
     {

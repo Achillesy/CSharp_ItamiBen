@@ -23,6 +23,16 @@ internal static class Program
         // ⚠️ 下面三个是**调试出口，不是产品功能**，跟 DECISIONS A3「不做 CLI」
         //    不冲突：A3 禁的是 v3 那种独立的 `itami` 工具，这里只是两个跑完就退的开关。
         //    图标仍然是**代码画出来的**，仓库里一张位图都没有——这条规矩从钟面一路管到这儿。
+        // ⚠️ **这个出口排在最前面，而且一点 Avalonia 都不碰**：它只读 SQLite。
+        //    删掉每秒那行日志之后（2026-09-16），观测数据只在 samples.db 里——
+        //    那就必须留一条**不用装 SQLite 工具也能把它读出来**的路，
+        //    否则「观测归数据库」在没有工具的机器上等于「观测没了」。
+        if (args is ["--dump-samples", ..])
+        {
+            DumpSamples(args.Length > 1 ? args[1] : null, args.Length > 2 ? args[2] : null);
+            return;
+        }
+
         if (args is ["--dial-specimens", var specDir, ..])
         {
             HeadlessBuilder().SetupWithoutStarting();
@@ -56,6 +66,32 @@ internal static class Program
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>
+    /// 把 <c>samples.db</c> 的一段观测按 TSV 打到标准输出：`时刻 空闲 app 标题`。
+    ///
+    /// 不给区间就是**今天**。时刻按本地时区（<see cref="Core.SampleStore"/> 在边界上
+    /// 已经归一过了，这里不用再转）。
+    ///
+    /// ⚠️ 程序正开着也能读：SQLite 走 WAL，读不挡写。
+    /// </summary>
+    private static void DumpSamples(string? from, string? to)
+    {
+        var path = AppData.SamplesPath();
+        if (!File.Exists(path)) { Console.Error.WriteLine($"no samples.db at {path}"); return; }
+
+        var start = Parse(from) ?? new DateTimeOffset(DateTime.Today, DateTimeOffset.Now.Offset);
+        var end = Parse(to) ?? start.AddDays(1);
+
+        using var db = Core.SampleStore.Open(path);
+        var rows = db.Read(start, end);
+        Console.WriteLine($"# {path}  {start:yyyy-MM-dd HH:mm} → {end:yyyy-MM-dd HH:mm}  ({rows.Count} rows)");
+        foreach (var o in rows)
+            Console.WriteLine($"{o.At:yyyy-MM-dd HH:mm:ss}\t{o.IdleSeconds}\t{o.App}\t{o.Title}");
+
+        static DateTimeOffset? Parse(string? s)
+            => DateTimeOffset.TryParse(s, out var t) ? t : null;
     }
 
     // Avalonia 需要它保持这个签名和可见性（设计器和 XAML 编译器会找它）

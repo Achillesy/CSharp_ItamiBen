@@ -222,9 +222,18 @@ pwsh pack-windows.ps1       # → dist\ItamiBen-<版本>-win-x64.exe（需要 In
 **不是产品功能**——跑完就退，正常启动路径根本不经过它们：
 
 ```bash
+ItamiBen --dump-samples [起] [止]           # 把 samples.db 按 TSV 打出来，默认今天
+ItamiBen --dial-specimens <输出目录>        # 钟面在几个关键状态下的离屏样张
 ItamiBen --export-icon    <输出.ico>        # Windows 图标
 ItamiBen --export-iconset <输出.iconset>    # macOS，再 iconutil -c icns
 ```
+
+`--dump-samples` 存在的理由：日志**刻意不重复观测数据**——`at` / `app` / `title` / `idle`
+本来就是 `samples.db` 的列，而由它们推出来的东西（专注秒数、余量、判定结果）全是纯函数，
+每分钟重放出来一模一样。**在日志里再记一份就是第二份副本，而副本迟早跟正本对不上。**
+
+`--dial-specimens` 把钟面在几个关键状态下渲成 PNG 供人眼检查——钟面活在界面层，
+单元测试够不到，而半径、角度、图层顺序这类问题真的只能靠看图抓。
 
 图标跟别的东西一样是**代码画的**，仓库里一张位图都没有。
 

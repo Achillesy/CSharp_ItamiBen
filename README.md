@@ -251,9 +251,20 @@ Not product features — they render and exit, and the normal startup path never
 them:
 
 ```bash
+ItamiBen --dump-samples [from] [to]        # samples.db as TSV; defaults to today
+ItamiBen --dial-specimens <out dir>        # the dial rendered off-screen at key states
 ItamiBen --export-icon    <out.ico>        # Windows icon
 ItamiBen --export-iconset <out.iconset>    # macOS, then iconutil -c icns
 ```
+
+`--dump-samples` exists because the log deliberately does **not** repeat the observations:
+`at`, `app`, `title` and `idle` are columns in `samples.db`, and everything derived from
+them (focused, slack, the verdict) is a pure function of those, replayed identically every
+minute. Putting them in the log too would be a second copy that drifts.
+
+`--dial-specimens` renders the dial to PNGs at a handful of key states, for a human to
+eyeball the geometry — the dial lives in the UI layer where unit tests can't reach it, and
+radius / angle / layering bugs really are only caught by looking.
 
 The icon is drawn in code like everything else; there is no bitmap in this repository.
 

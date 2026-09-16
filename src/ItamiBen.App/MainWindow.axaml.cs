@@ -653,9 +653,12 @@ public partial class MainWindow : Window
                 _drifting = round.Phase == RoundPhase.Focusing
                          && j?.Outcome == SecondOutcome.OffTask;
 
-                if (j is { } judged)
-                    Log.Line($"{judged.Outcome,-10} focused={round.FocusedSeconds,-5} slack={round.SlackSeconds,-5} "
-                           + $"idle={_last.Idle,-5} app={s.App,-18} title={s.Title}");
+                // ⚠️ **这里以前每秒写一行日志，2026-09-16 删掉了。**
+                //    那一行记的是 at / app / title / idle ——**四样全是 samples.db 的列**，
+                //    外加 outcome / focused / slack ——这三样是它们的纯函数，而且重放是
+                //    幂等的（`RebuildTests` 守着）。也就是说整行都是数据库的副本，
+                //    50 分钟一轮 3000 行、几百 KB，还把真正要看的那几行冲得找不着。
+                //    **观测归数据库，日志只留判断和失败。**
             }
             else
             {
@@ -871,6 +874,35 @@ public partial class MainWindow : Window
     /// 跟当前这个环对一次账。⚠️ **恢复那条路要传 false**：那时手里的环是刚构造出来的
     /// 空壳，跟重建结果必然不同，对账只会吐出一条假警告。
     /// </param>
+    /// <summary>
+    /// 刚过去那一分钟的构成，外加「红在哪扇窗口上」。
+    ///
+    /// ⚠️ **只在这一分钟没满格时才写**：满格的分钟没有任何可解释的东西，写出来只是噪音。
+    /// 于是日志有了一个好性质——**你做得越好，它越安静**；翻开日志看到的每一行，
+    /// 都是当时确实发生了什么的那几分钟。
+    ///
+    /// ⚠️ 归因**只做诊断，永不回流判定**，而且跟判定调的是**同一个 `Judgment`、
+    /// 同一批行、同一张 `AwayMap`**——所以「为什么」永远跟「算没算」一致。
+    /// 别在这儿另写一套匹配，两边分家之后日志会**理直气壮地给出错误的解释**，
+    /// 比没有更糟。
+    /// </summary>
+    private void LogMinute(Round rebuilt, IReadOnlyList<Observation> rows, AwayMap away,
+                           Round live, DateTimeOffset now)
+    {
+        var justPassed = TimeGrid.PreviousMinute(now);
+        // ⚠️ 索引算式在 `Round.CellAt` 里，**这里不自己减**——v3 就是在调用方算错索引，
+        //    结果那行日志一次都没打出来过
+        if (rebuilt.CellAt(justPassed) is not { } cell) return;
+        if (cell.FocusedSeconds >= 60) return;   // 满格的分钟没什么可说的
+
+        var why = OffTaskAttribution.Biggest(rows, away, live.Goals, _rules, justPassed) is { } who
+            ? $"  ← {who.Seconds}s [{who.App}] {who.Title}"
+            : "";
+
+        Log.Line($"minute {justPassed:HH:mm}  focus={cell.FocusedSeconds,-3} off={cell.OffTaskSeconds,-3} "
+               + $"away={cell.AwaySeconds,-3} blank={cell.UnrecordedSeconds,-3} {cell.Tier}{why}");
+    }
+
     private void Rebuild(DateTimeOffset now, bool compare = true)
     {
         if (_round is not { } live || _store is null) return;
@@ -909,18 +941,11 @@ public partial class MainWindow : Window
             }
             _lastAwaySpans = away.Spans.Count;
 
-            // 刚过去那一分钟红在哪扇窗口上。⚠️ **只做诊断，永不回流**：环上只说
-            //    「这一分钟红了」，两小时后你根本想不起来当时开着什么。
-            //    ⚠️ 它跟判定调的是**同一个 Judgment、同一批行、同一张 AwayMap**，
-            //    所以「为什么」永远跟「算没算」一致——别在这儿另写一套匹配。
-            var justPassed = TimeGrid.PreviousMinute(now);
-            if (justPassed >= live.StartedAt
-                && OffTaskAttribution.Biggest(rows, away, live.Goals, _rules, justPassed) is { } who)
-                Log.Line($"off-task {justPassed:HH:mm}: {who.Seconds}s on [{who.App}] {who.Title}");
-
             Log.Line($"rebuilt from db: minute={rebuilt.CurrentMinute,-4} focused={rebuilt.FocusedSeconds,-5} "
                    + $"slack={rebuilt.SlackSeconds,-5} rows={rows.Count,-5} away={away.Spans.Count} "
                    + $"phase={rebuilt.Phase}");
+
+            LogMinute(rebuilt, rows, away, live, now);
             _round = rebuilt;
         }
         catch (Exception e)

@@ -146,3 +146,48 @@ public class PreviousMinuteTests
         Assert.Equal(0, prev.Second);
     }
 }
+
+/// <summary>
+/// 「这个时刻落在哪一格」——v3 就是在调用方自己算这个索引时算错的。
+/// </summary>
+public class CellAtTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 9, 16, 10, 0, 0, TimeSpan.FromHours(8));
+
+    private static Round Fresh() => new(T0, 25, ["编程"],
+        GoalRules.Parse("""{ "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } } }"""));
+
+    [Theory]
+    [InlineData(0, 0)]        // 开始那一秒
+    [InlineData(59, 0)]       // 第一分钟的最后一秒，还是第 0 格
+    [InlineData(60, 1)]       // 跨到第 1 格
+    [InlineData(7199, 119)]   // 环的最后一秒
+    public void 落在对应的那一格(int secondsIn, int expectIndex)
+    {
+        var cell = Fresh().CellAt(T0.AddSeconds(secondsIn));
+        Assert.NotNull(cell);
+        Assert.Equal(expectIndex, cell!.Value.Index);
+    }
+
+    [Fact]
+    public void 早于开始时刻返回_null()
+        => Assert.Null(Fresh().CellAt(T0.AddSeconds(-1)));
+
+    [Fact]
+    public void 超出两小时环返回_null()
+        => Assert.Null(Fresh().CellAt(T0.AddMinutes(Round.RingMinutes)));
+
+    [Fact]
+    public void 读到的就是那一分钟真实的构成()
+    {
+        var r = Fresh();
+        for (var i = 0; i < 20; i++) r.Observe(T0.AddMinutes(1).AddSeconds(i), "Code", "Round.cs");
+        for (var i = 20; i < 50; i++) r.Observe(T0.AddMinutes(1).AddSeconds(i), "Google Chrome", "X");
+
+        var cell = r.CellAt(T0.AddMinutes(1).AddSeconds(30));
+
+        Assert.Equal(20, cell!.Value.FocusedSeconds);
+        Assert.Equal(30, cell.Value.OffTaskSeconds);
+        Assert.Equal(10, cell.Value.UnrecordedSeconds);
+    }
+}
