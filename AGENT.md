@@ -27,12 +27,14 @@ UPDATE config SET version = version + 1, changed_at = unixepoch(), note = 'what 
 ItamiBen checks that number once a minute and reloads. **Without this the user sees no
 effect until they restart**, decides your change did not work, and asks you to do it again.
 
-**2. Record what you did, and what you were asked for:**
+**2. Append what you did to `applied-sql.log`**, in the same folder as the database:
 
-```sql
-INSERT INTO applied_sql (at, request, statement, ok, rows_changed, message)
-VALUES (unixepoch(), 'what the user asked you for, in their words',
-        'the statements you ran', 1, 0, NULL);
+```
+────────────────────────────────────────────────────────
+2026-09-16 18:09:31  OK  1 row(s)
+asked: move tonight's reminder an hour earlier
+
+UPDATE schedule SET cron = '0 20 * * 3' WHERE cron = '0 21 * * 3';
 ```
 
 This is the only record of why the configuration looks the way it does. The results of your
@@ -40,8 +42,10 @@ change are in the database; **the change itself is not** — nothing can reconst
 Three weeks from now "why is this goal here?" has no other answer, and the user did not
 write it, you did.
 
-⚠️ `applied_sql` is the **one** ledger table you are expected to write to, and only ever by
-`INSERT`. Never UPDATE or DELETE it — a record that can erase itself is not a record.
+⚠️ **Append, never rewrite.** And keep the user's own words next to your statements: with
+only the SQL, nobody can tell whether you understood what they asked for.
+
+⚠️ It is a plain text file on purpose — no SQL can reach it, not even by mistake.
 
 ---
 
@@ -60,17 +64,14 @@ write it, you did.
 
 ### Not yours — the ledger. Never write to these.
 
-`sample` · `app` · `title` · `round` · `event` · `total` · `applied_sql`
+`sample` · `app` · `title` · `round` · `event` · `total`
 
 `total` is the user's lifetime hours per goal — tens or hundreds of hours that cannot be
 recovered. `sample` is one row per second of observation. **Read them if it helps you answer
 a question; never UPDATE or DELETE.**
 
-`applied_sql` is the exception: you **append** one row to it for every change you make (rule
-2 above), and never modify it otherwise.
-
-Any statement that changes one of these is refused and the whole thing is rolled back —
-including whatever legitimate configuration changes were in the same batch.
+Any statement that changes one of these is refused and the whole batch is rolled back —
+including whatever legitimate configuration changes were in it.
 
 ---
 
@@ -205,14 +206,14 @@ ItamiBen's **Configure online** window (Settings → the red button). In that ca
   **Prefer one correct statement over a clever one.**
 - Anything that touches the ledger is refused and rolled back automatically, so do not try
   to "clean up" `sample`, `total` or `round` even if it seems helpful.
-- Everything you send is recorded in `applied_sql` alongside what the user asked for,
+- Everything you send is written to `applied-sql.log` alongside what the user asked for,
   whether it worked or not. That is for them, not against you — but write accordingly.
 
 ## Check your work
 
 ```
 ItamiBen --query config      # goals, rules, commands, schedule, as the program reads them
-ItamiBen --query sql         # every statement applied by hand: asked, ran, worked or not
+ItamiBen --query sql         # applied-sql.log: what was asked, what ran, whether it worked
 ItamiBen --query events      # what fired, what failed
 ItamiBen --query samples     # one row per second, to see what names really appear
 ```

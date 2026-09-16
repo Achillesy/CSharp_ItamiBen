@@ -323,7 +323,7 @@ public class ApplySqlTests
         using var db = Memory();
         var before = db.ConfigVersion;
 
-        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('Coding');", null);
+        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('Coding');");
 
         Assert.True(r.Ok);
         Assert.Equal(before + 1, db.ConfigVersion);   // AI 忘了写那句也没关系，程序兜底
@@ -341,7 +341,7 @@ public class ApplySqlTests
         var r = db.ApplySql("""
             INSERT INTO goal (name) VALUES ('Coding');
             UPDATE total SET seconds = 0;
-            """, null);
+            """);
 
         Assert.False(r.Ok);
         Assert.Contains("ledger", r.Message);
@@ -354,7 +354,7 @@ public class ApplySqlTests
     public void 删采样也算动账本()
     {
         using var db = Memory();
-        Assert.False(db.ApplySql("DELETE FROM sample;", null).Ok);
+        Assert.False(db.ApplySql("DELETE FROM sample;").Ok);
         Assert.Single(db.Read(DateTimeOffset.MinValue.AddDays(1), DateTimeOffset.MaxValue.AddDays(-1)));
     }
 
@@ -364,7 +364,7 @@ public class ApplySqlTests
         using var db = Memory();
         var version = db.ConfigVersion;
 
-        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('ok'); 这不是 SQL;", null);
+        var r = db.ApplySql("INSERT INTO goal (name) VALUES ('ok'); 这不是 SQL;");
 
         Assert.False(r.Ok);
         Assert.Empty(db.Goals());
@@ -392,77 +392,22 @@ public class ApplySqlTests
 }
 
 /// <summary>
-/// 手动执行的记账（DECISIONS I19）。**整个程序里唯一不可逆、且由外人写的动作**，
-/// 所以它是少数几件推不出来、必须记的事。
+/// 账本护栏在把审计挪出数据库之后**依然成立**（DECISIONS I21）：
+/// 记录搬去文件了，但 `sample` / `round` / `total` / `event` 该挡的照挡。
 /// </summary>
-public class AppliedSqlTests
+public class LedgerStillGuardedTests
 {
-    private static SampleStore Memory()
+    [Fact]
+    public void 挪走审计表之后账本照样挡得住()
     {
-        var db = SampleStore.Open(":memory:");
+        using var db = SampleStore.Open(":memory:");
         db.AddTotals(new Dictionary<string, int> { ["编程"] = 100 });
-        return db;
-    }
+        // ⚠️ 得真有一行采样：指纹比的是**数量**，空表上 `DELETE` 删掉 0 行、
+        //    指纹自然没变，那是正确行为，不是漏网
+        db.Write(new DateTimeOffset(2026, 9, 16, 10, 0, 0, TimeSpan.FromHours(8)), "Code", "x", 0);
 
-    [Fact]
-    public void 成功的记下来_意图和产物配在一起()
-    {
-        using var db = Memory();
-        db.ApplySql("INSERT INTO goal (name) VALUES ('Coding');", "只算 VS Code");
-
-        var a = Assert.Single(db.SqlHistory());
-        Assert.True(a.Ok);
-        Assert.Equal("只算 VS Code", a.Request);        // 你要的
-        Assert.Contains("INSERT INTO goal", a.Statement); // 实际跑的
-        Assert.Equal(1, a.RowsChanged);
-    }
-
-    [Fact]
-    public void 失败的也要记_而且这种更值钱()
-    {
-        using var db = Memory();
-        db.ApplySql("UPDATE total SET seconds = 0;", "帮我清零");
-
-        // ⚠️ 失败会回滚。审计行要是写在事务里就跟着没了——而「AI 想动账本」
-        //    恰恰是最该留痕的那一种
-        var a = Assert.Single(db.SqlHistory());
-        Assert.False(a.Ok);
-        Assert.Contains("ledger", a.Message);
+        Assert.False(db.ApplySql("UPDATE total SET seconds = 0;").Ok);
+        Assert.False(db.ApplySql("DELETE FROM sample;").Ok);
         Assert.Equal(100, db.Totals()["编程"]);
-    }
-
-    [Fact]
-    public void 语法错也记得下来()
-    {
-        using var db = Memory();
-        db.ApplySql("这不是 SQL;", null);
-
-        var a = Assert.Single(db.SqlHistory());
-        Assert.False(a.Ok);
-        Assert.Null(a.Request);
-    }
-
-    [Fact]
-    public void SQL_删不掉自己的记录()
-    {
-        // ⚠️ 这是这张表进账本护栏的**全部理由**：审计表要是被它审计的东西改得动，
-        //    就等于没有——一句 DELETE 就把痕迹抹了
-        using var db = Memory();
-        db.ApplySql("INSERT INTO goal (name) VALUES ('Coding');", null);
-
-        var r = db.ApplySql("DELETE FROM applied_sql;", null);
-
-        Assert.False(r.Ok);
-        Assert.Equal(2, db.SqlHistory().Count);   // 原来那条还在，这次的企图也记下来了
-    }
-
-    [Fact]
-    public void 最近的在最前面()
-    {
-        using var db = Memory();
-        db.ApplySql("INSERT INTO goal (name) VALUES ('A');", "第一次");
-        db.ApplySql("INSERT INTO goal (name) VALUES ('B');", "第二次");
-
-        Assert.Equal("第二次", db.SqlHistory()[0].Request);
     }
 }

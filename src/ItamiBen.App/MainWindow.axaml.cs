@@ -203,7 +203,11 @@ public partial class MainWindow : Window
         _totals = Totals.Load(_store);
         WindowLayout.Bind(_settings);
         AppData.RefreshAgentDoc();
-        if (_store is { } db) Config.EnsureSeeded(db);
+        if (_store is { } db)
+        {
+            SqlLog.MigrateFromTable(db);
+            Config.EnsureSeeded(db);
+        }
         LoadConfig();
 
         BuildGoals();
@@ -326,9 +330,25 @@ public partial class MainWindow : Window
     /// 目标列表：一行一个，**左边勾选框、右边累计小时**（跟 v3 一致）。
     /// rules.json 有几个目标就有几行，窗口高度跟着走。
     /// </summary>
+    /// <summary>
+    /// 铺目标行。**必须可以重复调**——配置一改就会重铺（`ReloadConfigIfChanged`）。
+    ///
+    /// ⚠️ 2026-09-16 实机撞到：原来它只在启动时调一次，所以**只往里加、从不清空**。
+    /// 加了「改完配置当场重装」之后，界面上的目标列表**翻了一倍**（用户截图）。
+    /// 这一族错跟退出路径那个（I17）是同一个形状：**一个函数原本「只跑一次」，
+    /// 后来被第二个调用方接上，而它从来没为第二次做过准备。**
+    ///
+    /// ⚠️ 重铺要把选中项带过去：不带的话改一次配置就把用户刚选的目标弄丢了。
+    /// </summary>
     private void BuildGoals()
     {
         var panel = this.FindControl<StackPanel>("GoalsPanel")!;
+        var wasPicked = Picked();
+
+        panel.Children.Clear();
+        _goalBoxes.Clear();
+        _goalTotals.Clear();
+
         foreach (var goal in _rules.SelectableGoals)
         {
             var box = new RadioButton
@@ -356,6 +376,11 @@ public partial class MainWindow : Window
             _goalTotals.Add(total);
             panel.Children.Add(row);
         }
+
+        // 选中项带过去；它没了（配置里删掉了）就退回第一个——**永远有一个是选中的**
+        var keep = _goalBoxes.FirstOrDefault(b => (string)b.Content! == wasPicked)
+                ?? _goalBoxes.FirstOrDefault();
+        if (keep is not null) keep.IsChecked = true;
     }
 
     private void ApplyTheme() => ApplyPalette();

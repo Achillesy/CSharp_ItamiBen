@@ -161,21 +161,6 @@ public sealed class SampleStore : IDisposable
             -- text 是提醒文字，run 是要跑的命令名，**至少写一个**。
             -- ⚠️ 带 run 的条目**错过了就不补**：合盖两小时再打开，一条 22:00 的关机
             --    会当场执行。只提醒的条目照旧补放（那正是提醒该有的行为）。
-            -- 手动执行过的 SQL。**整个程序里唯一不可逆、且由外人写的动作**，
-            -- 所以它是少数几件「推不出来、必须记账」的事（DECISIONS I19）。
-            -- ⚠️ 这张表属于**账本**，进 `LedgerFingerprint`：审计表要是被它审计的东西
-            --    改得动，就等于没有——一段 SQL 顺手 `DELETE FROM applied_sql` 就把自己
-            --    的痕迹抹了。
-            CREATE TABLE IF NOT EXISTS applied_sql (
-              id           INTEGER PRIMARY KEY,
-              at           INTEGER NOT NULL,
-              request      TEXT,              -- 用户当时写的那句需求（意图）
-              statement    TEXT NOT NULL,     -- 真正跑的那段（产物）
-              ok           INTEGER NOT NULL,
-              rows_changed INTEGER NOT NULL,
-              message      TEXT               -- 失败时的原因
-            );
-
             CREATE TABLE IF NOT EXISTS schedule (
               id      INTEGER PRIMARY KEY,
               cron    TEXT NOT NULL,
@@ -512,7 +497,7 @@ public sealed class SampleStore : IDisposable
     /// <summary>一次 SQL 应用的结果。</summary>
     public readonly record struct SqlResult(bool Ok, int RowsChanged, string Message);
 
-    /// <summary>`applied_sql` 的一行：**意图和产物配在一起**，才看得出 AI 有没有理解错。</summary>
+    /// <summary>老 `applied_sql` 表的一行，**只剩迁移在用**。</summary>
     public readonly record struct AppliedSql(DateTimeOffset At, string? Request, string Statement,
                                              bool Ok, int RowsChanged, string? Message);
 
@@ -530,8 +515,7 @@ public sealed class SampleStore : IDisposable
             SELECT (SELECT COUNT(*) FROM sample) || '/' || (SELECT COUNT(*) FROM round)
                 || '/' || (SELECT COUNT(*) FROM total)
                 || '/' || (SELECT COALESCE(SUM(seconds), 0) FROM total)
-                || '/' || (SELECT COUNT(*) FROM event)
-                || '/' || (SELECT COUNT(*) FROM applied_sql);
+                || '/' || (SELECT COUNT(*) FROM event);
             """;
         return cmd.ExecuteScalar()?.ToString() ?? "";
     }
@@ -563,7 +547,7 @@ public sealed class SampleStore : IDisposable
     /// 为了好看的逐条报错引入一个会切错的解析器不划算。出错时 SQLite 的异常里
     /// 本来就带着出错的位置。
     /// </summary>
-    public SqlResult ApplySql(string sql, string? request)
+    public SqlResult ApplySql(string sql)
     {
         var before = LedgerFingerprint();
         var changesBefore = TotalChanges();
@@ -581,16 +565,10 @@ public sealed class SampleStore : IDisposable
             if (LedgerFingerprint() != before)
             {
                 tx.Rollback();
-                var refused = "Refused: that SQL changed the ledger (sample / round / total / event / "
-                            + "applied_sql). Nothing was written — the whole thing was rolled back.";
-                // ⚠️ **回滚之后单独记一次**：审计行要是写在事务里，会跟着一起没掉——
-                //    而「AI 给的 SQL 想动账本」恰恰是最值得留痕的那一种。
-                Audit(request, sql, ok: false, 0, refused);
-                return new SqlResult(false, 0, refused);
+                return new SqlResult(false, 0,
+                    "Refused: that SQL changed the ledger (sample / round / total / event). "
+                    + "Nothing was written — the whole thing was rolled back.");
             }
-
-            // 记账。⚠️ **在指纹核对之后**：写在核对之前的话，这一行自己就会让指纹对不上。
-            Audit(request, sql, ok: true, (int)(TotalChanges() - changesBefore), null, tx);
 
             using (var bump = _db.CreateCommand())
             {
@@ -607,51 +585,37 @@ public sealed class SampleStore : IDisposable
         catch (Exception e)
         {
             try { tx.Rollback(); } catch { }
-            Audit(request, sql, ok: false, 0, e.Message);
             return new SqlResult(false, 0, e.Message);
         }
     }
 
     /// <summary>
-    /// 记一次手动执行。<paramref name="tx"/> 给成功那条路（跟改动同一个事务提交），
-    /// 失败那条路传 null——那时事务已经回滚了，得单独写。
+    /// 老的 `applied_sql` 表还在的话，把行取出来（给迁移用）。表不在就返回空。
+    ///
+    /// ⚠️ 这张表 2026-09-16 搬去文件了（DECISIONS I21）：**SQLite 够不着普通文件**，
+    /// 所以那份记录根本不在任何一句外来 SQL 的射程之内——比原来靠指纹拦
+    /// `DELETE FROM applied_sql` 硬。
     /// </summary>
-    private void Audit(string? request, string statement, bool ok, int rows, string? message,
-                       Microsoft.Data.Sqlite.SqliteTransaction? tx = null)
+    public List<AppliedSql> TakeAppliedSqlRows()
     {
+        var list = new List<AppliedSql>();
         try
         {
             using var cmd = _db.CreateCommand();
-            if (tx is not null) cmd.Transaction = tx;
-            cmd.CommandText = "INSERT INTO applied_sql (at, request, statement, ok, rows_changed, message) "
-                            + "VALUES ($at, $req, $sql, $ok, $rows, $msg);";
-            cmd.Parameters.AddWithValue("$at", DateTimeOffset.Now.ToUnixTimeSeconds());
-            cmd.Parameters.AddWithValue("$req", (object?)request ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$sql", statement);
-            cmd.Parameters.AddWithValue("$ok", ok ? 1 : 0);
-            cmd.Parameters.AddWithValue("$rows", rows);
-            cmd.Parameters.AddWithValue("$msg", (object?)message ?? DBNull.Value);
-            cmd.ExecuteNonQuery();
+            cmd.CommandText = "SELECT at, request, statement, ok, rows_changed, message FROM applied_sql ORDER BY id;";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new AppliedSql(
+                    DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
+                    r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2),
+                    r.GetInt64(3) != 0, r.GetInt32(4), r.IsDBNull(5) ? null : r.GetString(5)));
         }
-        catch { /* 记不上账不该把这次执行本身搞砸 */ }
-    }
-
-    /// <summary>手动执行过的 SQL，最近的在前。</summary>
-    public List<AppliedSql> SqlHistory(int limit = 50)
-    {
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = "SELECT at, request, statement, ok, rows_changed, message FROM applied_sql "
-                        + "ORDER BY at DESC, id DESC LIMIT $n;";
-        cmd.Parameters.AddWithValue("$n", limit);
-        var list = new List<AppliedSql>();
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-            list.Add(new AppliedSql(
-                DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
-                r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2),
-                r.GetInt64(3) != 0, r.GetInt32(4), r.IsDBNull(5) ? null : r.GetString(5)));
+        catch { /* 表不在，说明早就搬完了 */ }
         return list;
     }
+
+    /// <summary>搬完之后把老表删掉。**调用方负责先确认文件写成功了。**</summary>
+    public void DropAppliedSqlTable() => Execute(_db, "DROP TABLE IF EXISTS applied_sql;", ignoreErrors: true);
 
     private long TotalChanges()
     {

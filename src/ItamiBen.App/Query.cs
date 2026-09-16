@@ -43,7 +43,7 @@ internal static class Query
         switch (what)
         {
             case "config": ConfigDump(db); break;
-            case "sql": SqlHistory(db); break;
+            case "sql": SqlHistory(); break;
             case "samples": Samples(db, start, end); break;
             case "events": Events(db, start, end); break;
             case "rounds": Rounds(db, start, end); break;
@@ -83,20 +83,15 @@ internal static class Query
 
     /// <summary>
     /// 手动执行过的 SQL。**「配置为什么长这样」唯一的答案**——`--query config` 只给现状。
+    ///
+    /// ⚠️ 它住在**文件**里不在库里（DECISIONS I21）：SQLite 够不着普通文件，
+    /// 所以这份记录不在任何一句外来 SQL 的射程之内。
     /// </summary>
-    private static void SqlHistory(SampleStore db)
+    private static void SqlHistory()
     {
-        var rows = db.SqlHistory();
-        Console.WriteLine($"# {rows.Count} manual SQL applications (most recent first)");
-        foreach (var a in rows)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"== {a.At:yyyy-MM-dd HH:mm}  {(a.Ok ? $"OK, {a.RowsChanged} row(s)" : "FAILED")}");
-            if (a.Request is { Length: > 0 } req)
-                foreach (var line in req.Split('\n')) Console.WriteLine($"   asked: {line}");
-            foreach (var line in a.Statement.Split('\n')) Console.WriteLine($"   ran:   {line}");
-            if (a.Message is { Length: > 0 } m) Console.WriteLine($"   why:   {m}");
-        }
+        var text = SqlLog.Read();
+        Console.WriteLine($"# {SqlLog.Path_}");
+        Console.Write(text.Length == 0 ? "# (nothing has been applied by hand)\n" : text);
     }
 
     private static void Samples(SampleStore db, DateTimeOffset from, DateTimeOffset to)
