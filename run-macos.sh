@@ -44,6 +44,15 @@ cp -R src/ItamiBen.App/bin/Release/net10.0/. "$CONTENTS/MacOS/"
 rm -rf "$CONTENTS/MacOS/runtimes/browser-wasm"
 rm -rf "$CONTENTS/MacOS/runtimes"/win-* "$CONTENTS/MacOS/runtimes"/linux-*
 
+# 图标：**代码画的，仓库里没有位图**。导出 → iconutil 压成 .icns → 放进 Resources。
+# ⚠️ 这一步用的是 headless 渲染（见 Program.cs 的 HeadlessBuilder），**不依赖图形会话**
+#    ——屏幕锁着、SSH 里打包都能跑。用 UsePlatformDetect 的话这里会当场 -6661 崩掉。
+echo "==> 画图标"
+mkdir -p "$CONTENTS/Resources"
+src/ItamiBen.App/bin/Release/net10.0/ItamiBen --export-iconset "dist/ItamiBen.iconset" >/dev/null
+iconutil -c icns "dist/ItamiBen.iconset" -o "$CONTENTS/Resources/ItamiBen.icns"
+rm -rf "dist/ItamiBen.iconset"
+
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -52,6 +61,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
   <key>CFBundleName</key>              <string>ItamiBen</string>
   <key>CFBundleDisplayName</key>       <string>ItamiBen</string>
   <key>CFBundleExecutable</key>        <string>ItamiBen</string>
+  <key>CFBundleIconFile</key>          <string>ItamiBen.icns</string>
   <!-- ⚠️ 这个 id 定了就别改：辅助功能授权绑在它 + 代码签名上 -->
   <key>CFBundleIdentifier</key>        <string>com.achillesy.itamiben</string>
   <key>CFBundlePackageType</key>       <string>APPL</string>

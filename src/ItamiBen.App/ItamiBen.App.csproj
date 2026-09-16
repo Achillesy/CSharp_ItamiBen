@@ -18,12 +18,22 @@
     <AssemblyName>ItamiBen</AssemblyName>
     <RootNamespace>ItamiBen.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!--
+      Windows 的 exe 图标。⚠️ **tomato.ico 是 `ItamiBen` 的 export-icon 开关从
+      `TomatoIcon.cs` 导出来的，不是手画的位图**——图标仍然是代码画出来的，
+      改番茄的形状就去改那个文件、重导一次。
+      它进仓库只是因为 MSBuild 的 ApplicationIcon 在编译时就要有这个文件在，
+      而用程序自己去生成它是循环依赖。
+    -->
+    <ApplicationIcon>tomato.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
   </ItemGroup>
 
