@@ -86,6 +86,13 @@ public partial class MainWindow : Window
     /// <summary>提示条显示到哪一刻。null = 没在显示。⚠️ 用截止时刻不用布尔量，同 E6。</summary>
     private DateTime? _bannerUntil;
 
+    /// <summary>
+    /// 右键菜单那两项。**留着引用**：主题一换，图标的墨色要跟着重画
+    /// （菜单只构造一次，不会自己更新）。图钉那项还要跟右上角的图标**联动**。
+    /// </summary>
+    private MenuItem? _pinItem;
+    private MenuItem? _closeItem;
+
     /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
     private readonly List<IDisposable> _signals = [];
 
@@ -139,6 +146,14 @@ public partial class MainWindow : Window
         // ⚠️ 拨针挂在**钟面本身**上，没有独立按钮（v3 的 E4：Button 内部会把
         //    PointerPressed 标 Handled，挂在钟面上的普通订阅收不到）。
         this.FindControl<DialControl>("Dial")!.PointerWheelChanged += OnAlarmWheel;
+
+        // null = 跟着系统走（第一次启动）；点过主题图标之后才钉死
+        RequestedThemeVariant = _settings.DarkTheme switch
+        {
+            true => ThemeVariant.Dark,
+            false => ThemeVariant.Light,
+            null => ThemeVariant.Default,
+        };
 
         ApplyLayout();
         ApplyTheme();
@@ -216,6 +231,43 @@ public partial class MainWindow : Window
         var palette = ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
         this.FindControl<DialControl>("Dial")!.Palette = palette;
         this.FindControl<Border>("CardBackdrop")!.Background = new SolidColorBrush(palette.Card);
+        ApplyChrome();
+    }
+
+    /// <summary>
+    /// 把右上角两个图标和右键菜单**整个重画一遍**。
+    ///
+    /// 状态一变就整个重画，不去「改某一个属性」——跟钟面每拍整个重画是同一个路数，
+    /// 不存在「上一次的状态没清干净」这回事。
+    ///
+    /// ⚠️ **图钉图标、右键菜单那一项、`settings.Pinned`、`Topmost` 是同一个状态的四种
+    /// 表现，必须一起更新**。任何一处单独改都会让它们悄悄分家——而分家之后界面还是
+    /// 好好的，只是说的不是同一件事。
+    ///
+    /// ⚠️ 主题一换图标要重画：墨色取自当前调色板，夜面下还用日面的深墨就只剩光晕
+    /// 在撑形状了。
+    /// </summary>
+    private void ApplyChrome()
+    {
+        var palette = ActualThemeVariant == ThemeVariant.Dark ? DialPalette.Dark : DialPalette.Light;
+        var dark = ActualThemeVariant == ThemeVariant.Dark;
+
+        var pin = this.FindControl<Button>("PinBtn")!;
+        pin.Content = ChromeIcons.Pin(_settings.Pinned, palette);
+        pin.Classes.Set("on", _settings.Pinned);
+
+        this.FindControl<Button>("ThemeBtn")!.Content = ChromeIcons.Theme(dark, palette);
+
+        if (_pinItem is not null) _pinItem.IsChecked = _settings.Pinned;
+        if (_closeItem is not null) _closeItem.Icon = ChromeIcons.Close(palette);
+    }
+
+    /// <summary>置顶的**唯一入口**——图标、菜单项、设置、窗口属性一次全对齐。</summary>
+    private void SetPinned(bool pinned)
+    {
+        _settings.Pinned = pinned;
+        Topmost = pinned;
+        ApplyChrome();
     }
 
     /// <summary>
@@ -258,18 +310,23 @@ public partial class MainWindow : Window
 
         // 没有标题栏就没有系统菜单，这是唯一能关窗口的地方。只有两项，不做成一整套窗口菜单。
         // 走 Close() 而不是直接退进程——跟点 × 完全同一条路径（会走 OnExit 落盘）。
-        var close = new MenuItem { Header = "Close window" };
+        var close = new MenuItem { Header = "Close window", Icon = ChromeIcons.Close() };
         close.Click += (_, _) => Close();
 
-        var pin = new MenuItem { Header = "Keep on top", ToggleType = MenuItemToggleType.CheckBox, IsChecked = Topmost };
-        pin.Click += (_, _) =>
-        {
-            _settings.Pinned = !_settings.Pinned;
-            Topmost = _settings.Pinned;
-            pin.IsChecked = _settings.Pinned;
-        };
+        _closeItem = close;
+        _pinItem = new MenuItem { Header = "Keep on top", ToggleType = MenuItemToggleType.CheckBox };
+        _pinItem.Click += (_, _) => SetPinned(!_settings.Pinned);
 
-        dial.ContextMenu = new ContextMenu { ItemsSource = new[] { pin, close } };
+        dial.ContextMenu = new ContextMenu { ItemsSource = new[] { _pinItem, close } };
+
+        this.FindControl<Button>("PinBtn")!.Click += (_, _) => SetPinned(!_settings.Pinned);
+        this.FindControl<Button>("ThemeBtn")!.Click += (_, _) =>
+        {
+            // 图标画的是**当前状态**，所以点它就是切到另一头
+            _settings.DarkTheme = ActualThemeVariant != ThemeVariant.Dark;
+            RequestedThemeVariant = _settings.DarkTheme is true ? ThemeVariant.Dark : ThemeVariant.Light;
+            // ActualThemeVariantChanged 会带出 ApplyTheme → ApplyChrome，这里不用手动调
+        };
 
         RestoreWindowPosition();
     }

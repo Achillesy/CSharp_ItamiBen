@@ -67,6 +67,14 @@
     -->
     <Grid>
       <local:DialControl Name="Dial" />
+      <!-- 右上角两个小图标，跟左上角的闹钟时刻对称。⚠️ 它们在 Dial **之外**，
+           所以不吃 layout.json 那一档不透明度——图标本来就半透，再叠一层就没了 -->
+      <StackPanel Name="ChromeRow" Orientation="Horizontal" Spacing="0"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,2,0">
+        <Button Name="ThemeBtn" Classes="chrome" />
+        <Button Name="PinBtn" Classes="chrome" />
+      </StackPanel>
+
       <TextBlock Name="AlarmText" FontSize="18" FontWeight="Bold" Opacity="0.85"
                  HorizontalAlignment="Left" VerticalAlignment="Top" Margin="2,0,0,0"
                  IsHitTestVisible="False" Text="" />

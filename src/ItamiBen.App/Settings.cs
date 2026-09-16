@@ -24,6 +24,13 @@ public sealed class Settings
     [JsonPropertyName("alarmSound")]
     public string? AlarmSound { get; set; }
 
+    /// <summary>
+    /// 日面还是夜面。**null = 跟着系统走**（第一次启动就是这个），
+    /// 点过主题图标之后才会钉死成 true / false。
+    /// </summary>
+    [JsonPropertyName("darkTheme")]
+    public bool? DarkTheme { get; set; }
+
     /// <summary>窗口是不是一直压在最上面。默认**开**——它是一只挂钟，挡住了就没用了。</summary>
     [JsonPropertyName("pinned")]
     public bool Pinned { get; set; } = true;

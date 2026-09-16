@@ -8,5 +8,35 @@
 
   <Application.Styles>
     <FluentTheme />
+
+    <!--
+      右上角那两个小图标。**静止时半透、悬停时变清楚**——它们压在钟面上，
+      不该抢眼；要用的时候鼠标一靠就现形。
+      ⚠️ 必须显式清掉 Fluent 给 Button 的背景和边框，否则悬停时会冒出一块底色。
+    -->
+    <Style Selector="Button.chrome">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="3" />
+      <Setter Property="Width" Value="26" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Opacity" Value="0.40" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- 开着的图钉要看得清：形状（填实 vs 空心）和不透明度**双重表达**同一个状态 -->
+    <Style Selector="Button.chrome.on">
+      <Setter Property="Opacity" Value="0.95" />
+    </Style>
+    <Style Selector="Button.chrome:pointerover">
+      <Setter Property="Opacity" Value="0.95" />
+    </Style>
+    <Style Selector="Button.chrome /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.chrome:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
   </Application.Styles>
 </Application>
