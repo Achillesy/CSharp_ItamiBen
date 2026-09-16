@@ -36,15 +36,19 @@ public static class TomatoIcon
 {
     // ---- 6 colours, not one more
     //
-    // ⚠️ 果身和萼片**都是绿的，必须靠明度拉开**（2026-09-16 改青番茄时定）：
-    //    果身走偏黄的亮绿，萼片走偏蓝的暗绿，中间隔着一大截明度。
-    //    两边挑成邻近的绿会**安静地糊成一团**——16px 下先没的就是萼片。
-    private static readonly Color Body_ = Color.FromRgb(0x8C, 0xC0, 0x3E);       // 果身
-    private static readonly Color BodyDark = Color.FromRgb(0x6B, 0x9C, 0x2B);    // 右下那弯暗面
-    private static readonly Color BodyLit = Color.FromRgb(0xAF, 0xD7, 0x62);     // 左上的高光
-    private static readonly Color GreenDark = Color.FromRgb(0x1C, 0x52, 0x24);   // 萼片
-    private static readonly Color Green = Color.FromRgb(0x2A, 0x70, 0x30);       // 压在上面那两片
-    private static readonly Color GreenLit = Color.FromRgb(0x3C, 0x8C, 0x3C);    // 果梗的亮面
+    // ⚠️ 果身要**闷一点的橄榄绿，不能用亮柠檬绿**（用户 2026-09-16：「太透了，像一颗葡萄」）。
+    //    亮而饱和的黄绿读起来是**通透的浆果**；真正的青番茄是压着土气的、偏暗的绿。
+    //    这里**真实感压过分辨度**——用户原话：「糊也不怕，现实中绿番茄和叶子本来
+    //    颜色就相近，我要的是一眼看出这是个番茄」。所以果身和萼片只拉开明度，不硬掰色相。
+    //
+    // ⚠️ 高光也要跟着压：一块又亮又大的高光正是「葡萄感」的另一半来源，
+    //    它现在只比果身亮一档，够交代圆，不够抢戏。
+    private static readonly Color Body_ = Color.FromRgb(0x6F, 0x96, 0x33);       // 果身
+    private static readonly Color BodyDark = Color.FromRgb(0x54, 0x75, 0x22);    // 右下那弯暗面
+    private static readonly Color BodyLit = Color.FromRgb(0x8C, 0xB0, 0x4E);     // 左上的高光
+    private static readonly Color GreenDark = Color.FromRgb(0x1C, 0x46, 0x1A);   // 萼片
+    private static readonly Color Green = Color.FromRgb(0x27, 0x5E, 0x23);       // 压在上面那两片
+    private static readonly Color GreenLit = Color.FromRgb(0x35, 0x77, 0x2C);    // 果梗的亮面
 
     public static RenderTargetBitmap Render(int size = 128)
     {
