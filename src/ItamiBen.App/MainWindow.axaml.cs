@@ -4,6 +4,8 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
+using System.Runtime.InteropServices;
 using ItamiBen.App.Platform;
 using ItamiBen.Core;
 
@@ -84,6 +86,9 @@ public partial class MainWindow : Window
     /// <summary>提示条显示到哪一刻。null = 没在显示。⚠️ 用截止时刻不用布尔量，同 E6。</summary>
     private DateTime? _bannerUntil;
 
+    /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
+    private readonly List<IDisposable> _signals = [];
+
     private readonly Settings _settings = Settings.Load();
     private readonly AlarmClock _alarm = new();
 
@@ -145,6 +150,8 @@ public partial class MainWindow : Window
         Closing += (_, _) => OnExit();
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.ShutdownRequested += (_, _) => OnExit();
+
+        HookSignals();
 
         UpdateUi();
     }
@@ -539,8 +546,46 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// **`kill` 也走受控退出。**
+    ///
+    /// ⚠️ Avalonia 的 `Closing` / `ShutdownRequested` **对 SIGTERM 一律不触发**——
+    /// 而 `run-macos.sh` 正是用 `pkill` 停进程的。症状很温和：一轮明明正常跑完，
+    /// 下次启动闹钟却退回上上次的值（2026-09-16 实测撞到）。
+    ///
+    /// 挂上之后 `kill`、`pkill`、注销、关机都能走到 <see cref="OnExit"/>。
+    /// ⚠️ **`kill -9` 仍然救不了**，那是内核直接抹掉进程——但那条路有观测库兜着
+    /// （DECISIONS F4：本轮状态在库里，重开就接回来）。
+    ///
+    /// 信号处理器跑在线程池线程上，而 <see cref="OnExit"/> 会碰 SQLite 连接和
+    /// <c>_round</c>——**必须回到 UI 线程**，否则跟每秒的采样撞在一起。
+    /// </summary>
+    private void HookSignals()
+    {
+        foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT })
+        {
+            try
+            {
+                _signals.Add(PosixSignalRegistration.Create(signal, ctx =>
+                {
+                    Log.Line($"{ctx.Signal} received — settling before exit");
+                    try { Dispatcher.UIThread.Invoke(OnExit); }
+                    catch (Exception e) { Log.Error("Failed to settle on signal", e); }
+                    // Cancel = false：照常让进程退出，我们只是抢在它之前把账写完
+                }));
+            }
+            catch (Exception e)
+            {
+                Log.Error($"Cannot hook {signal}", e);
+            }
+        }
+    }
+
+    /// <summary>
     /// 受控退出。⚠️ 两件事，**都必须做**：本轮落盘（C5）和闹钟时刻落盘（E7）。
     /// 后者跟有没有正在跑的一轮无关——所以它不能藏在 <see cref="Settle"/> 里。
+    ///
+    /// **幂等**：`Closing` / `ShutdownRequested` / 信号三条路都会调它，
+    /// 而 <see cref="Settle"/> 有 <c>_written</c> 挡着，设置重写一遍也无害。
     /// </summary>
     private void OnExit()
     {
