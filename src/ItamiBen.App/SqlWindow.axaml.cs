@@ -38,6 +38,15 @@ public partial class SqlWindow : Window
     private readonly MainWindow? _owner;
     private readonly SampleStore? _store;
 
+    /// <summary>
+    /// 这扇窗开着期间**只备份一次**。
+    ///
+    /// ⚠️ 每次 Apply 都覆盖备份的话，**连按两下就把退路弄丢了**：第二份备份记的是
+    /// 第一次改完之后的状态，想回到「什么都没改」已经回不去。一扇窗 = 一次改动会话，
+    /// 备份记的就是这次会话开始前的样子。
+    /// </summary>
+    private bool _backedUp;
+
     public SqlWindow() => InitializeComponent();
 
     public SqlWindow(MainWindow owner, SampleStore? store)
@@ -94,7 +103,13 @@ public partial class SqlWindow : Window
             result.Text = "Pasted. Read it, then press Apply.";
         };
 
-        this.FindControl<Button>("Apply")!.Click += (_, _) => RunSql(sql, result);
+        var apply = this.FindControl<Button>("Apply")!;
+        apply.Click += (_, _) => RunSql(sql, result, apply);
+
+        // ⚠️ **改了 SQL 才重新允许 Apply**：跑成功之后按钮要变灰，否则手一抖就跑第二遍
+        //    ——而第二遍是不是无害，取决于 AI 碰巧写的是 upsert 还是 INSERT。
+        //    2026-09-16 用户连点了几下，那次侥幸是 upsert。
+        sql.TextChanged += (_, _) => apply.IsEnabled = !string.IsNullOrWhiteSpace(sql.Text);
     }
 
     /// <summary>
@@ -118,7 +133,7 @@ public partial class SqlWindow : Window
     /// ⚠️ 方法名**不能叫 `Apply`**：axaml 里那个 `Name="Apply"` 会让 Avalonia 的
     /// 名字生成器造一个同名字段，撞上就是 `CS0102`。这个项目为这类冲突改过两次名
     /// （`TotalsText` / `AlarmText`）。
-    private void RunSql(TextBox sql, TextBlock result)
+    private void RunSql(TextBox sql, TextBlock result, Button apply)
     {
         if (_store is not { } store) { result.Text = "The database is not open."; return; }
         if (string.IsNullOrWhiteSpace(sql.Text)) { result.Text = "There is no SQL to apply."; return; }
@@ -127,13 +142,16 @@ public partial class SqlWindow : Window
         _owner?.FlushSettings();
 
         var backup = AppData.DbPath() + ".bak";
-        try { store.BackupTo(backup); }
-        catch (Exception e)
+        if (!_backedUp)
         {
-            // ⚠️ 备份失败就**不跑**：没有退路的情况下执行外来 SQL 不值得
-            result.Text = $"Could not make a backup, so nothing was run: {e.Message}";
-            Events.Error("sql", "Backup failed; refused to apply", e);
-            return;
+            try { store.BackupTo(backup); _backedUp = true; }
+            catch (Exception e)
+            {
+                // ⚠️ 备份失败就**不跑**：没有退路的情况下执行外来 SQL 不值得
+                result.Text = $"Could not make a backup, so nothing was run: {e.Message}";
+                Events.Error("sql", "Backup failed; refused to apply", e);
+                return;
+            }
         }
 
         var r = store.ApplySql(text);
@@ -151,9 +169,13 @@ public partial class SqlWindow : Window
             ? "\nWindow size and opacity take effect the next time you start ItamiBen."
             : "";
 
+        // ⚠️ 跑过就变灰，直到 SQL 被改动为止
+        apply.IsEnabled = false;
+
         result.Text = $"Applied. {r.RowsChanged} row(s) changed, configuration reloaded."
-                    + $"{restartNote}\n\nA copy of the database from just before this was saved as "
-                    + $"{Path.GetFileName(backup)}.";
+                    + $"{restartNote}\n\nA copy of the database from before you opened this window "
+                    + $"was saved as {Path.GetFileName(backup)}. "
+                    + "Apply is disabled until you change the SQL above.";
         Events.Info("sql", $"applied, {r.RowsChanged} rows changed");
     }
 

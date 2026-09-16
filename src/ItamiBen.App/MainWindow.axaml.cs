@@ -180,6 +180,9 @@ public partial class MainWindow : Window
     /// <summary>本轮是否已落盘。**落盘是一个动作，不是一条政策**（DECISIONS C5）。</summary>
     private bool _written;
 
+    /// <summary>退出路径走过没有。见 <see cref="OnExit"/>——**三条路都会调它**。</summary>
+    private bool _exited;
+
     /// <summary>关窗口已经问过并得到许可。</summary>
     private bool _closeApproved;
 
@@ -1159,11 +1162,22 @@ public partial class MainWindow : Window
     /// 受控退出。⚠️ 两件事，**都必须做**：本轮落盘（C5）和闹钟时刻落盘（E7）。
     /// 后者跟有没有正在跑的一轮无关——所以它不能藏在 <see cref="Settle"/> 里。
     ///
-    /// **幂等**：`Closing` / `ShutdownRequested` / 信号三条路都会调它，
-    /// 而 <see cref="Settle"/> 有 <c>_written</c> 挡着，设置重写一遍也无害。
+    /// **必须幂等**：`Closing` / `ShutdownRequested` / 信号三条路都会调它。
+    ///
+    /// ⚠️ 2026-09-16 这里出过一次事故，形状值得记住：原来的理由是
+    /// 「<see cref="Settle"/> 有 `_written` 挡着，**设置重写一遍也无害**」——
+    /// 那句话在设置还是一个 JSON 文件时是对的。设置搬进数据库之后（I12），
+    /// 第二遍会撞上**已经 Dispose 的连接**，`BeginTransaction` 当场抛。
+    /// 而那时 `Events` 已经解绑，异常只落进那份本该是空的文本文件里。
+    ///
+    /// **改动作废了一条前提，而那条前提只写在注释里。** 所以现在靠一个显式的标志，
+    /// 不再靠「里面每一步碰巧都能重跑」。
     /// </summary>
     private void OnExit()
     {
+        if (_exited) return;
+        _exited = true;
+
         Settle(EndReason.Closed);
         _settings.FocusMinutes = _focusMinutes;
         _settings.SelectedGoal = Picked();
