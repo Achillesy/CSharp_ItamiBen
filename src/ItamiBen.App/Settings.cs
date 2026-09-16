@@ -1,19 +1,27 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ItamiBen.App.Platform;
+using ItamiBen.Core;
 
 namespace ItamiBen.App;
 
 /// <summary>
-/// 程序自己的设置，运行时目录下的 <c>settings.json</c>。
+/// 程序自己的设置，**存在 `samples.db` 的 `setting` 表里**（2026-09-16 从 `settings.json`
+/// 搬进来，DECISIONS I12）。
 ///
-/// <code>
-/// { "alarmSound": "Sosumi", "alarmAt": "2026-09-16T07:30:00" }
-/// </code>
+/// ⚠️ **这些从来不是用户手写的**，跟 `rules.json` / `alarms.cron` / `layout.json`
+/// 不是一类东西：那三份**用户写、程序只读**；这些**程序写、用户只看**
+/// （v3 的 K25 说的就是这个区别）。既然用户不用手改，那就没理由为它单开一个文件——
+/// 数据库随时都在，顺手就查了。
 ///
-/// ⚠️ **这个文件是程序整份重写的**，跟 `rules.json` 不是一类东西
-/// （v3 的 K25 记着这条）：手改要在程序**没跑**的时候改，而且写不了注释。
-/// 用户手写的配置一律另起文件、程序只读不写。
+/// ⚠️ 搬过来还顺手解决了一个真问题：JSON 那套是**整份重写**，而「一次写全部」正是两个
+/// 实例互相覆盖的根源（I1）。现在是逐键 upsert，一个事务。
+///
+/// ⚠️ 读写**复用同一个类型模型和同一个解析器**——先序列化成 `JsonObject`，再把顶层
+/// 逐键摊平成行；读回来反着拼。所以 `value` 存的是 **JSON 片段**（字符串带引号、
+/// 数字不带）。看着略怪，但**一个文件一条读取路径**是这个项目反复吃亏换来的规矩
+/// （v3 的 §15.4：同一份数据两条解析路径，咬了两次，症状都是半个文件安静地失效）。
 ///
 /// ⚠️ 闹钟只存**一个值**：响铃时刻（v3 的 E7）。黄针位置是它对 12 小时取余的推导值，
 /// 存两份会漂。**退出时写一次**，不是每拨一格就写盘。
@@ -97,6 +105,15 @@ public sealed class Settings
     [JsonPropertyName("alarmAt")]
     public DateTime? AlarmAt { get; set; }
 
+    /// <summary>
+    /// 从哪儿读来的就写回哪儿去。
+    ///
+    /// ⚠️ 记在实例上、而不是让每个调用方自己传：`Save()` 有五个调用点（设置窗口四处、
+    /// 退出一处），**只要有一处忘了传，那一处的改动就安静地不落盘**——而「设置没保存」
+    /// 恰恰是最容易被当成「我记错了」的那类 bug。
+    /// </summary>
+    private SampleStore? _store;
+
     private static readonly JsonSerializerOptions ReadOpts = new()
     {
         ReadCommentHandling = JsonCommentHandling.Skip,
@@ -104,18 +121,34 @@ public sealed class Settings
         PropertyNameCaseInsensitive = true,
     };
 
-    public static Settings Load()
+    /// <summary>
+    /// 从库里读设置；库没开（或者根本打不开）就全用默认值——**程序照样能跑**。
+    ///
+    /// 第一次跑会把旧的 `settings.json` 搬进来，然后把那个文件改名成
+    /// `settings.json.migrated`：留着是为了万一要回看，改名是为了**它不再看起来像
+    /// 还在生效的配置**。
+    /// </summary>
+    public static Settings Load(SampleStore? store)
     {
         var settings = new Settings();
         try
         {
-            var path = Path.Combine(AppData.Dir, "settings.json");
-            if (File.Exists(path))
-                settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), ReadOpts) ?? new Settings();
+            var rows = store?.Settings() ?? [];
+            if (rows.Count == 0 && store is not null) rows = MigrateFromJson(store);
+            if (rows.Count > 0)
+            {
+                var obj = new JsonObject();
+                foreach (var (k, v) in rows)
+                {
+                    // 单个值坏了就跳过这一个键，别让整份设置陪葬
+                    try { obj[k] = JsonNode.Parse(v); } catch { }
+                }
+                settings = obj.Deserialize<Settings>(ReadOpts) ?? new Settings();
+            }
         }
         catch (Exception e)
         {
-            Events.Error("settings", "Failed to read settings.json", e);
+            Events.Error("settings", "Failed to read settings", e);
         }
 
         // 没挑过音色就自动挑一个：两个平台的候选写在一张表里，反正只有一边的文件存在。
@@ -132,21 +165,72 @@ public sealed class Settings
         settings.RestDoneSound ??= Sound.PreferredOrFirst("Submarine", "Purr", "Bottle", "chord", "tada");
         settings.IdleSound ??= Sound.PreferredOrFirst("Tink", "Pop", "Morse", "ding", "Speech On");
 
+        settings._store = store;
         return settings;
     }
 
-    /// <summary>⚠️ 整份重写。手改过的内容会被这一次写盘覆盖掉。</summary>
+    /// <summary>
+    /// 写回库里。库没开就什么都不做——**丢的是「下次启动记得上次的选择」，
+    /// 不是账本**，不值得为它多一条容错路径。
+    /// </summary>
     public void Save()
     {
+        if (_store is null) return;
         try
         {
-            Directory.CreateDirectory(AppData.Dir);
-            File.WriteAllText(Path.Combine(AppData.Dir, "settings.json"),
-                              JsonSerializer.Serialize(this, AppData.JsonOptions));
+            _store.PutSettings(Flatten());
         }
         catch (Exception e)
         {
-            Events.Error("settings", "Failed to write settings.json", e);
+            Events.Error("settings", "Failed to write settings", e);
         }
+    }
+
+    /// <summary>把自己摊平成「键 → JSON 片段」。null 的键不写，读回来时自然走默认值。</summary>
+    private Dictionary<string, string> Flatten()
+    {
+        var map = new Dictionary<string, string>();
+        if (JsonSerializer.SerializeToNode(this, AppData.JsonOptions) is not JsonObject obj) return map;
+        foreach (var (k, v) in obj)
+            if (v is not null)
+                // ⚠️ **必须把编码选项传给 `ToJsonString`**：它不继承序列化时那一份，
+                //    默认编码器会把中文和 `+` 转义成 \uXXXX。存进去照样读得回来，
+                //    但在 DB Browser 里**「自学数理化」会变成一串 \u81EA…**，
+                //    而「出了问题直接查数据库」的前提就是那一眼能看懂。
+                map[k] = v.ToJsonString(AppData.JsonOptions);
+        return map;
+    }
+
+    /// <summary>
+    /// 把旧的 `settings.json` 搬进库，然后改名。只在库里一条设置都没有时才走这一遭。
+    /// </summary>
+    private static Dictionary<string, string> MigrateFromJson(SampleStore store)
+    {
+        var path = Path.Combine(AppData.Dir, "settings.json");
+        if (!File.Exists(path)) return [];
+
+        var map = new Dictionary<string, string>();
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(path), documentOptions: new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                }) is JsonObject obj)
+            {
+                foreach (var (k, v) in obj)
+                    if (v is not null)
+                        map[k] = v.ToJsonString(AppData.JsonOptions);
+            }
+
+            if (map.Count > 0) store.PutSettings(map);
+            File.Move(path, path + ".migrated", overwrite: true);
+            Events.Info("settings", $"migrated {map.Count} settings from settings.json");
+        }
+        catch (Exception e)
+        {
+            Events.Error("settings", "Failed to migrate settings.json", e);
+        }
+        return map;
     }
 }

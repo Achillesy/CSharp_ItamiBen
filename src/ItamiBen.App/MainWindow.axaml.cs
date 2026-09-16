@@ -158,7 +158,8 @@ public partial class MainWindow : Window
     /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
     private readonly List<IDisposable> _signals = [];
 
-    private readonly Settings _settings = Settings.Load();
+    /// <summary>⚠️ 在 <c>OpenStore()</c> 之后才装得进来——设置现在住在库里。</summary>
+    private Settings _settings = new();
     private readonly AlarmClock _alarm = new();
 
     /// <summary>连拨的计数和上一拍的时刻，见 <see cref="OnAlarmWheel"/>。</summary>
@@ -192,6 +193,10 @@ public partial class MainWindow : Window
         LoadRules();
         _totals = Totals.Load();
         OpenStore();
+
+        // ⚠️ **必须排在 OpenStore 后面**：设置住在库里（I12）。库要是打不开，
+        //    这里拿到的是一套默认值——程序照样跑，只是记不住上次的选择。
+        _settings = Settings.Load(_store);
 
         BuildGoals();
 

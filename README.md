@@ -109,12 +109,17 @@ All under `~/Library/Application Support/ItamiBen/` (macOS) or `%APPDATA%\ItamiB
 | `rules.json` | **you.** The program only ever reads it. A default ships inside the app. |
 | `alarms.cron` | **you.** Optional. Re-read once a minute. |
 | `layout.json` | **you.** Optional. Read once at startup. |
-| `settings.json` | the program, as a whole file. Edit it only while ItamiBen isn't running. |
 | `during.json` | the program. Accumulated hours per goal — the number beside each goal. |
-| `samples.db` | the program. One row per second, kept across rounds. |
-| `itamiben.log` | the program. This run; the previous run is `itamiben.log.old`. |
+| `samples.db` | the program. Observations, rounds, events **and settings**. |
+| `itamiben.log` | the program. Only what could not reach the database; normally empty. |
 
 Comments and trailing commas are allowed in the three files you write.
+
+The split is the point: **the three you write, the program only ever reads; everything the
+program writes, you only ever read.** Sounds, window position, alarm time and so on used to
+live in a `settings.json`; they are rows in `samples.db` now, because you never hand-edited
+them and one fewer file is one fewer thing to keep consistent. An existing `settings.json`
+is imported once and renamed to `settings.json.migrated`.
 
 ### rules.json
 

@@ -88,6 +88,17 @@ public sealed class SampleStore : IDisposable
               text  TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS event_at ON event(at);
+            -- 程序自己的设置（音色、置顶、窗口位置、闹钟时刻……）。
+            -- ⚠️ **这些从来不是用户手写的**，跟 rules.json / alarms.cron / layout.json
+            -- 不是一类东西：那三份用户写、程序只读；这些程序写、用户只看。
+            -- 放这儿是为了少一个文件，也为了**不用再整份重写**——JSON 那套「一次写全部」
+            -- 正是两个实例互相覆盖的根源（I1）。
+            -- ⚠️ `value` 存的是**JSON 片段**（字符串带引号、数字不带），因为读写复用的是
+            -- 同一个类型模型和同一个解析器——**一个文件一条读取路径**，不另开一套。
+            CREATE TABLE IF NOT EXISTS setting (
+              key   TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
             """);
 
         return new SampleStore(db);
@@ -257,6 +268,40 @@ public sealed class SampleStore : IDisposable
             cmd.ExecuteNonQuery();
         }
         catch { }
+    }
+
+    /// <summary>所有设置。没写过就是空的。</summary>
+    public Dictionary<string, string> Settings()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT key, value FROM setting;";
+        var map = new Dictionary<string, string>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) map[r.GetString(0)] = r.GetString(1);
+        return map;
+    }
+
+    /// <summary>
+    /// 整批写设置。**一个事务**——要么全落，要么一条都不落。
+    ///
+    /// ⚠️ 逐个 upsert 而不是「先清空再插入」：清空那一瞬间要是进程没了，设置就全丢了。
+    /// </summary>
+    public void PutSettings(IReadOnlyDictionary<string, string> values)
+    {
+        using var tx = _db.BeginTransaction();
+        using var cmd = _db.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "INSERT INTO setting (key, value) VALUES ($k, $v) "
+                        + "ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
+        var k = cmd.Parameters.Add("$k", Microsoft.Data.Sqlite.SqliteType.Text);
+        var v = cmd.Parameters.Add("$v", Microsoft.Data.Sqlite.SqliteType.Text);
+        foreach (var (key, value) in values)
+        {
+            k.Value = key;
+            v.Value = value;
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     /// <summary>一段时间里开过的轮次（按起点算落不落在区间里），按时间先后。</summary>
