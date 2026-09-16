@@ -91,6 +91,22 @@ public sealed class Settings
     /// 外接屏断开之后，上次那个位置可能整个落在屏幕外，无边框窗口就再也找不着也够不着了。
     /// 所以恢复之后必须过一遍夹取（`MainWindow.ClampIntoScreen`）。
     /// </summary>
+    /// <summary>
+    /// 窗口档位和不透明度。**智能体可以改这两个**（AGENT.md 里点了名），
+    /// 其余的键是程序自己记的，改了也会被下一次写盘覆盖。
+    /// </summary>
+    [JsonPropertyName("layout")] public string? Layout { get; set; }
+
+    [JsonPropertyName("opacityPercent")] public double? OpacityPercent { get; set; }
+
+    /// <summary>
+    /// 闹钟到点要跑的那条命令**的名字**（`command` 表的主键）。
+    ///
+    /// ⚠️ 只存名字，不存命令原文：**可执行的文本只准住在 `command` 表里**，
+    /// 这样「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
+    /// </summary>
+    [JsonPropertyName("alarmCommand")] public string? AlarmCommand { get; set; }
+
     [JsonPropertyName("windowX")] public int? WindowX { get; set; }
     [JsonPropertyName("windowY")] public int? WindowY { get; set; }
 

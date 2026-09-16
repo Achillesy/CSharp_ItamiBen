@@ -43,11 +43,13 @@
   </ItemGroup>
 
   <!--
-    随程序发一份默认 rules.json（AppData.RulesPath 的第二级）。用户自己那份在运行时
-    目录里，优先级更高，**重装多少次都不会被这一份覆盖**。
+    ⚠️ **AGENT.md 要跟程序一起发**：配置现在住在数据库里、由智能体改，而智能体得先
+    找得到说明。程序启动时把它刷进运行时目录，**跟数据库放在同一个文件夹**——
+    智能体拿到那个目录就同时拿到了库和用法。
+    每次启动都覆盖：它是随二进制发的，**不该被改，也就不会跟代码漂开**。
   -->
   <ItemGroup>
-    <Content Include="..\..\rules.json" Link="rules.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\AGENT.md" Link="AGENT.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--

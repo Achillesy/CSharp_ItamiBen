@@ -15,33 +15,24 @@ namespace ItamiBen.App.Platform;
 public static class Command
 {
     /// <summary>
-    /// **到点时现读 `rules.json`**，不用启动时那份快照（v3 的 L4）。
+    /// 闹钟到点：按名字从命令清单里取出这台机器该跑的那条，跑掉。
     ///
-    /// 这不违反「一个文件一条读取路径」：读的仍然是 <see cref="GoalRules.Parse"/>，
-    /// 同一个解析器，只是时机从「启动一次」变成「每次到点」。一年也读不了几次。
+    /// ⚠️ **只按名字取，不接受命令原文**（DECISIONS I15）：可执行的文本只住在
+    /// `command` 表里，这样「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
     ///
-    /// 读失败就退回传进来的快照并记一条 Error——**到点该关机却一声不响，比用一份
-    /// 稍旧的命令更糟**，前提是日志里写清楚用了旧的。
+    /// ⚠️ 配置**现在就在库里**，运行中改了下一分钟就重装，所以这里不用再去现读文件
+    /// （原来那条「到点现读 rules.json」的路连同它的容错一起删掉了）。
     /// </summary>
-    public static void LaunchDetached(GoalRules snapshot)
+    public static void LaunchDetached(GoalRules rules, string? name)
     {
-        var rules = snapshot;
-        try
+        if (rules.CommandNamed(name) is not { Length: > 0 } cmd)
         {
-            rules = GoalRules.Parse(File.ReadAllText(AppData.RulesPath()));
-        }
-        catch (Exception e)
-        {
-            Events.Error("command", "Cannot re-read rules.json for executeCommand; using the startup snapshot", e);
-        }
-
-        if (rules.CommandForThisOs() is not { Length: > 0 } cmd)
-        {
-            Events.Warn("command", "Alarm fired with the command armed, but there is no executeCommand for this OS");
+            Events.Warn("command", $"Alarm fired with the command armed, but there is no command named "
+                                 + $"'{name ?? "(none)"}' for this OS");
             return;
         }
 
-        Events.Info("command", $"running: {cmd}");
+        Events.Info("command", $"running '{name}': {cmd}");
         RunDetached(cmd);
     }
 

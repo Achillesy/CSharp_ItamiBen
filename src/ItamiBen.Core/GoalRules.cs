@@ -125,7 +125,8 @@ public sealed class GoalRules
     private sealed record CompiledGroup(string Name, bool Disabled, IReadOnlyList<CompiledRule> Rules);
 
     private readonly IReadOnlyList<CompiledGroup> _groups;
-    private readonly IReadOnlyDictionary<string, IReadOnlyList<string>> _commands;
+    /// <summary>名字 → 这条命令在两个系统上各是什么。**可执行的文本只住在这里。**</summary>
+    private readonly IReadOnlyDictionary<string, (string? MacOS, string? Windows)> _commands;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -135,7 +136,7 @@ public sealed class GoalRules
     };
 
     private GoalRules(IReadOnlyList<CompiledGroup> groups,
-                      IReadOnlyDictionary<string, IReadOnlyList<string>> commands,
+                      IReadOnlyDictionary<string, (string? MacOS, string? Windows)> commands,
                       string? layout, double? opacityPercent)
     {
         _groups = groups;
@@ -148,16 +149,55 @@ public sealed class GoalRules
     /// 某个操作系统的命令表。⚠️ **调用方只该用第 0 条**（v3 的 E9）——这是个常用命令的
     /// 收藏夹，换命令靠重排文件里的顺序，不靠界面。没配就是空列表。
     /// </summary>
-    public IReadOnlyList<string> CommandsFor(string os)
-        => _commands.TryGetValue(os, out var list) ? list : [];
+    /// <summary>清单里有哪些命令，按名字。</summary>
+    public IReadOnlyList<string> CommandNames => [.. _commands.Keys.OrderBy(k => k, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// 按名字取这台机器上该跑的那条命令。名字为空、找不到、或者这条命令没给本系统写，
+    /// 一律返回 null——**调用方拿 null 当「没有」处理，不猜也不退而求其次**。
+    /// </summary>
+    public string? CommandNamed(string? name)
+    {
+        if (name is null || !_commands.TryGetValue(name, out var c)) return null;
+        var cmd = OperatingSystem.IsWindows() ? c.Windows : c.MacOS;
+        return string.IsNullOrWhiteSpace(cmd) ? null : cmd;
+    }
 
     /// <summary>这台机器上到点会跑的那一条；没配就是 null。</summary>
-    public string? CommandForThisOs()
-        => CommandsFor(OperatingSystem.IsWindows() ? "windows" : "macos").FirstOrDefault();
 
     /// <summary>空规则——一个目标都没有。界面在还没有 rules.json 时用它顶着。</summary>
-    public static GoalRules Empty { get; } = new([], new Dictionary<string, IReadOnlyList<string>>(), null, null);
+    public static GoalRules Empty { get; } = new([], new Dictionary<string, (string?, string?)>(), null, null);
 
+    /// <summary>
+    /// 从库里的行装配——**正常路径走这一条**（<see cref="Parse"/> 只剩迁移在用）。
+    /// </summary>
+    public static GoalRules Of(IReadOnlyList<SampleStore.GoalRow> goals,
+                               IReadOnlyList<SampleStore.CommandRow> commands,
+                               string? layout = null, double? opacityPercent = null)
+    {
+        var compiled = new List<CompiledGroup>();
+        foreach (var g in goals)
+        {
+            var rules = new List<CompiledRule>();
+            foreach (var r in g.Rules)
+                rules.Add(new CompiledRule(Compile(r.App, $"{g.Name}.app"),
+                                           Compile(r.Title, $"{g.Name}.title")));
+            compiled.Add(new CompiledGroup(g.Name, !g.Enabled, rules));
+        }
+
+        var table = new Dictionary<string, (string?, string?)>(StringComparer.Ordinal);
+        foreach (var c in commands) table[c.Name] = (c.MacOS, c.Windows);
+
+        return new GoalRules(compiled, table, layout, opacityPercent);
+    }
+
+    /// <summary>
+    /// 老 `rules.json` 的解析，**只给迁移用**（2026-09-16 起配置住在库里，DECISIONS I15）。
+    ///
+    /// ⚠️ 老文件的 `executeCommand` 是个**无名的有序清单、只跑第 0 条**。库里的命令**按名字
+    /// 引用**，所以这里只把每个系统的第 0 条搬成一条叫 <c>alarm</c> 的命令——
+    /// 其余几条留在改名后的旧文件里，**不会凭空消失**，要的话让智能体加回来。
+    /// </summary>
     public static GoalRules Parse(string json)
     {
         var file = JsonSerializer.Deserialize<RulesFile>(json, JsonOpts)
@@ -182,9 +222,34 @@ public sealed class GoalRules
             groups.Add(new CompiledGroup(name, g.Disabled, rules));
         }
 
-        return new GoalRules(groups,
-            file.ExecuteCommand ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase),
-            file.Layout, ReadPercent(file.Opacity));
+        var legacy = file.ExecuteCommand ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var table = new Dictionary<string, (string?, string?)>(StringComparer.Ordinal);
+        var mac = legacy.GetValueOrDefault("macos")?.FirstOrDefault();
+        var win = legacy.GetValueOrDefault("windows")?.FirstOrDefault();
+        if (mac is not null || win is not null) table["alarm"] = (mac, win);
+
+        return new GoalRules(groups, table, file.Layout, ReadPercent(file.Opacity));
+    }
+
+    /// <summary>
+    /// 摊回成库里的行，**只给迁移用**。
+    ///
+    /// ⚠️ 正则的原文从 <c>Regex.ToString()</c> 取回来——它返回的就是当初传进去的模式串，
+    /// 一个字节不差。所以迁移**不需要第二条解析路径**（v3 的 §15.4：同一份文件两条读取
+    /// 路径，咬了两次）。
+    /// </summary>
+    public (List<SampleStore.GoalRow> Goals, List<SampleStore.CommandRow> Commands) ToRows()
+    {
+        var goals = new List<SampleStore.GoalRow>();
+        foreach (var g in _groups)
+            goals.Add(new SampleStore.GoalRow(g.Name, !g.Disabled,
+                [.. g.Rules.Select(r => new SampleStore.RuleRow(r.App?.ToString(), r.Title?.ToString()))]));
+
+        var commands = new List<SampleStore.CommandRow>();
+        foreach (var (name, c) in _commands)
+            commands.Add(new SampleStore.CommandRow(name, c.MacOS, c.Windows));
+
+        return (goals, commands);
     }
 
     /// <summary>`layout` 那个词，原样给出来——怎么解释是界面层的事。</summary>

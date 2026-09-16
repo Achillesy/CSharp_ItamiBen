@@ -29,41 +29,54 @@ public static class AppData
                        "ItamiBen");
 
     /// <summary>
-    /// rules.json 按三级查找，**绝不只看当前工作目录**——桌面快捷方式的「起始位置」
-    /// 可以是任何地方，按工作目录找会变成「有时能跑有时不能」。
-    ///
-    /// <code>
-    /// 1. &lt;运行时目录&gt;/rules.json   ← 用户自己那份，重装不会被覆盖
-    /// 2. &lt;可执行文件旁边&gt;/rules.json ← 随程序发的默认规则
-    /// 3. ./rules.json                  ← 开发时从仓库根目录跑
-    /// </code>
-    ///
-    /// **这条链是只读的**：程序永远不写 rules.json（写一次用户的注释就全没了）。
+    /// 累计账本的老文件。**只剩迁移在用**——账本 2026-09-16 搬进库了（DECISIONS I13）。
     /// </summary>
-    public static string RulesPath()
-    {
-        var mine = Path.Combine(Dir, "rules.json");
-        if (File.Exists(mine)) return mine;
-
-        var beside = Path.Combine(AppContext.BaseDirectory, "rules.json");
-        return File.Exists(beside) ? beside : "rules.json";
-    }
-
-    /// <summary>累计账本。**程序自己写的文件**，跟 rules.json 不是一条链。</summary>
     public static string TotalsPath() => Path.Combine(Dir, "during.json");
-
-    /// <summary>
-    /// alarms.cron —— **用户手写，程序只读不写**，跟 rules.json 同一类契约。
-    /// 每分钟重读一次，所以改完不用重启。
-    /// </summary>
-    public static string AlarmsPath() => Path.Combine(Dir, "alarms.cron");
 
     /// <summary>
     /// 观测库（DESIGN §9）：一秒一行的 app / title / 空闲。
     /// **跨轮持久**——v3 的 `During` 是 checkpoint 模型，第 N 轮的秒在第 N+1 轮 Start 时
     /// 才入账，库一清这条链就断（DECISIONS F4）。
     /// </summary>
-    public static string SamplesPath() => Path.Combine(Dir, "samples.db");
+    /// <summary>
+    /// 把随程序发的 `AGENT.md` 刷进运行时目录，**跟数据库放在同一个文件夹**。
+    ///
+    /// ⚠️ 配置住在库里、由智能体改（DECISIONS I15），而智能体得先找得到说明。
+    /// 拿到那个目录 = 同时拿到库和用法，不用再去翻仓库。
+    ///
+    /// ⚠️ **每次启动都覆盖**：它是随二进制发的，不该被人改——也就不会跟代码漂开。
+    /// 复制失败一声不吭：少一份说明不该让程序起不来。
+    /// </summary>
+    public static void RefreshAgentDoc()
+    {
+        try
+        {
+            var src = Path.Combine(AppContext.BaseDirectory, "AGENT.md");
+            if (File.Exists(src)) File.Copy(src, Path.Combine(Dir, "AGENT.md"), overwrite: true);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 那**一个**数据库：观测、轮次、事件、设置、账本、配置全在里面
+    /// （2026-09-16 起，DECISIONS I15）。
+    ///
+    /// ⚠️ 改名前叫 `samples.db`——那个名字现在是错的，里面早就不只有采样了。
+    /// 旧文件还在就顺手改个名，**不动内容**：SQLite 认的是文件不是名字。
+    /// </summary>
+    public static string DbPath()
+    {
+        var path = Path.Combine(Dir, "ItamiBen.sqlite3");
+        var old = Path.Combine(Dir, "samples.db");
+        if (!File.Exists(path) && File.Exists(old))
+            try
+            {
+                foreach (var suffix in new[] { "", "-wal", "-shm" })
+                    if (File.Exists(old + suffix)) File.Move(old + suffix, path + suffix);
+            }
+            catch { /* 改不动名就用旧的，下面照样开得起来 */ return File.Exists(path) ? path : old; }
+        return path;
+    }
 
     /// <summary>
     /// 程序**自己那些文件**的写法。不转义非 ASCII：目标名可能是任何语言，这个文件是

@@ -108,6 +108,68 @@ public sealed class SampleStore : IDisposable
               goal    TEXT PRIMARY KEY,
               seconds INTEGER NOT NULL
             );
+
+            -- ── 下面四张是**配置**表：智能体改这些，程序读这些 ─────────────────
+            --
+            -- ⚠️ 上面那些是**账本**（sample / app / title / round / event / total）：
+            --    程序写、谁都别改。分界写在 AGENT.md 里，那是给智能体看的那份。
+
+            -- 配置版本号。**只有一行。** 改完配置把 version 加一，
+            -- 运行中的程序下一分钟就会重读——否则改了要等重启才生效，
+            -- 而「改了没反应」正是这个项目最恨的那类失败。
+            CREATE TABLE IF NOT EXISTS config (
+              id         INTEGER PRIMARY KEY CHECK (id = 1),
+              version    INTEGER NOT NULL,
+              changed_at INTEGER NOT NULL,
+              note       TEXT
+            );
+
+            -- 小目标。position 决定界面上的顺序；enabled=0 = 不再用但留着
+            -- （**删了以后想找回来还得重写**）。
+            CREATE TABLE IF NOT EXISTS goal (
+              name     TEXT PRIMARY KEY,
+              enabled  INTEGER NOT NULL DEFAULT 1,
+              position INTEGER NOT NULL DEFAULT 0,
+              note     TEXT
+            );
+
+            -- 匹配规则。**组内任意一条命中就算命中**；一条里 app 和 title 都写就都要中。
+            -- ⚠️ 两个都是正则，而且**区分大小写**：macOS 报 `Code`、Windows 报 `Code.exe`，
+            --    两边都要覆盖就写 `^Code(\.exe)?$`。写成只对一边的，另一边**一条都不中
+            --    而且不报错**——症状是整轮全红，跟「今天确实没干活」长得一模一样。
+            CREATE TABLE IF NOT EXISTS rule (
+              id    INTEGER PRIMARY KEY,
+              goal  TEXT NOT NULL REFERENCES goal(name) ON DELETE CASCADE,
+              app   TEXT,
+              title TEXT,
+              note  TEXT,
+              CHECK (app IS NOT NULL OR title IS NOT NULL)
+            );
+
+            -- 命令清单。**按名字引用**，闹钟和计划表都从这儿挑。
+            -- ⚠️ 可执行的文本**只准出现在这一张表里**：别处（计划表）只存名字。
+            --    这样「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
+            CREATE TABLE IF NOT EXISTS command (
+              name    TEXT PRIMARY KEY,
+              macos   TEXT,
+              windows TEXT,
+              note    TEXT,
+              CHECK (macos IS NOT NULL OR windows IS NOT NULL)
+            );
+
+            -- 计划表（原来的 alarms.cron）。cron 是标准 crontab 的前五列。
+            -- text 是提醒文字，run 是要跑的命令名，**至少写一个**。
+            -- ⚠️ 带 run 的条目**错过了就不补**：合盖两小时再打开，一条 22:00 的关机
+            --    会当场执行。只提醒的条目照旧补放（那正是提醒该有的行为）。
+            CREATE TABLE IF NOT EXISTS schedule (
+              id      INTEGER PRIMARY KEY,
+              cron    TEXT NOT NULL,
+              text    TEXT,
+              run     TEXT REFERENCES command(name),
+              enabled INTEGER NOT NULL DEFAULT 1,
+              note    TEXT,
+              CHECK (text IS NOT NULL OR run IS NOT NULL)
+            );
             """);
 
         return new SampleStore(db);
@@ -277,6 +339,157 @@ public sealed class SampleStore : IDisposable
             cmd.ExecuteNonQuery();
         }
         catch { }
+    }
+
+    // ── 配置 ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 配置版本号。**运行中的程序靠它知道该重读了**——每分钟看一眼，变了就重新装配置。
+    /// 一行都还没有就是 0。
+    /// </summary>
+    public long ConfigVersion
+    {
+        get
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = "SELECT version FROM config WHERE id = 1;";
+            return cmd.ExecuteScalar() is long v ? v : 0;
+        }
+    }
+
+    /// <summary>版本号加一。改完配置**必须调一次**，否则要等重启才生效。</summary>
+    public void BumpConfig(string note)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO config (id, version, changed_at, note) VALUES (1, 1, $at, $note)
+            ON CONFLICT(id) DO UPDATE SET version = version + 1, changed_at = $at, note = $note;
+            """;
+        cmd.Parameters.AddWithValue("$at", DateTimeOffset.Now.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$note", note);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>一个小目标连同它的规则。</summary>
+    public readonly record struct GoalRow(string Name, bool Enabled, IReadOnlyList<RuleRow> Rules);
+
+    /// <summary>一条匹配规则。两个都可以是 null，但不能都是。</summary>
+    public readonly record struct RuleRow(string? App, string? Title);
+
+    /// <summary>一条命令，按系统分。</summary>
+    public readonly record struct CommandRow(string Name, string? MacOS, string? Windows);
+
+    /// <summary>一条计划。<paramref name="Text"/> 和 <paramref name="Run"/> 至少有一个。</summary>
+    public readonly record struct ScheduleRow(string Cron, string? Text, string? Run);
+
+    /// <summary>所有目标连同规则，按 position 排。</summary>
+    public List<GoalRow> Goals()
+    {
+        var rules = new Dictionary<string, List<RuleRow>>();
+        using (var cmd = _db.CreateCommand())
+        {
+            cmd.CommandText = "SELECT goal, app, title FROM rule ORDER BY id;";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var goal = r.GetString(0);
+                if (!rules.TryGetValue(goal, out var list)) rules[goal] = list = [];
+                list.Add(new RuleRow(r.IsDBNull(1) ? null : r.GetString(1),
+                                     r.IsDBNull(2) ? null : r.GetString(2)));
+            }
+        }
+
+        using var g = _db.CreateCommand();
+        g.CommandText = "SELECT name, enabled FROM goal ORDER BY position, name;";
+        var goals = new List<GoalRow>();
+        using var gr = g.ExecuteReader();
+        while (gr.Read())
+        {
+            var name = gr.GetString(0);
+            goals.Add(new GoalRow(name, gr.GetInt64(1) != 0,
+                                  rules.GetValueOrDefault(name) ?? []));
+        }
+        return goals;
+    }
+
+    public List<CommandRow> Commands()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT name, macos, windows FROM command ORDER BY name;";
+        var list = new List<CommandRow>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(new CommandRow(r.GetString(0),
+                                    r.IsDBNull(1) ? null : r.GetString(1),
+                                    r.IsDBNull(2) ? null : r.GetString(2)));
+        return list;
+    }
+
+    /// <summary>启用着的计划，按 id 排。</summary>
+    public List<ScheduleRow> Schedule()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT cron, text, run FROM schedule WHERE enabled != 0 ORDER BY id;";
+        var list = new List<ScheduleRow>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(new ScheduleRow(r.GetString(0),
+                                     r.IsDBNull(1) ? null : r.GetString(1),
+                                     r.IsDBNull(2) ? null : r.GetString(2)));
+        return list;
+    }
+
+    /// <summary>配置表是不是一条都还没有——决定要不要播种 / 迁移。</summary>
+    public bool ConfigIsEmpty
+    {
+        get
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = "SELECT (SELECT COUNT(*) FROM goal) + (SELECT COUNT(*) FROM command) "
+                            + "+ (SELECT COUNT(*) FROM schedule);";
+            return Convert.ToInt64(cmd.ExecuteScalar()) == 0;
+        }
+    }
+
+    /// <summary>整批写配置。一个事务——**要么全落，要么一条都不落**。</summary>
+    public void PutConfig(IReadOnlyList<GoalRow> goals, IReadOnlyList<CommandRow> commands,
+                          IReadOnlyList<(ScheduleRow Row, bool Enabled, string? Note)> schedule,
+                          string note)
+    {
+        using var tx = _db.BeginTransaction();
+
+        void Run(string sql, params (string Name, object? Value)[] args)
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            foreach (var (n, v) in args) cmd.Parameters.AddWithValue(n, v ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+
+        for (var i = 0; i < goals.Count; i++)
+        {
+            var g = goals[i];
+            Run("INSERT INTO goal (name, enabled, position) VALUES ($n, $e, $p) "
+              + "ON CONFLICT(name) DO UPDATE SET enabled = excluded.enabled, position = excluded.position;",
+                ("$n", g.Name), ("$e", g.Enabled ? 1 : 0), ("$p", i));
+            foreach (var r in g.Rules)
+                Run("INSERT INTO rule (goal, app, title) VALUES ($g, $a, $t);",
+                    ("$g", g.Name), ("$a", r.App), ("$t", r.Title));
+        }
+        foreach (var c in commands)
+            Run("INSERT INTO command (name, macos, windows) VALUES ($n, $m, $w) "
+              + "ON CONFLICT(name) DO UPDATE SET macos = excluded.macos, windows = excluded.windows;",
+                ("$n", c.Name), ("$m", c.MacOS), ("$w", c.Windows));
+        foreach (var (row, enabled, n) in schedule)
+            Run("INSERT INTO schedule (cron, text, run, enabled, note) VALUES ($c, $t, $r, $e, $n);",
+                ("$c", row.Cron), ("$t", row.Text), ("$r", row.Run), ("$e", enabled ? 1 : 0), ("$n", n));
+
+        Run("INSERT INTO config (id, version, changed_at, note) VALUES (1, 1, $at, $note) "
+          + "ON CONFLICT(id) DO UPDATE SET version = version + 1, changed_at = $at, note = $note;",
+            ("$at", DateTimeOffset.Now.ToUnixTimeSeconds()), ("$note", note));
+
+        tx.Commit();
     }
 
     /// <summary>每个目标的终身累计秒数。</summary>

@@ -76,41 +76,65 @@ public class GoalRulesTests
         Assert.Contains("编程", ex.Message);
     }
 
-    // ── executeCommand（闹钟到点跑的命令）──────────────────────────────
+    // ── 命令清单（2026-09-16 起住在库里，JSON 那半只剩迁移，DECISIONS I15）────
 
     [Fact]
-    public void 命令表单条字符串和一串都收()
+    public void 库里的命令按名字取_只给本系统那一条()
     {
-        var one = GoalRules.Parse("""
-        { "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } },
-          "executeCommand": { "macos": "pmset displaysleepnow" } }
-        """);
-        Assert.Equal(["pmset displaysleepnow"], one.CommandsFor("macos"));
+        var rules = GoalRules.Of(
+            [new SampleStore.GoalRow("Coding", true, [new SampleStore.RuleRow("^Code$", null)])],
+            [new SampleStore.CommandRow("sleep", "pmset displaysleepnow", "rundll32.exe …")]);
 
-        var many = GoalRules.Parse("""
-        { "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } },
-          "executeCommand": { "macos": ["a", "b", "c"] } }
-        """);
-        Assert.Equal(["a", "b", "c"], many.CommandsFor("macos"));
+        var expected = OperatingSystem.IsWindows() ? "rundll32.exe …" : "pmset displaysleepnow";
+        Assert.Equal(expected, rules.CommandNamed("sleep"));
+        Assert.Equal(["sleep"], rules.CommandNames);
     }
 
     [Fact]
-    public void 操作系统名大小写不敏感()
+    public void 名字找不到或没给本系统写就是_null_不猜()
     {
+        // 只给了另一个系统的那条：本系统上就是「没有」，不退而求其次
+        var other = OperatingSystem.IsWindows()
+            ? new SampleStore.CommandRow("x", "只有 macOS 的", null)
+            : new SampleStore.CommandRow("x", null, "只有 Windows 的");
+        var rules = GoalRules.Of([], [other]);
+
+        Assert.Null(rules.CommandNamed("x"));
+        Assert.Null(rules.CommandNamed("莫须有"));
+        Assert.Null(rules.CommandNamed(null));
+    }
+
+    [Fact]
+    public void 迁移把老清单的第零条搬成一条叫_alarm_的命令()
+    {
+        // ⚠️ 老文件是**无名的有序清单、只跑第 0 条**；库里按名字引用。
+        //    其余几条留在改名后的旧文件里，不会凭空消失。
         var rules = GoalRules.Parse("""
-        { "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } },
-          "executeCommand": { "MacOS": "x" } }
+        { "Groups": {},
+          "executeCommand": { "macos": ["第零条", "第一条"], "windows": ["w0", "w1"] } }
         """);
-        Assert.Equal(["x"], rules.CommandsFor("macos"));
+
+        Assert.Equal(["alarm"], rules.CommandNames);
+        Assert.Equal(OperatingSystem.IsWindows() ? "w0" : "第零条", rules.CommandNamed("alarm"));
     }
 
     [Fact]
-    public void 没配命令就是空列表不是异常()
+    public void 迁移能把规则原样摊回成库里的行()
     {
-        Assert.Empty(TestRules.Rules.CommandsFor("macos"));
-        Assert.Empty(TestRules.Rules.CommandsFor("windows"));
-        Assert.Null(TestRules.Rules.CommandForThisOs());
+        // ⚠️ 正则原文从 Regex.ToString() 取回来——迁移**不需要第二条解析路径**
+        var (goals, _) = GoalRules.Parse("""
+        { "Groups": { "编程": { "Rules": [ { "App": "^Code$", "Title": "GitHub" } ] },
+                      "停用的": { "Disabled": true, "Rules": [ { "Title": "x" } ] } } }
+        """).ToRows();
+
+        Assert.Equal(2, goals.Count);
+        Assert.True(goals[0].Enabled);
+        Assert.Equal("^Code$", goals[0].Rules[0].App);
+        Assert.Equal("GitHub", goals[0].Rules[0].Title);
+        Assert.False(goals[1].Enabled);
+        Assert.Null(goals[1].Rules[0].App);
     }
+
 
     [Fact]
     public void 命令里带双引号的也原样存得住()
@@ -121,7 +145,8 @@ public class GoalRulesTests
         { "Groups": { "编程": { "Rules": [ { "App": "^Code$" } ] } },
           "executeCommand": { "macos": "osascript -e 'tell application \"System Events\" to sleep'" } }
         """);
-        Assert.Contains("\"System Events\"", rules.CommandsFor("macos")[0]);
+        var mac = rules.ToRows().Commands.Single(c => c.Name == "alarm").MacOS;
+        Assert.Contains("\"System Events\"", mac);
     }
 
     [Fact]

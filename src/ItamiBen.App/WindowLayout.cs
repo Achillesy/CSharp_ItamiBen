@@ -34,29 +34,19 @@ public sealed record LayoutMetrics(
     int BannerMaxLines, double BannerMaxWidth, Thickness DominoMargin);
 
 /// <summary>
-/// 窗口外观的开关。**写在 `rules.json` 的顶层**（2026-09-16 从单独的 `layout.json`
-/// 并进来，DECISIONS I14）：
+/// 窗口外观的开关。**`setting` 表里的 `layout` / `opacityPercent` 两个键**
+/// （2026-09-16 一路从 layout.json → rules.json → 库，DECISIONS I14 / I15）。
 ///
-/// <code>
-/// { "Groups": { ... }, "layout": "compact", "opacity": 75 }
-/// </code>
+/// ⚠️ **这个类自己不读任何东西**，只负责**怎么解释**：值由 <see cref="Settings"/>
+/// 装好递进来。
 ///
-/// ⚠️ **这个类自己不读文件、不解析 JSON**：值由 <see cref="GoalRules"/> 一起读出来，
-/// 这里只负责**怎么解释**。一份文件一个解析器——v3 的 §15.4 就是同一份文件两条读取
-/// 路径，咬了两次，症状都是半个文件安静地失效。
-///
-/// ⚠️ **别搬进设置表**：那是程序写、用户只看的地方（I12），而这两个值用户要手改。
+/// ⚠️ 这两个键是设置表里**少数几个智能体该动的**，AGENT.md 里点了名。
 ///
 /// ⚠️ **只在启动时读一次，运行中改了不生效**——这是用户要的语义，也顺带免掉了
 /// 「运行中换档要重新夹回屏幕、提示条正显示着怎么办」的一整类边界情况。
 /// </summary>
 public static class WindowLayout
 {
-    /// <summary>
-    /// 作废的那个文件名。留着只为**提醒**：它还在的话说明用户以为它还管用，
-    /// 而「改了没反应」正是这个项目最恨的那类失败——所以启动时要吭一声。
-    /// </summary>
-    public const string RetiredFileName = "layout.json";
 
     /// <summary>不透明度的下限。再低就只剩一团看不清的影子了。</summary>
     public const double MinOpacityPercent = 10;
@@ -98,9 +88,9 @@ public static class WindowLayout
     /// </summary>
     private static LayoutSettings _current = new(LayoutMode.Standard, DefaultOpacity);
 
-    /// <summary>规则读出来之后装上去。**一次启动只该调一次。**</summary>
-    public static void Bind(GoalRules rules)
-        => _current = new LayoutSettings(ModeOf(rules.LayoutName), OpacityOf(rules.OpacityPercent));
+    /// <summary>设置读出来之后装上去。**一次启动只该调一次。**</summary>
+    public static void Bind(Settings settings)
+        => _current = new LayoutSettings(ModeOf(settings.Layout), OpacityOf(settings.OpacityPercent));
 
     public static LayoutMode Mode => _current.Mode;
 

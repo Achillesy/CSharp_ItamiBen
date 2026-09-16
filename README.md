@@ -76,7 +76,7 @@ program. Drag it **by the dial** (the draggable area is the circle, not the squa
 
 - **Scroll on the dial** moves the yellow alarm hand. Keep scrolling and it accelerates.
 - **Right-click the dial** for: Keep on top · Force ticking · Run command at alarm · Close.
-- **Click the small red ring** to peek at the next `alarms.cron` entry within twelve hours.
+- **Click the small red ring** to peek at the next scheduled reminder within twelve hours.
   It shows for three seconds and changes nothing.
 - The **seven dominoes** under the dial are the days of the week; the fallen ones are the
   days already gone.
@@ -87,10 +87,11 @@ program. Drag it **by the dial** (the draggable area is the circle, not the squa
 
 ### A smaller window, and seeing through it
 
-Two keys at the top level of `rules.json`:
+Two keys in the `setting` table — ask the agent, or set them yourself:
 
-```json
-{ "Groups": { ... }, "layout": "compact", "opacity": 75 }
+```sql
+UPDATE setting SET value = '"compact"' WHERE key = 'layout';
+UPDATE setting SET value = '60'        WHERE key = 'opacityPercent';
 ```
 
 `layout` is `standard` (380 px wide) or `compact` (292 px). `opacity` is 0–100 and applies
@@ -99,79 +100,49 @@ dimming those just makes them unreadable.
 
 Read once, at startup.
 
+## Configuring it: ask an agent
+
+**There are no configuration files.** Goals, matching rules, the command list and the
+schedule are rows in one SQLite database, and they are meant to be written by an AI agent,
+not by hand:
+
+```
+macOS    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
+Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
+```
+
+Next to that database sits **`AGENT.md`**, written for the agent rather than for you. Point
+any capable coding agent at that folder and say what you want:
+
+> Read AGENT.md and set ItamiBen up so only VS Code and Chrome-on-GitHub count as work.
+
+> Read AGENT.md and have ItamiBen remind me to stand up every hour between 9 and 6 on
+> weekdays.
+
+The agent will need write access to that folder once. Everything else it can work out from
+`AGENT.md` and the database itself — the database already knows every application you have
+actually been seen using, so the agent can check its own rules against reality instead of
+guessing.
+
+You can of course open the database yourself with any SQLite tool. `AGENT.md` is readable
+by humans too; it just assumes you want the details.
+
 ## Your files
 
 All under `~/Library/Application Support/ItamiBen/` (macOS) or `%APPDATA%\ItamiBen\`
 (Windows).
 
-| file | who writes it |
+| file | what it is |
 |---|---|
-| `rules.json` | **you.** The program only ever reads it. A default ships inside the app. |
-| `alarms.cron` | **you.** Optional. Re-read once a minute. |
-| `samples.db` | the program. Observations, rounds, events, settings **and the hours ledger**. |
-| `itamiben.log` | the program. Only what could not reach the database; normally empty. |
+| `ItamiBen.sqlite3` | everything: configuration, observations, rounds, events, settings, and the hours ledger |
+| `AGENT.md` | refreshed at every launch; the instructions the agent reads |
+| `itamiben.log` | only what could not reach the database. Normally empty — anything in it means something went wrong |
 
-Comments and trailing commas are allowed in the two files you write.
+## Recurring reminders
 
-The split is the point: **two files you write, one database the program writes, and a log
-that stays empty.** Sounds, window position, alarm time and the per-goal hours used to live
-in a `settings.json` and a `during.json`; they are rows in `samples.db` now, because you
-never hand-edited them and one fewer file is one fewer thing to keep consistent. Existing
-copies are imported once and renamed to `*.migrated`.
-
-The hours ledger gained something in the move: a finished round is now **added** in the
-database (`seconds = seconds + n`) instead of the whole file being rewritten. If the write
-fails, that round's minutes are lost — but every hour you had before it is untouched.
-
-### rules.json
-
-```json
-{
-  "Groups": {
-    "Coding": {
-      "Rules": [
-        { "App": "^(Code|claude)(\\.exe)?$" },
-        { "Title": "GitHub" }
-      ]
-    },
-    "Retired goal": { "Disabled": true, "Rules": [] }
-  }
-}
-```
-
-`App` and `Title` are regular expressions. A rule with both must match both; a goal matches
-if **any** of its rules match. Disable a goal rather than deleting it — deleting means
-rewriting it from scratch when you want it back.
-
-⚠️ **The expressions are case sensitive, and the two platforms report different names.**
-macOS reports `Claude` and `Code`; Windows reports `claude.exe` and `Code.exe`. A rules
-file carried from Windows to macOS matches nothing at all — and it does not error. The
-symptom is a whole round of red, which looks exactly like a day you really did waste. Write
-both forms: `^(Claude|claude\.exe)$`.
-
-### Where the accumulated hours come from
-
-The number beside each goal is that goal's lifetime total, in `during.json`, written once
-when a round ends in a controlled way (target reached, Give up, closing the window, or
-SIGTERM). A `kill -9` loses only that round's total — the round itself is rebuilt from
-`samples.db` on the next launch, hand position and all.
-
-## Recurring reminders (alarms.cron)
-
-A **standard crontab** — Vixie semantics, no dialect of its own — where the sixth column is
-reminder text, never a command:
-
-```
-# ItamiBen alarms.
-# Column 6 is reminder text, not a command. It is never executed.
-#
-# m    h     dom mon dow    reminder
-  30   9     *   *   1-5    Stand up
-  0    7     *   *   *      Commented out lines stay quiet
-```
-
-The day-of-month / day-of-week OR rule is Vixie's, and it is implemented: when both are
-restricted, a day matches if **either** matches.
+Rows in the `schedule` table, with **standard crontab** timing — Vixie semantics, including
+the day-of-month / day-of-week OR rule. A row carries reminder text, a command to run, or
+both. Ask the agent; `AGENT.md` has the details.
 
 When one comes due you get two things at once, on purpose:
 
@@ -274,8 +245,8 @@ normal day that file stays empty; anything in it means something went wrong.
 
 `--query minutes` is the one that answers "why didn't this minute count": it replays the
 round out of the database and names the window that produced the red. ⚠️ It uses the
-**current** `rules.json`, so if you have edited your rules since, old rounds will not match
-what the program decided at the time.
+**current** rules, so if the configuration has changed since, old rounds will not match what
+the program decided at the time.
 
 `--dial-specimens` renders the dial to PNGs at a handful of key states, for a human to
 eyeball the geometry — the dial lives in the UI layer where unit tests can't reach it, and

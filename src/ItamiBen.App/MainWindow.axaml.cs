@@ -112,6 +112,9 @@ public partial class MainWindow : Window
     /// </summary>
     private DateTime _alarmsProcessedThrough = DateTime.Now;
 
+    /// <summary>上一次装配时的配置版本。跟库里对不上就重装（<see cref="ReloadConfigIfChanged"/>）。</summary>
+    private long _configVersion;
+
     /// <summary>提示条显示到哪一刻。null = 没在显示。⚠️ 用截止时刻不用布尔量，同 E6。</summary>
     private DateTime? _bannerUntil;
 
@@ -190,13 +193,16 @@ public partial class MainWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
 
-        LoadRules();
         OpenStore();
 
         // ⚠️ **必须排在 OpenStore 后面**：设置住在库里（I12）。库要是打不开，
         //    这里拿到的是一套默认值——程序照样跑，只是记不住上次的选择。
         _settings = Settings.Load(_store);
         _totals = Totals.Load(_store);
+        WindowLayout.Bind(_settings);
+        AppData.RefreshAgentDoc();
+        if (_store is { } db) Config.EnsureSeeded(db);
+        LoadConfig();
 
         BuildGoals();
 
@@ -278,30 +284,40 @@ public partial class MainWindow : Window
 
     // ── 装配 ────────────────────────────────────────────────────────────────
 
-    private void LoadRules()
+    /// <summary>
+    /// 从库里装配规则和计划表。**配置住在库里**（DECISIONS I15）。
+    ///
+    /// ⚠️ 库开不了就是空规则——**宁可什么都做不了，也不能放行一切**：
+    /// 空规则匹配一切 = 约束当场归零，那正是这个程序唯一的卖点。
+    /// </summary>
+    private void LoadConfig()
     {
-        var path = AppData.RulesPath();
-        try
-        {
-            _rules = GoalRules.Parse(File.ReadAllText(path));
-        }
-        catch (Exception e)
-        {
-            // ⚠️ 规则读不了就一个目标都不给选——**宁可什么都做不了，也不能放行一切**。
-            //    空规则匹配一切 = 约束当场归零，那正是这个程序唯一的卖点
-            _rules = GoalRules.Empty;
-            _rulesError = $"{Path.GetFileName(path)}: {e.Message}";
-            Events.Error("rules", $"Failed to load {path}", e);
-        }
+        _rules = Config.LoadRules(_store, _settings);
+        _alarms = Config.LoadSchedule(_store);
+        _configVersion = _store?.ConfigVersion ?? 0;
 
-        // 档位和透明度跟规则写在同一份文件里（I14），一次读完一起装上
-        WindowLayout.Bind(_rules);
+        _rulesError = _rules.SelectableGoals.Count == 0
+            ? "no goals configured — ask an agent to read AGENT.md"
+            : null;
+    }
 
-        // ⚠️ **作废的 layout.json 还在就要吭一声**：它还在，说明用户以为它还管用，
-        //    而「改了没反应」正是这个项目最恨的那类失败。
-        if (File.Exists(Path.Combine(AppData.Dir, WindowLayout.RetiredFileName)))
-            Events.Warn("config", $"{WindowLayout.RetiredFileName} is no longer read — "
-                                + "move its \"layout\" / \"opacity\" into rules.json");
+    /// <summary>
+    /// 有人改过配置就重装。**每分钟看一眼版本号。**
+    ///
+    /// ⚠️ 没有这一步的话，智能体改完要等你重启才生效——而「改了没反应」正是这个项目
+    /// 最恨的那类失败。版本号是**智能体自己负责加一**的，AGENT.md 里写死了。
+    /// </summary>
+    private void ReloadConfigIfChanged()
+    {
+        if (_store is not { } store) return;
+        long version;
+        try { version = store.ConfigVersion; }
+        catch (Exception e) { Events.Error("config", "Cannot read the config version", e); return; }
+        if (version == _configVersion) return;
+
+        LoadConfig();
+        BuildGoals();
+        Events.Info("config", $"reloaded at version {version}");
     }
 
     /// <summary>
@@ -449,7 +465,7 @@ public partial class MainWindow : Window
     internal bool CommandArmed => _commandArmed;
 
     /// <summary>到点会跑的那一条；没配就是 null。设置窗口要显示它（v3 的 E14）。</summary>
-    internal string? CommandForThisOs => _rules.CommandForThisOs();
+    internal string? CommandForThisOs => _rules.CommandNamed(_settings.AlarmCommand);
 
     /// <summary>
     /// 窗口尺寸、不透明度、置顶、拖动、右键菜单——**无边框那一套**。
@@ -761,7 +777,7 @@ public partial class MainWindow : Window
             && _last.Idle >= IdleNudgeSeconds && _last.Idle < AwayMap.ThresholdSeconds)
             Sound.Repeat(_settings.IdleSound, NotifyRings);
 
-        _alarms = LoadAlarms();
+        ReloadConfigIfChanged();
         CheckAlarmsList(now);
         RefreshAlarmsDot(now);
 
@@ -770,20 +786,6 @@ public partial class MainWindow : Window
         this.FindControl<DominoRow>("Dominoes")!.Fallen = DominoRow.FallenForToday(now);
     }
 
-    /// <summary>每分钟重读一次：这是用户手写的文件，改完不该还要重启。读不了就当没有。</summary>
-    private static IReadOnlyList<CronEntry> LoadAlarms()
-    {
-        try
-        {
-            var path = AppData.AlarmsPath();
-            return File.Exists(path) ? AlarmsList.Parse(File.ReadAllText(path)) : [];
-        }
-        catch (Exception e)
-        {
-            Events.Error("cron", "Failed to read alarms.cron", e);
-            return [];
-        }
-    }
 
     /// <summary>
     /// 到点的条目。
@@ -814,7 +816,15 @@ public partial class MainWindow : Window
         // ⚠️ 它跟上面那条提示条**并存，不是二选一**：提示条保证屏幕上一定看得见，
         //    但它有硬高度上限、多出来的只剩一个 `+N`；**通知中心这一份才是不丢内容的**，
         //    而且关掉程序也还能翻回来。
-        foreach (var e in due) Platform.Notify.Show(e.Text);
+        foreach (var e in due)
+            if (e.Text.Length > 0)
+                Platform.Notify.Show(e.Text);
+
+        // ⚠️ **带命令的条目在这里跑**，而且 `AlarmsList.Due` 已经保证它们不会被补放
+        //    （错过的那一分钟不会事后执行）。命令只按名字取，原文只住在 command 表里。
+        foreach (var e in due)
+            if (e.Run is { } name)
+                Platform.Command.LaunchDetached(_rules, name);
 
         // ⚠️ 这个开关**只管响不响铃**（v3 的 J6）：上面那条「检查清单 → 挑出到点的 →
         //    提示条 + 系统通知 + 日志」的主链路**无条件每分钟都走**，不受它控制。
@@ -982,7 +992,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            _store = SampleStore.Open(AppData.SamplesPath());
+            _store = SampleStore.Open(AppData.DbPath());
             _recorder = new Recorder(_store, () => (_last.App, _last.Title), () => _last.Idle);
 
             // 库开起来了，从这一刻起要记的事都进 `event` 表，不再落文本（见 Events）
@@ -1078,7 +1088,7 @@ public partial class MainWindow : Window
         if (_commandArmed)
         {
             Events.Info("alarm", $"{_alarm.FireAt:HH:mm} fired → running the command");
-            Command.LaunchDetached(_rules);
+            Command.LaunchDetached(_rules, _settings.AlarmCommand);
             return;
         }
 

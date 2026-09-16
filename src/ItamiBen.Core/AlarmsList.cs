@@ -7,7 +7,8 @@ namespace ItamiBen.Core;
 /// ——那行历史是唯一的反馈渠道，多条规则时不带表达式就只知道"响了"、不知道是哪一行响的。
 /// 默认空串：表盘红圈那条路（<see cref="AlarmsList.DotPosition"/>）不关心它。
 /// </summary>
-public readonly record struct AlarmEntry(DateTime At, string Text, string Expression = "");
+/// <param name="Run">要跑的命令名。null = 这条只提醒，不跑任何东西。</param>
+public readonly record struct AlarmEntry(DateTime At, string Text, string Expression = "", string? Run = null);
 
 /// <summary>清单里的一行：一条 crontab 时间表达式 + 它的提醒文字。</summary>
 /// <remarks>
@@ -16,7 +17,8 @@ public readonly record struct AlarmEntry(DateTime At, string Text, string Expres
 /// 内容多半是关机），两者离得太近——一旦合流，一份看着人畜无害的提醒文件就能关机器。
 /// 将来若要向 Linux 看齐做成可执行，必须单独设计、单独确认，不许"顺手统一"。
 /// </remarks>
-public sealed record CronEntry(Cron Schedule, string Text);
+/// <param name="Run">要跑的命令名（库里 `schedule.run` 那一列）。null = 只提醒。</param>
+public sealed record CronEntry(Cron Schedule, string Text, string? Run = null);
 
 /// <summary>
 /// Alarms 清单（DESIGN §10）。**从 v3 原样搬过来**，跟 AW 无关：解析 <c>alarms.cron</c>、挑出该响哪一条。**纯函数，
@@ -62,6 +64,23 @@ public static class AlarmsList
             result.Add(new CronEntry(schedule, label));
         }
         return result;
+    }
+
+    /// <summary>
+    /// 只解析**表达式本身**（库里 `schedule.cron` 那一列），不带提醒文字。
+    /// 认不出就是 null——调用方跳过这一条。
+    ///
+    /// ⚠️ 走的是跟 <see cref="Parse"/> **同一个** <see cref="Cron"/> 解析器：
+    /// 库里和老文件里的 cron 语义必须逐字一致，否则迁移过来的条目会安静地改变行为。
+    /// </summary>
+    public static Cron? ParseExpression(string expression)
+    {
+        var line = expression.Trim();
+        if (line.Length == 0) return null;
+        if (line[0] == '@') return ParseAlias(line + " x").Item1;
+
+        var f = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return f.Length < 5 ? null : Cron.TryParse(f[0], f[1], f[2], f[3], f[4]);
     }
 
     /// <summary><c>@daily 每日回顾</c>：第一个词是别名，剩下的是文字。</summary>
@@ -113,7 +132,13 @@ public static class AlarmsList
         for (var m = first; m <= last; m = m.AddMinutes(1))
             foreach (var entry in entries)
                 if (entry.Schedule.Matches(m))
-                    due.Add(new AlarmEntry(m, entry.Text, entry.Schedule.Expression));
+                {
+                    // ⚠️ **带命令的条目错过了就不补**：合盖两小时再打开，一条 22:00 的关机
+                    //    会当场执行。只提醒的条目照旧补放——那正是提醒该有的行为，
+                    //    而「补跑一条命令」几乎永远不是。
+                    if (entry.Run is not null && m != last) continue;
+                    due.Add(new AlarmEntry(m, entry.Text, entry.Schedule.Expression, entry.Run));
+                }
 
         return due;
     }
