@@ -136,24 +136,6 @@ public class AlarmClockTests
     }
 
     [Fact]
-    public void 上弦只在将来真的会响时才成立()
-    {
-        var a = new AlarmClock();
-        Assert.False(a.IsArmed(At(10, 0)));            // 从没拨过
-
-        a.Bump(9 * 60 + 5, At(20, 0));                 // ⇒ 21:05
-        Assert.True(a.IsArmed(At(20, 0)));
-        Assert.False(a.IsArmed(At(21, 5)));            // 时刻到了就不再是「将来」
-
-        a.MarkFired();
-        Assert.False(a.IsArmed(At(20, 0)));            // 响过了
-
-        var b = new AlarmClock();
-        b.Restore(At(21, 5));
-        Assert.False(b.IsArmed(At(20, 0)));            // 残影不算上弦
-    }
-
-    [Fact]
     public void 过期的时刻不补响()
     {
         var a = new AlarmClock();

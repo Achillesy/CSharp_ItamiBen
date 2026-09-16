@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ItamiBen.App"
         x:Class="ItamiBen.App.MainWindow"
-        Title="ItamiBen"
+        Title="一袋米要我洗嘞"
         WindowStartupLocation="CenterScreen"
         SizeToContent="Height"
         CanResize="False"
@@ -11,112 +11,121 @@
         TransparencyLevelHint="Transparent">
 
   <!--
-    ⚠️ 无边框 + 透明底是**整扇主窗口**的属性，不是另开一扇挂件——功能一个不变，
-    只是外框和窗口底色没了。宽高由 layout.json 那一档决定（WindowLayout），
-    XAML 里不写死，免得同一个量两处定义。
+    ⚠️ **布局照 v3 逐项对齐**（用户 2026-09-16：「完整保留 v3 的界面」）。
+       ItamiBen 只多两样，都是用户点头认可的：**钟面右键菜单**（代码里，不在这份 XAML）
+       和**底部那条应用名 / 标题显示栏**。别再往这里加别的。
 
-    ⚠️ 没有标题栏之后：拖窗口靠钟面（左键），关窗口靠钟面上的右键菜单。
-       两者挂在同一个控件上互不影响——一个认左键、一个是 ContextMenu。
+    ⚠️ 无边框 + 透明底是**整扇主窗口**的属性。没有标题栏之后拖窗口靠钟面（左键）、
+       关窗口靠钟面右键菜单。
   -->
+  <Grid Margin="18,14,18,16" RowDefinitions="Auto,Auto,Auto">
 
-  <!--
-    ⚠️ 界面文字一律英文（CLAUDE.md），目标名除外——那是用户自己在 rules.json 里写的。
-  -->
-  <DockPanel Margin="14">
-
-    <!--
-      控件区要有一块**实心底色**垫着：窗口透明之后，按钮和文字会直接浮在桌面上，
-      什么背景都可能，读不了。
-      ⚠️ 底色跟内容**分成两层**：低透明度下只有底色跟着淡，按钮和文字保持实心
-      ——挡住后面的是那块底色，不是细细的文字，把文字一起调淡就没法读了。
-    -->
-    <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0">
-      <Border Name="CardBackdrop" CornerRadius="10" />
-      <StackPanel Spacing="10" Margin="12,12,12,12">
-
-      <!-- 三段读数的文字版。⚠️ 用分钟不用秒：格子每分钟才封盘，秒级跳动是噪声（DESIGN §4.5） -->
-      <!-- ⚠️ 空闲时是**空的**：目标列表就在下面，不需要再写一句话说明它是干什么的 -->
-      <TextBlock Name="Readout" FontSize="17" FontWeight="SemiBold"
-                 HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
-                 IsVisible="False" Text="" />
-
-      <!-- ⚠️ 休息期间它**不变成 Start**（DECISIONS C8）：不给「一口气连干三轮」的捷径 -->
-      <Button Name="ActionBtn" Classes="start" Content="Start" />
-
-      <!--
-        时长。**没有说明、没有标签、连数字都不显示**（v3 的用户 2026-07-27 定：
-        整个意义就在于靠猜）。只有刻度，自己拖。
-        ⚠️ 范围 10~50、步长 5——别往上加（DECISIONS C6：再往上会出现理论上
-        不可能完成的设定）。
-      -->
-      <Slider Name="Minutes" Margin="2,4,2,0"
-              Minimum="10" Maximum="50" TickFrequency="5"
-              IsSnapToTickEnabled="True" TickPlacement="BottomRight" Value="25" />
-
-      <!-- 小目标：一行一个，右边是累计小时。内容来自 rules.json -->
-      <StackPanel Name="GoalsPanel" Spacing="2" />
-
-      <!--
-        当前采到的是什么：**应用名居中一行，标题左对齐一行**。
-        ⚠️ 两行都是 `MaxLines=1` + 省略号截断，**绝不折行**——窗口是
-           `SizeToContent="Height"`，一折行整扇窗就变高，边框跟着跳。
-      -->
-      <Border Name="StatusBar" CornerRadius="4" Padding="8,5">
-        <DockPanel LastChildFill="True">
-          <Button Name="GrantBtn" DockPanel.Dock="Right" Content="Grant…" Margin="8,0,0,0"
-                  VerticalAlignment="Center" />
-          <StackPanel Spacing="1">
-            <TextBlock Name="StatusApp" FontSize="11" FontWeight="SemiBold"
-                       TextAlignment="Center" TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis" MaxLines="1" />
-            <TextBlock Name="StatusTitle" FontSize="11" Opacity="0.75"
-                       TextAlignment="Left" TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis" MaxLines="1" />
-          </StackPanel>
-        </DockPanel>
-      </Border>
-
-      <TextBlock Name="Colophon" FontSize="10" Opacity="0.45"
-                 HorizontalAlignment="Center" TextWrapping="NoWrap" MaxLines="1" />
-      </StackPanel>
-    </Grid>
-
-    <!--
-      钟面 + 叠在左上角的闹钟时刻。
-      ⚠️ 标签必须 IsHitTestVisible="False"：滚轮拨针挂在 Dial 上，
-         标签不能把左上角那片区域变成挡事件的东西（v3 的 E15）。
-    -->
-    <!-- 骨牌 = **星期**：七个，倒下几个就是星期几（周一 1 … 周日 7）。
-         屏幕上一个字都没有——扫一眼就够，没什么可读的 -->
-    <local:DominoRow Name="Dominoes" DockPanel.Dock="Bottom" Margin="0,2,0,-4" />
-
-    <Grid DockPanel.Dock="Top">
+    <!-- ── 第 0 行：钟面 ───────────────────────────────────────────────── -->
+    <Grid Grid.Row="0">
       <local:DialControl Name="Dial" />
-      <!-- 右上角两个小图标，跟左上角的闹钟时刻对称。⚠️ 它们在 Dial **之外**，
-           所以不吃 layout.json 那一档不透明度——图标本来就半透，再叠一层就没了 -->
-      <StackPanel Name="ChromeRow" Orientation="Horizontal" Spacing="0"
-                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,2,0">
-        <Button Name="TickBtn" Classes="chrome" />
-        <Button Name="SettingsBtn" Classes="chrome" />
-        <Button Name="ThemeBtn" Classes="chrome" />
-        <Button Name="PinBtn" Classes="chrome" />
-      </StackPanel>
 
-      <TextBlock Name="AlarmText" FontSize="18" FontWeight="Bold" Opacity="0.85"
-                 HorizontalAlignment="Left" VerticalAlignment="Top" Margin="2,0,0,0"
-                 IsHitTestVisible="False" Text="" />
+      <!-- 拨针时的时刻，**只在拨的时候出现**，停手两秒就收（v3 的 3.9.4）。
+           ⚠️ IsHitTestVisible="False" 不能删：拖窗口和滚轮都挂在 Dial 上，
+              左上角这片区域不能变成挡事件的东西。 -->
+      <TextBlock Name="AlarmText" IsVisible="False" IsHitTestVisible="False"
+                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                 FontSize="18" FontWeight="Bold" />
+
+      <!-- ⚠️ 顺序和位置照 v3：主题、喇叭、图钉。**齿轮不在这一排**，它在下面骨牌那行的
+           右端、**图钉正下方**。
+           ⚠️ 喇叭和图钉有 ToolTip，**主题和齿轮没有**（v3 的 E10）：齿轮打开模态框会把
+              气泡留在屏幕上；主题一点就重画整扇窗口，气泡挂在旧的一版上，同一类麻烦。 -->
+      <StackPanel Orientation="Horizontal" Spacing="2"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
+        <Button Name="ThemeBtn" Classes="chrome" />
+        <Button Name="TickBtn" Classes="chrome" ToolTip.Tip="Ticking" />
+        <Button Name="PinBtn" Classes="chrome" ToolTip.Tip="Always on top" />
+      </StackPanel>
+    </Grid>
+
+    <!-- ── 第 1 行：骨牌（= 星期几）+ 提示条 + 齿轮 ────────────────────── -->
+    <Grid Name="DominoRowCell" Grid.Row="1" Margin="0,2,0,-4">
+      <local:DominoRow Name="Dominoes" />
 
       <!--
-        alarms.cron 到点的提示条，**刚好显示一分钟**（到点起、到下一个整分止）。
-        ⚠️ 不要在它隐藏之后再做「清除」动作——跟盘面上其它一切一样，这是
-        「这一拍该不该显示」的条件判断，不是要擦掉的状态。
+        alarms.cron 到点的提示条，**刚好显示一分钟**。
+        ⚠️ **两层实色文字**（墨色一份 + 亮蓝一份偏移 −2,−2 叠在上面），跟画指针阴影
+           同一个手法：窗口是透明的，提示条背后可能是任何壁纸，单色文字会糊进去。
+        ⚠️ `MaxLines` / `MaxWidth` 在代码里按档位设，**不是保守取值是算出来的硬上限**：
+           它跟骨牌叠在同一个 Auto 高的格子里，撑高了会把下面的卡片顶下去，
+           整扇窗为了一条提示条跳一分钟。
       -->
-      <Border Name="AlarmBanner" IsVisible="False" IsHitTestVisible="False"
-              VerticalAlignment="Bottom" CornerRadius="6" Padding="10,7" Margin="0,0,0,2"
-              Background="#E6D6453F">
-        <TextBlock Name="AlarmBannerText" Foreground="White" FontWeight="SemiBold"
-                   TextWrapping="Wrap" TextAlignment="Center" />
-      </Border>
+      <Grid Name="AlarmBanner" HorizontalAlignment="Center" VerticalAlignment="Center"
+            IsVisible="False">
+        <StackPanel Spacing="2">
+          <TextBlock Name="AlarmBannerTime" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
+          <TextBlock Name="AlarmBannerText" FontSize="16" HorizontalAlignment="Center"
+                     TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <StackPanel Spacing="2" Margin="-2,-2,0,0">
+          <TextBlock Name="AlarmBannerTimeBlue" FontSize="18" FontWeight="Bold"
+                     Foreground="#63A6E0" HorizontalAlignment="Center" />
+          <TextBlock Name="AlarmBannerTextBlue" FontSize="16" Foreground="#63A6E0"
+                     HorizontalAlignment="Center" TextAlignment="Center"
+                     TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </Grid>
+
+      <!-- 齿轮单独在这一行的右端，**正对着上面的图钉** -->
+      <StackPanel Orientation="Horizontal" Spacing="2"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-6,-4,0">
+        <Button Name="SettingsBtn" Classes="chrome" />
+      </StackPanel>
     </Grid>
-  </DockPanel>
+
+    <!-- ── 第 2 行：卡片 ──────────────────────────────────────────────────
+         ⚠️ **拆成两层**（底色层 + 内容层，同一个格子里的两个兄弟）：`layout.json` 的
+            opacity 只作用在**底色**上，按钮和文字保持实心——真正挡住壁纸的是那块实心
+            底色，细细的文字挡不住什么，而把文字一起调淡只会让低透明度下没法读。
+         ⚠️ **底色层必须声明在内容层之前**：Grid 子元素的层叠顺序看声明顺序。
+         ⚠️ **卡片内部只有一个间距数字 8**：Border.Padding 和 StackPanel.Spacing 取同一个
+            值，卡片边框到控件的距离 = 控件与控件之间的距离，整张卡片一套节奏。 -->
+    <Border Name="CardBackdrop" Grid.Row="2" CornerRadius="10" />
+    <Border Grid.Row="2" CornerRadius="10" Padding="8">
+      <StackPanel Spacing="8">
+
+        <Button Name="ActionBtn" Classes="start" Content="Start" />
+
+        <!-- ⚠️ **没有说明、没有标签、连数字都不显示**（v3 的用户 2026-07-27：
+             整个意义就在于靠猜）。只有刻度，自己拖。范围 10~50、步长 5。 -->
+        <Slider Name="Minutes" Margin="2,4,2,0"
+                Minimum="10" Maximum="50" TickFrequency="5"
+                IsSnapToTickEnabled="True" TickPlacement="BottomRight" Value="25" />
+
+        <!-- 目标列表：一行一个，**单选**，右边是累计小时。rules.json 有几个就有几行 -->
+        <StackPanel Name="GoalsPanel" Spacing="2" />
+
+        <!--
+          ✅ ItamiBen 多出来的那条（用户认可）：当前采到的是什么。
+          **应用名居中一行，标题左对齐一行。**
+          ⚠️ 两行都是单行 + 省略号截断，**绝不折行**——窗口是 SizeToContent="Height"，
+             一折行整扇窗就变高、边框跟着跳。
+        -->
+        <Border Name="StatusBar" CornerRadius="4" Padding="8,5">
+          <DockPanel LastChildFill="True">
+            <Button Name="GrantBtn" DockPanel.Dock="Right" Content="Grant…" Margin="8,0,0,0"
+                    VerticalAlignment="Center" />
+            <StackPanel Spacing="1">
+              <TextBlock Name="StatusApp" FontSize="11" FontWeight="SemiBold"
+                         TextAlignment="Center" TextWrapping="NoWrap"
+                         TextTrimming="CharacterEllipsis" MaxLines="1" />
+              <TextBlock Name="StatusTitle" FontSize="11" Opacity="0.75"
+                         TextAlignment="Left" TextWrapping="NoWrap"
+                         TextTrimming="CharacterEllipsis" MaxLines="1" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="©️2026 Achilles.Newman" HorizontalAlignment="Center" FontSize="11" Opacity="0.4" />
+          <TextBlock Name="VersionLabel" Grid.Column="1" HorizontalAlignment="Right" FontSize="11" Opacity="0.4" />
+        </Grid>
+      </StackPanel>
+    </Border>
+  </Grid>
 </Window>

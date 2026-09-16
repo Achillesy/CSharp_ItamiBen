@@ -120,6 +120,15 @@ public partial class MainWindow : Window
     private bool _commandArmed;
     private MenuItem? _closeItem;
 
+    /// <summary>
+    /// 窗口最后一次**真实**的位置。
+    ///
+    /// ⚠️ **不能在退出那一刻现读 `Position`**：2026-09-16 实测那样存下来的是 `(0,0)`，
+    /// 下次启动窗口就被拖到屏幕左上角。改成一有移动就记下来——反正拖窗口本来就会
+    /// 连续触发 `PositionChanged`，取最后一个值天然是对的。
+    /// </summary>
+    private PixelPoint? _lastPosition;
+
     /// <summary>SIGTERM / SIGINT 的登记，要留着引用否则会被 GC 掉。</summary>
     private readonly List<IDisposable> _signals = [];
 
@@ -210,6 +219,13 @@ public partial class MainWindow : Window
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.ShutdownRequested += (_, _) => OnExit();
 
+        PositionChanged += (_, e) =>
+        {
+            // 还没显示出来时是 (0,0)，那不是真实位置
+            if (e.Point is { X: 0, Y: 0 }) return;
+            _lastPosition = e.Point;
+        };
+
         HookSignals();
 
         UpdateUi();
@@ -285,6 +301,11 @@ public partial class MainWindow : Window
 
         this.FindControl<DialControl>("Dial")!.Palette = palette;
         this.FindControl<Border>("CardBackdrop")!.Background = new SolidColorBrush(normal.Card);
+
+        var ink = new SolidColorBrush(normal.Ink);
+        this.FindControl<TextBlock>("AlarmBannerTime")!.Foreground = ink;
+        this.FindControl<TextBlock>("AlarmBannerText")!.Foreground = ink;
+        this.FindControl<TextBlock>("AlarmText")!.Foreground = ink;
 
         var dominoes = this.FindControl<DominoRow>("Dominoes")!;
         dominoes.Palette = normal;   // ⚠️ 骨牌不跟着翻：它压根不在钟面上
@@ -403,8 +424,17 @@ public partial class MainWindow : Window
         this.FindControl<DominoRow>("Dominoes")!.OpacityMask = mask;
         this.FindControl<Border>("CardBackdrop")!.OpacityMask = mask;
 
-        this.FindControl<TextBlock>("Colophon")!.Text =
-            $"ItamiBen {typeof(MainWindow).Assembly.GetName().Version?.ToString(3)}   © 2026 Achilles.Newman";
+        this.FindControl<TextBlock>("VersionLabel")!.Text =
+            typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "";
+
+        // ⚠️ 提示条的上限**是算出来的硬上限，不是保守取值**：它跟骨牌叠在同一个 Auto 高
+        //    的格子里，撑高了会把下面的卡片顶下去，整扇窗为了一条提示条跳一分钟
+        foreach (var name in new[] { "AlarmBannerText", "AlarmBannerTextBlue" })
+        {
+            var text = this.FindControl<TextBlock>(name)!;
+            text.MaxLines = metrics.BannerMaxLines;
+            text.MaxWidth = metrics.BannerMaxWidth;
+        }
 
         Topmost = _settings.Pinned;
 
@@ -571,6 +601,11 @@ public partial class MainWindow : Window
             // 不跑偏就立刻回到用户设的那一档，不留半个相位。
             _inverted = _drifting && !_inverted;
             ApplyPalette();
+
+            // ⚠️ 这里是**每秒**判断，跟提示条那条（按分钟收）不是一回事：这个标签是秒级的，
+            //    挂在分钟节拍上会一直糊到下一个整分钟
+            var scrub = this.FindControl<TextBlock>("AlarmText")!;
+            if (scrub.IsVisible && DateTime.Now >= _alarmQuietUntil) scrub.IsVisible = false;
         }
 
         CheckAlarm();
@@ -635,7 +670,11 @@ public partial class MainWindow : Window
         foreach (var e in due)
             Log.Line($"alarms.cron fired {e.At:HH:mm} [{e.Expression}] {e.Text}");
 
-        ShowBanner(string.Join('\n', due.Select(e => $"{e.At:HH:mm}   {e.Text}")),
+        // 条数超出的部分缀在**时间行**末尾（`23:55  +2`），不占新的一行——多一行会把
+        // 下面的卡片顶下去
+        var head = due[0];
+        var extra = due.Count > 1 ? $"  +{due.Count - 1}" : "";
+        ShowBanner($"{head.At:HH:mm}{extra}", head.Text,
                    new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0).AddMinutes(1));
 
         // ⚠️ 这个开关**只管响不响铃**（v3 的 J6）：上面那条「检查清单 → 挑出到点的 →
@@ -654,12 +693,23 @@ public partial class MainWindow : Window
         dial.AlarmsDotMultiple = nextDue.Count > 1;
     }
 
-    /// <summary><paramref name="text"/> 为 null 就是收起。</summary>
-    private void ShowBanner(string? text, DateTime? until = null)
+    /// <summary>
+    /// 提示条。<paramref name="time"/> 为 null 就是收起。
+    ///
+    /// ⚠️ **两层实色文字一起写**（墨色一份 + 亮蓝一份偏移叠在上面），跟画指针阴影同一个
+    /// 手法：窗口是透明的，提示条背后可能是任何壁纸，单色文字会糊进去。漏写任何一层
+    /// 都会缺一半，而且**不报错**。
+    /// </summary>
+    private void ShowBanner(string? time, string? body = null, DateTime? until = null)
     {
-        _bannerUntil = text is null ? null : until;
-        this.FindControl<Border>("AlarmBanner")!.IsVisible = text is not null;
-        if (text is not null) this.FindControl<TextBlock>("AlarmBannerText")!.Text = text;
+        _bannerUntil = time is null ? null : until;
+        this.FindControl<Grid>("AlarmBanner")!.IsVisible = time is not null;
+        if (time is null) return;
+
+        foreach (var name in new[] { "AlarmBannerTime", "AlarmBannerTimeBlue" })
+            this.FindControl<TextBlock>(name)!.Text = time;
+        foreach (var name in new[] { "AlarmBannerText", "AlarmBannerTextBlue" })
+            this.FindControl<TextBlock>(name)!.Text = body ?? "";
     }
 
     /// <summary>
@@ -840,6 +890,12 @@ public partial class MainWindow : Window
         _alarm.Bump(direction * notches * step * AlarmClock.SlotMinutes, now);
         _alarmQuietUntil = now.AddSeconds(2);
 
+        // 拨到哪儿了，**只在拨的时候显示**。收起的时刻**复用 `_alarmQuietUntil`**——
+        // 「停手两秒后收起」跟「调整期结束」天然是同一个时刻，不需要第二个计时量
+        var scrub = this.FindControl<TextBlock>("AlarmText")!;
+        scrub.Text = _alarm.FireAt is { } at ? at.ToString("HH:mm") : "";
+        scrub.IsVisible = true;
+
         // ⚠️ 拨针要留痕：它的后果（响铃）可能几小时后才发作，到时候「这闹钟哪来的」
         //    完全无从查起。2026-09-16 实测就撞上一次——日志里只有 `alarm fired`，
         //    查不出是谁把它从 15:32 拨到 10:22 的
@@ -924,8 +980,12 @@ public partial class MainWindow : Window
         _settings.FocusMinutes = _focusMinutes;
         _settings.SelectedGoal = Picked();
         _settings.AlarmAt = _alarm.FireAt;
-        try { _settings.WindowX = Position.X; _settings.WindowY = Position.Y; }
-        catch (Exception e) { Log.Error("Failed to read the window position", e); }
+        if (_lastPosition is { } at)
+        {
+            _settings.WindowX = at.X;
+            _settings.WindowY = at.Y;
+            Log.Line($"window position saved: {at.X},{at.Y}");
+        }
         _settings.Save();
         _store?.Dispose();
     }
@@ -1002,10 +1062,6 @@ public partial class MainWindow : Window
         dial.Projection = live ? _round!.Project() : null;
         dial.InvalidateVisual();
 
-        this.FindControl<TextBlock>("AlarmText")!.Text = FormatAlarm();
-        var readout = this.FindControl<TextBlock>("Readout")!;
-        readout.Text = ReadoutText();
-        readout.IsVisible = readout.Text.Length > 0;
         RefreshGoalTotals();
 
         var action = this.FindControl<Button>("ActionBtn")!;
@@ -1020,27 +1076,6 @@ public partial class MainWindow : Window
         this.FindControl<Slider>("Minutes")!.IsEnabled = !running;
 
         UpdateStatus(sample);
-    }
-
-    private string ReadoutText()
-    {
-        if (_rulesError is not null) return $"No goals: {_rulesError}";
-        // ⚠️ 空闲时**什么都不写**：目标列表就在下面，不需要再写一句话说明它是干什么的
-        if (_round is null) return _rules.SelectableGoals.Count == 0 ? "No goals in rules.json yet." : "";
-
-        var p = _round.Project();
-        return _round.Phase switch
-        {
-            RoundPhase.Focusing => $"{Mins(p.CommitSeconds)} to go · {Mins(p.SlackSeconds)} of slack",
-            RoundPhase.Resting => $"Break · {Mins(p.BreakEndSeconds - p.HandSeconds)} left",
-            _ => _round.Ending switch
-            {
-                EndReason.Completed => $"Done. {Mins(_round.FocusedSeconds)} of focus.",
-                EndReason.GaveUp => $"Gave up. {Mins(_round.FocusedSeconds)} counted anyway.",
-                EndReason.RanOut => $"Ran out of slack. {Mins(_round.FocusedSeconds)} counted anyway.",
-                _ => $"Stopped. {Mins(_round.FocusedSeconds)} counted anyway.",
-            },
-        };
     }
 
     /// <summary>
@@ -1109,21 +1144,6 @@ public partial class MainWindow : Window
     {
         this.FindControl<TextBlock>("StatusApp")!.Text = app;
         this.FindControl<TextBlock>("StatusTitle")!.Text = title;
-    }
-
-    /// <summary>
-    /// 闹钟时刻。
-    ///
-    /// ⚠️ **必须把「上弦了」和「黄针残影」分开**：两者在盘面上长得一模一样
-    /// （v3 的 E7 明说过期闹钟只剩残影），不写出来用户读不出它还作不作数。
-    /// </summary>
-    private string FormatAlarm()
-    {
-        if (_alarm.FireAt is not { } at) return "";
-
-        var now = DateTime.Now;
-        var when = at.Date == now.Date ? at.ToString("HH:mm") : at.ToString("HH:mm") + " tomorrow";
-        return _alarm.IsArmed(now) ? $"⏰ {when}" : $"⏰ {when} · off";
     }
 
     /// <summary>向上取整到分钟：读数因此每分钟才跳一次，跟格子封盘同步。</summary>

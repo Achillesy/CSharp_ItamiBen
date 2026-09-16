@@ -62,15 +62,6 @@ public sealed class AlarmClock
     public bool ShouldFire(DateTime now) => !_fired && FireAt is { } at && now >= at;
 
     /// <summary>
-    /// 上弦了吗——**将来真的会响**才算。响过的、恢复回来没激活的、时刻已经过去的，
-    /// 一律是 false。
-    ///
-    /// ⚠️ v3 没有这个查询（它的提示只显示时刻）。加它是因为界面上「黄针残影」和
-    /// 「真的会响」长得一模一样，不分开的话用户读不出闹钟到底还作不作数。
-    /// </summary>
-    public bool IsArmed(DateTime now) => !_fired && FireAt is { } at && at > now;
-
-    /// <summary>
     /// 响一次就完，**不是每日重复闹钟**（v3 的 E5）。时刻留着，作为黄针位置的来源。
     /// </summary>
     public void MarkFired() => _fired = true;
