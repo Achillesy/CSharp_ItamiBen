@@ -195,32 +195,15 @@ pwsh pack-windows.ps1       # → dist\ItamiBen-<版本>-win-x64.exe（需要 In
 ⚠️ **Windows 那一半从没在真机上跑过**，`pack-windows.ps1` 和 `installer/ItamiBen.iss`
 都是纸面代码。
 
-## 调试出口
+## 觉得不对劲的时候
 
-**不是产品功能**——跑完就退，正常启动路径根本不经过它们：
+把 `itamiben.log` 丢给 AI，说一句你本来以为会怎样。那里面有**每一次改配置**——
+要的是什么、实际跑的是什么、成没成——通常这就是全部答案。它是纯文本，拖进去就行。
 
-```bash
-ItamiBen --query samples  [起] [止]         # 一秒一行的原始观测
-ItamiBen --query events   [起] [止]         # 闹钟 / 提醒 / 命令 / 出错
-ItamiBen --query rounds   [起] [止]         # 开过哪些轮、怎么结束的
-ItamiBen --query minutes  [起] [止]         # 每一轮逐分钟的构成，红的还给出是哪扇窗口
-ItamiBen --dial-specimens <输出目录>        # 钟面在几个关键状态下的离屏样张
-ItamiBen --export-icon    <输出.ico>        # Windows 图标
-ItamiBen --export-iconset <输出.iconset>    # macOS，再 iconutil -c icns
-```
+要是答案是「你的规则从来没命中过」，打开 **Configure online**，让 AI 看一眼你真实的
+配置和它实际见过的程序名单。
 
-**这个程序没有运行日志。** `samples.db` 就是记录，出了问题直接查它。
-`itamiben.log` 只剩一个用处：**装不下在数据库里的那些话**——库自己打不开、被单实例挡回去、
-启动早期就崩了。正常跑一天它一个字节都不长；**里面有东西 = 出事了**。
-
-`--query minutes` 是回答「这一分钟为什么没算」的那个：它从库里把那一轮重放一遍，
-并指出红是哪扇窗口造成的。⚠️ 它用的是**当前**的配置，所以你要是改过规则，
-回头看老轮次会跟当时的判定对不上。
-
-`--dial-specimens` 把钟面在几个关键状态下渲成 PNG 供人眼检查——钟面活在界面层，
-单元测试够不到，而半径、角度、图层顺序这类问题真的只能靠看图抓。
-
-图标跟别的东西一样是**代码画的**，仓库里一张位图都没有。
+**没有任何命令要你敲，也没有任何东西要你记。**
 
 ## 项目结构
 

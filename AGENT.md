@@ -218,10 +218,17 @@ ItamiBen's **Configure online** window (Settings → the red button). In that ca
 
 ```
 ItamiBen --query config      # goals, rules, commands, schedule, as the program reads them
-ItamiBen --query log         # itamiben.log: what was asked, what ran, whether it worked
 ItamiBen --query events      # what fired, what failed
+ItamiBen --query rounds      # which sessions ran and how they ended
+ItamiBen --query minutes     # each session minute by minute, with the red explained
 ItamiBen --query samples     # one row per second, to see what names really appear
 ```
+
+These exist because the database is binary and `sqlite3` is not installed everywhere —
+notably not on Windows. `--query minutes` is the one you cannot reproduce with SQL at all:
+it replays the judgment engine over the stored observations.
+
+There is deliberately no `--query log`: `itamiben.log` is plain text. Read the file.
 
 On macOS the binary is inside the app bundle:
 `/Applications/ItamiBen.app/Contents/MacOS/ItamiBen`.

@@ -223,36 +223,16 @@ Read Me. The version number has exactly one source: `<Version>` in
 ⚠️ **The Windows half has never been run on a real machine.** `pack-windows.ps1` and
 `installer/ItamiBen.iss` are paper code.
 
-## Debug exits
+## When something looks wrong
 
-Not product features — they render and exit, and the normal startup path never goes near
-them:
+Hand `itamiben.log` to an AI and say what you expected. It holds every configuration change
+ever applied — what was asked for, what ran, whether it worked — which is usually the whole
+story. It is plain text; drag the file in.
 
-```bash
-ItamiBen --query samples  [from] [to]      # one row per second, as TSV
-ItamiBen --query events   [from] [to]      # alarms, reminders, commands, failures
-ItamiBen --query rounds   [from] [to]      # which rounds ran and how they ended
-ItamiBen --query minutes  [from] [to]      # each round minute by minute, red ones explained
-ItamiBen --dial-specimens <out dir>        # the dial rendered off-screen at key states
-ItamiBen --export-icon    <out.ico>        # Windows icon
-ItamiBen --export-iconset <out.iconset>    # macOS, then iconutil -c icns
-```
+If the answer is "your rules never matched anything", open **Configure online** and let the
+AI look at your actual configuration and the list of applications it has really seen.
 
-**There is no running log.** `samples.db` is the record, so when something looks wrong you
-query it. `itamiben.log` exists only for what cannot reach the database — the database
-itself failing to open, a second instance being turned away, a crash during startup. On a
-normal day that file stays empty; anything in it means something went wrong.
-
-`--query minutes` is the one that answers "why didn't this minute count": it replays the
-round out of the database and names the window that produced the red. ⚠️ It uses the
-**current** rules, so if the configuration has changed since, old rounds will not match what
-the program decided at the time.
-
-`--dial-specimens` renders the dial to PNGs at a handful of key states, for a human to
-eyeball the geometry — the dial lives in the UI layer where unit tests can't reach it, and
-radius / angle / layering bugs really are only caught by looking.
-
-The icon is drawn in code like everything else; there is no bitmap in this repository.
+There is nothing for you to run and nothing to memorise.
 
 ## Project layout
 
