@@ -8,7 +8,8 @@
   // app 名：macOS 是 localizedName（Code / Google Chrome），Windows 是进程名加后缀
   // （Code.exe），所以下面用 (\\.exe)? 同时覆盖两边。
   //
-  // ⚠️ 不用给 ItamiBen 自己写规则：前台是它自己时那一秒既不计入也不算跑偏。
+  // ⚠️ ItamiBen 自己**没有任何特例**：盯着自己的钟面就是跑偏，跟盯着别的什么一样。
+  //    想让它算专注，就在下面写一条 "App": "^ItamiBen(\\.exe)?$" 的规则。
   // ⚠️ 不再用的目标写 "Disabled": true，别删——删了以后想找回来还得重写。
   "Groups": {
     "编程": {

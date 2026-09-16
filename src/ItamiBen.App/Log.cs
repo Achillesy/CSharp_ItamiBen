@@ -51,6 +51,25 @@ public static class Log
         }
     }
 
+    /// <summary>
+    /// 往**已经在跑的那个实例**的日志里补一行，自己不接管这个文件。
+    ///
+    /// ⚠️ **专给被单实例锁挡回去的那个进程用**，只有一个调用方（<see cref="SingleInstance"/>）。
+    /// 它不能走 <see cref="Start"/>：那是 `File.WriteAllText`，**会把正在跑的那个实例的
+    /// 日志整份清空**——本来只想留一句话，结果把现场擦了。
+    ///
+    /// ⚠️ 也因此它绕过了 <c>_started</c> 那道闸（那道闸是拦单元测试的）。
+    /// 别给它加第二个调用方；要在 App 里记日志就用 <see cref="Line"/>。
+    /// </summary>
+    public static void Aside(string text)
+    {
+        lock (Gate)
+        {
+            try { File.AppendAllText(Path_, $"{DateTime.Now:HH:mm:ss}  {text}\n"); }
+            catch { }
+        }
+    }
+
     public static void Warn(string text) => Line($"WARN  {text}");
 
     public static void Error(string what, Exception e) => Line($"ERROR {what}: {e.GetType().Name} {e.Message}");

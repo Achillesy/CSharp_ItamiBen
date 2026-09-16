@@ -37,6 +37,17 @@ internal static class Program
             return;
         }
 
+        // ⚠️ **排在两个导出开关后面**：它们跑完就退、不碰任何运行时文件，
+        //    没理由因为「已经有一个在跑」而被挡住（打包时程序多半正开着）。
+        if (!SingleInstance.TryAcquire())
+        {
+            // ⚠️ **不能用 Log.Line**：日志还没 Start，那句会被静默丢掉；
+            //    而 Log.Start 是整份重写，会把**正在跑的那个实例**的日志擦干净。
+            //    Aside 只追加一行，落在对方的日志里，正好是想要的。
+            Log.Aside($"another instance (pid {Environment.ProcessId}) tried to start — exiting");
+            return;
+        }
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
