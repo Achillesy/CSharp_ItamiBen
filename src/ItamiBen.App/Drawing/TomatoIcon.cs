@@ -16,31 +16,31 @@ namespace ItamiBen.App;
 /// red-whole vs green-halved differs in hue, in silhouette, and in interior structure, so
 /// it still reads apart at 16px where a subtler difference would not.
 ///
+/// **The outline and the leaves are the old icon's, unchanged** -- only the colour and the
+/// interior are new. The silhouette was right the first time and there was nothing to gain
+/// by redrawing it.
+///
+/// Anatomy of the cut face, in the order it gets painted (user's correction, 2026-09-16):
+/// the fruit is **flesh all the way out -- no skin band**; the **white wings** spreading
+/// from the centre are the placenta; the **dark green** pockets they separate are juice.
+///
 /// Pure vector, like the dial and the dominoes: a handful of Beziers and ellipses, no
 /// bitmap asset, crisp at any size.
 ///
 /// **Colour constraint (set by the user): at most 8 colours, no outline.** Seven here.
 /// Depth comes from the brightness difference between flat blocks, never a gradient: a
 /// gradient smears into a blur at 16px, while flat blocks still read.
-///
-/// ⚠️ **Everything is built out of one silhouette** (<see cref="Body"/>, scaled toward the
-/// fruit's centre): skin, flesh wall and the locule cavity are the same curve at 1.00 /
-/// 0.93 / 0.70. Nesting three hand-drawn outlines instead would let the bands drift apart
-/// as soon as anyone tweaks the shape.
 /// </summary>
 public static class TomatoIcon
 {
     // ---- 7 colours, not one more
-    private static readonly Color Skin     = Color.FromRgb(0x2F, 0x6B, 0x1F);  // 外皮那一圈深绿
-    private static readonly Color Wall     = Color.FromRgb(0xD5, 0xE6, 0xA4);  // 果肉壁，泛白的浅绿
-    private static readonly Color Gel      = Color.FromRgb(0x8C, 0xC4, 0x46);  // 籽腔的胶质
-    private static readonly Color GelDeep  = Color.FromRgb(0x5F, 0x9B, 0x2E);  // 籽腔下缘的暗面
-    private static readonly Color Seed     = Color.FromRgb(0xF4, 0xF1, 0xCF);  // 籽
-    private static readonly Color Sepal    = Color.FromRgb(0x24, 0x60, 0x1C);  // 萼片
-    private static readonly Color SepalLit = Color.FromRgb(0x3E, 0x8A, 0x2B);  // 压在上面那两片 + 果梗
-
-    /// <summary>果实的重心。<see cref="Body"/> 收缩时朝它收，三圈才会同心。</summary>
-    private static readonly Point Heart = new(0.500, 0.628);
+    private static readonly Color Flesh     = Color.FromRgb(0xCF, 0xE3, 0x94);  // 果肉，青番茄偏黄的浅绿
+    private static readonly Color FleshDark = Color.FromRgb(0xA9, 0xC4, 0x70);  // 右下那弯暗面
+    private static readonly Color Juice     = Color.FromRgb(0x4E, 0x8E, 0x2A);  // 果汁，深绿
+    private static readonly Color JuiceDeep = Color.FromRgb(0x3A, 0x6E, 0x1E);  // 果汁的暗面
+    private static readonly Color Pith      = Color.FromRgb(0xF4, 0xF8, 0xE4);  // 中间那副白翅膀（胎座），籽也是它
+    private static readonly Color Sepal     = Color.FromRgb(0x24, 0x60, 0x1C);  // 萼片
+    private static readonly Color SepalLit  = Color.FromRgb(0x3E, 0x8A, 0x2B);  // 压在上面那两片 + 果梗
 
     public static RenderTargetBitmap Render(int size = 128)
     {
@@ -50,141 +50,125 @@ public static class TomatoIcon
             Point P(double x, double y) => new(x * size, y * size);
             void Fill(Color c, Geometry g) => ctx.DrawGeometry(new SolidColorBrush(c), null, g);
 
-            // ---- 剖面：皮 → 果肉壁，两圈同心
-            Fill(Skin, Body(P, 1.00, 0, 0));
-            Fill(Wall, Body(P, 0.93, 0, 0));
+            // ---- 果肉。⚠️ **没有果皮那一圈**（用户 2026-09-16 指出）：番茄本身就是果肉
+            //      组成的，切面上画一道深色边就成了西瓜。
+            //      暗的整块先画，亮的朝左上挪一点点盖上去，右下自然露出一弯暗面——
+            //      两个形状造出体积，不用任何渐变，也不用描边。
+            Fill(FleshDark, Body(P, 0.512, 0.572, 1.00));
+            Fill(Flesh, Body(P, 0.492, 0.556, 1.00));
 
-            // ---- 两个籽腔。⚠️ **不要画成四瓣的米字**：对称的四条亮芒在小尺寸下
-            //      会读成「闪光」而不是「切开的果子」。照片里就是左右两室，
-            //      中间那条浅色竖芯是**两室之间露出来的果肉壁**，不是另画的形状。
-            foreach (var mirror in new[] { false, true })
-            {
-                Fill(GelDeep, Locule(P, mirror, 0.008, 0.012));
-                Fill(Gel, Locule(P, mirror, 0, 0));
-            }
+            // ---- 果汁：中间一整块深绿，等下被白翅膀切成四腔。
+            //      ⚠️ 这里**不要去画四个独立的腔**：那样四块的边界得手工对齐，
+            //      翅膀一改就全歪。一块底 + 一个分隔件，边界永远自洽。
+            Fill(JuiceDeep, Body(P, 0.500, 0.564, 0.80));
+            Fill(Juice, Body(P, 0.488, 0.552, 0.785));
 
-            // ⚠️ **中轴不另画一道更亮的**：真果子的胎座跟果壁本来就是连着的同一块组织，
-            //    在中间压一条更白的竖条会读成「叶脉」，整个图标变成一片叶子。
-            //    两室之间露出来的果壁就是中轴，颜色相同才对。
+            // ---- 白翅膀：从果蒂下面一路向下的中轴，中途朝左右张开两片，
+            //      这是整个图标的主角（用户原话：「中间是白色像翅膀一样张开的结构」）
+            Fill(Pith, Wings(P));
 
-            // ---- 籽：贴着胎座排成一道弧，每室五粒
+            // ---- 籽：嵌在果汁里，贴着翅膀排
             foreach (var (x, y) in new[]
                      {
-                         (0.600, 0.428), (0.646, 0.500), (0.664, 0.586), (0.648, 0.670), (0.604, 0.744),
-                         (0.400, 0.428), (0.354, 0.500), (0.336, 0.586), (0.352, 0.670), (0.396, 0.744),
+                         (0.354, 0.370), (0.268, 0.400),                   // 左上腔
+                         (0.646, 0.370), (0.732, 0.400),                   // 右上腔
+                         (0.300, 0.648), (0.342, 0.726), (0.406, 0.784),   // 左下腔
+                         (0.700, 0.648), (0.658, 0.726), (0.594, 0.784),   // 右下腔
                      })
-                Fill(Seed, new EllipseGeometry(new Rect(
+                Fill(Pith, new EllipseGeometry(new Rect(
                     (x - 0.026) * size, (y - 0.020) * size, 0.052 * size, 0.040 * size)));
 
-            // ---- 萼片：几片小而尖的叶子从果蒂往外张，左右不完全对称才像真的。
-            //      ⚠️ **别放长**：伸到果子外沿那么长就成了一圈尖刺，读起来是爆炸不是叶子
-            var hub = P(0.500, 0.322);
-            foreach (var (tx, ty, w, bend) in new[]
+            // ---- 萼片和果梗：**跟旧图标一字不差**，只是换了个绿。
+            //      几片小而尖的叶子从果蒂往外张，左右不完全对称才像真的。
+            var hub = P(0.50, 0.250);
+            foreach (var (tx, ty, w) in new[]
                      {
-                         (0.316, 0.204, 0.056, -0.10),   // 最左，几乎平伸
-                         (0.378, 0.120, 0.052, -0.13),
-                         (0.500, 0.084, 0.048,  0.00),
-                         (0.622, 0.118, 0.052,  0.13),
-                         (0.684, 0.202, 0.056,  0.10),   // 最右
+                         (0.150, 0.248, 0.026),   // 最左，几乎平伸
+                         (0.252, 0.146, 0.024),
+                         (0.388, 0.108, 0.022),
+                         (0.618, 0.102, 0.022),
+                         (0.762, 0.150, 0.024),
+                         (0.858, 0.262, 0.026),   // 最右
                      })
-                Fill(Sepal, Leaf(hub, P(tx, ty), w * size, bend));
+                Fill(Sepal, Leaf(hub, P(tx, ty), w * size));
 
             // 中间两片压在上面，亮一号，叶子就有了层次
-            foreach (var (tx, ty, w, bend) in new[] { (0.416, 0.152, 0.058, -0.11), (0.588, 0.150, 0.058, 0.11) })
-                Fill(SepalLit, Leaf(hub, P(tx, ty), w * size, bend));
+            foreach (var (tx, ty, w) in new[] { (0.318, 0.186, 0.028), (0.692, 0.182, 0.028) })
+                Fill(SepalLit, Leaf(hub, P(tx, ty), w * size));
 
-            // ---- 果梗：短短一截，略向右倾
-            Fill(Sepal, Quad(P(0.478, 0.322), P(0.522, 0.322), P(0.538, 0.086), P(0.498, 0.080)));
-            Fill(SepalLit, Quad(P(0.498, 0.080), P(0.538, 0.086), P(0.544, 0.048), P(0.504, 0.042)));
+            // 果梗：短短一截，略向右倾
+            Fill(SepalLit, Quad(P(0.470, 0.268), P(0.524, 0.268), P(0.558, 0.078), P(0.512, 0.072)));
+            Fill(Sepal, Quad(P(0.512, 0.072), P(0.558, 0.078), P(0.564, 0.048), P(0.518, 0.042)));
         }
         return rtb;
     }
 
     /// <summary>
-    /// 切面的轮廓：圆而略扁，顶上因为果蒂有个浅浅的凹，越往下越收，底部一个圆钝的尖。
-    ///
-    /// <paramref name="k"/> 是朝 <see cref="Heart"/> 收缩的比例，皮 / 果肉 / 籽腔
-    /// 用的是**同一条曲线的三个尺寸**；<paramref name="dx"/> / <paramref name="dy"/>
-    /// 只给籽腔那一层做明暗错位用。
+    /// 果实轮廓：圆、略扁、下半更饱满，接近真果子那个「圆角方」的剪影。
+    /// **旧图标原样搬过来的曲线**，只多了一个 <paramref name="k"/>——
+    /// 果汁那一块用的是同一条曲线缩小一号，不是另画一个椭圆，这样谁改了剪影两层都跟着动。
     /// </summary>
-    private static Geometry Body(Func<double, double, Point> P, double k, double dx, double dy)
+    private static Geometry Body(Func<double, double, Point> P, double cx, double cy, double k)
     {
-        Point Q(double x, double y) => P(Heart.X + (x - Heart.X) * k + dx,
-                                         Heart.Y + (y - Heart.Y) * k + dy);
+        Point Q(double dx, double dy) => P(cx + dx * k, cy + dy * k);
 
         var geo = new StreamGeometry();
         using var g = geo.Open();
-        g.BeginFigure(Q(0.500, 0.300), true);
-        g.CubicBezierTo(Q(0.660, 0.238), Q(0.845, 0.300), Q(0.905, 0.455));
-        g.CubicBezierTo(Q(0.960, 0.600), Q(0.900, 0.810), Q(0.720, 0.905));
-        g.CubicBezierTo(Q(0.640, 0.948), Q(0.560, 0.958), Q(0.500, 0.958));
-        g.CubicBezierTo(Q(0.440, 0.958), Q(0.360, 0.948), Q(0.280, 0.905));
-        g.CubicBezierTo(Q(0.100, 0.810), Q(0.040, 0.600), Q(0.095, 0.455));
-        g.CubicBezierTo(Q(0.155, 0.300), Q(0.340, 0.238), Q(0.500, 0.300));
+        g.BeginFigure(Q(0, -0.300), true);
+        g.CubicBezierTo(Q(-0.290, -0.300), Q(-0.440, -0.140), Q(-0.440, 0.040));
+        g.CubicBezierTo(Q(-0.440, 0.250), Q(-0.265, 0.378), Q(0, 0.378));
+        g.CubicBezierTo(Q(0.265, 0.378), Q(0.440, 0.250), Q(0.440, 0.040));
+        g.CubicBezierTo(Q(0.440, -0.140), Q(0.290, -0.300), Q(0, -0.300));
         g.EndFigure(true);
         return geo;
     }
 
     /// <summary>
-    /// 一个籽腔：外缘顺着果壁鼓出去，内缘贴着中轴微微内凹，上下收成钝尖。
-    /// <paramref name="mirror"/> 把它翻到另一边——**一份形状画两室**，
-    /// 左右各写一遍迟早会调歪一边。
-    /// </summary>
-    private static Geometry Locule(Func<double, double, Point> P, bool mirror, double dx, double dy)
-    {
-        Point Q(double x, double y) => P((mirror ? 1 - x : x) + (mirror ? -dx : dx), y + dy);
-
-        var geo = new StreamGeometry();
-        using var g = geo.Open();
-        g.BeginFigure(Q(0.548, 0.306), true);
-        g.CubicBezierTo(Q(0.706, 0.340), Q(0.822, 0.458), Q(0.822, 0.606));
-        g.CubicBezierTo(Q(0.818, 0.746), Q(0.700, 0.848), Q(0.572, 0.858));
-        g.CubicBezierTo(Q(0.594, 0.750), Q(0.590, 0.430), Q(0.548, 0.306));
-        g.EndFigure(true);
-        return geo;
-    }
-
-    /// <summary>两头尖、中间鼓的梭形：中轴和隔膜都是它，只是方向不同。</summary>
-    private static Geometry Spindle(Point a, Point b, double width)
-    {
-        var dx = b.X - a.X;
-        var dy = b.Y - a.Y;
-        var len = Math.Max(1e-6, Math.Sqrt(dx * dx + dy * dy));
-        var nx = -dy / len * width;
-        var ny = dx / len * width;
-        var mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
-
-        var geo = new StreamGeometry();
-        using var g = geo.Open();
-        g.BeginFigure(a, true);
-        g.QuadraticBezierTo(new Point(mid.X + nx, mid.Y + ny), b);
-        g.QuadraticBezierTo(new Point(mid.X - nx, mid.Y - ny), a);
-        g.EndFigure(true);
-        return geo;
-    }
-
-    /// <summary>
-    /// 一片萼：从果蒂往尖端收的三角，腰部略鼓。
+    /// 中间那副白翅膀：一条中轴从果蒂下面一直到底，中途朝左右各张开一片，
+    /// 于是果汁被分成上下左右四腔。
     ///
-    /// <paramref name="bend"/> 把腰部整体推向一侧，叶子就**弯**了。⚠️ 这个参数不是
-    /// 装饰：一圈笔直的尖三角从一个点射出去，读起来是**爆炸**不是叶子——弯一下才像
-    /// 长出来的东西。
+    /// ⚠️ **翅尖停在果汁的边上就够了**（x 到 0.185 / 0.815，正好压在果汁的边界上）：再往外扎进浅色果肉里，
+    /// 白尖对着浅底成了两根长刺，整个图标读成「星形闪光」而不是切开的果子。
+    /// 白色只在深色上出现，形状才立得住。
+    ///
+    /// ⚠️ **翅膀要向上兜**，不能左右拉平：拉平的那版四条白芒等长等角，就是个米字。
+    ///
+    /// ⚠️ 左右严格对称，中轴不歪：这是唯一一处**对称比生动重要**的地方——歪了看着
+    /// 不像切开的果子，像被咬了一口。
     /// </summary>
-    private static Geometry Leaf(Point hub, Point tip, double halfWidth, double bend = 0)
+    private static Geometry Wings(Func<double, double, Point> P)
+    {
+        var geo = new StreamGeometry();
+        using var g = geo.Open();
+        g.BeginFigure(P(0.500, 0.262), true);
+        // 左半边，从上往下：中轴 → 那片向上兜起来的翅膀（上缘出去、下缘回来）→ 中轴到底
+        g.CubicBezierTo(P(0.478, 0.312), P(0.470, 0.382), P(0.464, 0.462));
+        g.CubicBezierTo(P(0.400, 0.416), P(0.276, 0.404), P(0.185, 0.468));   // 翅膀上缘，兜上去再到翅尖
+        g.CubicBezierTo(P(0.286, 0.502), P(0.398, 0.546), P(0.458, 0.576));   // 翅膀下缘，收回中轴
+        g.CubicBezierTo(P(0.466, 0.664), P(0.476, 0.782), P(0.500, 0.884));   // 中轴一路到底
+        // 右半边，从下往上（跟左边镜像）
+        g.CubicBezierTo(P(0.524, 0.782), P(0.534, 0.664), P(0.542, 0.576));
+        g.CubicBezierTo(P(0.602, 0.546), P(0.714, 0.502), P(0.815, 0.468));
+        g.CubicBezierTo(P(0.724, 0.404), P(0.600, 0.416), P(0.536, 0.462));
+        g.CubicBezierTo(P(0.530, 0.382), P(0.522, 0.312), P(0.500, 0.262));
+        g.EndFigure(true);
+        return geo;
+    }
+
+    /// <summary>一片萼：从果蒂往尖端收的细长三角，腰部略鼓。**旧图标原样搬过来**。</summary>
+    private static Geometry Leaf(Point hub, Point tip, double halfWidth)
     {
         var dx = tip.X - hub.X;
         var dy = tip.Y - hub.Y;
         var len = Math.Max(1e-6, Math.Sqrt(dx * dx + dy * dy));
         var nx = -dy / len * halfWidth;
         var ny = dx / len * halfWidth;
-        var bx = -dy / len * bend * len;
-        var by = dx / len * bend * len;
 
         var geo = new StreamGeometry();
         using var g = geo.Open();
         g.BeginFigure(new Point(hub.X + nx, hub.Y + ny), true);
-        g.QuadraticBezierTo(new Point(hub.X + dx * 0.55 + nx * 0.85 + bx, hub.Y + dy * 0.55 + ny * 0.85 + by), tip);
-        g.QuadraticBezierTo(new Point(hub.X + dx * 0.55 - nx * 0.85 + bx, hub.Y + dy * 0.55 - ny * 0.85 + by),
+        g.QuadraticBezierTo(new Point(hub.X + dx * 0.55 + nx * 0.85, hub.Y + dy * 0.55 + ny * 0.85), tip);
+        g.QuadraticBezierTo(new Point(hub.X + dx * 0.55 - nx * 0.85, hub.Y + dy * 0.55 - ny * 0.85),
                             new Point(hub.X - nx, hub.Y - ny));
         g.EndFigure(true);
         return geo;
