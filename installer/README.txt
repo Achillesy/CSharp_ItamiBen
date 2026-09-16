@@ -1,5 +1,5 @@
-ItamiBen — 一袋米要我洗嘞
-痛みを感じろ — feel the pain
+ItamiBen — 痛みを知らせる
+痛みを知らせる — it lets you know it hurts
 
 
 What it is

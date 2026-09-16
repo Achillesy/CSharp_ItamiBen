@@ -47,7 +47,7 @@ cp AGENT.md "$STAGE/dmg/"
 #    用户可见的行为变了，三份都要跟着改——v3 漏过一次。
 cat > "$STAGE/dmg/Read Me.txt" <<NOTE
 ItamiBen $VERSION for macOS ($ARCH)
-痛みを感じろ — feel the pain
+痛みを知らせる — it lets you know it hurts
 
 
 Install

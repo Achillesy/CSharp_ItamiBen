@@ -31,7 +31,10 @@ public static class Confirm
 
         var dlg = new Window
         {
-            Title = "一袋米要我洗嘞",
+            // ⚠️ 跟主窗口同一个常量，不再各写一份（AppData.WindowTitle）。
+            //    Windows 上 FindWindow 可能因此找到这扇对话框而不是主窗口——无所谓：
+            //    它是模态、压在主窗口上，把它提到前台等于把整个程序提到前台。
+            Title = AppData.WindowTitle,
             Width = 320,
             SizeToContent = SizeToContent.Height,
             CanResize = false,

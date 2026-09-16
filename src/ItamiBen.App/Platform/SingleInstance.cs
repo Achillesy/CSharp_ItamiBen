@@ -58,15 +58,6 @@ public static class SingleInstance
     private const string LockFile = "singleton.lock";
 
     /// <summary>
-    /// Windows 上按窗口标题找已有的那扇窗。
-    ///
-    /// ⚠️ **这个字符串必须跟 `MainWindow.axaml` 的 `Title` 逐字相同**，改一边不报错，
-    /// 只会让「提到前台」安静失效（症状：第二次双击图标什么也没发生）。
-    /// 界面文字用英文，但窗口标题是中文的产品名，所以这里也是中文。
-    /// </summary>
-    private const string WindowTitle = "一袋米要我洗嘞";
-
-    /// <summary>
     /// 留着引用，**防止被 GC 回收**——FileStream 的终结器会关掉句柄，句柄一关锁就没了，
     /// 后来的实例会误以为自己是第一个。进程退出时操作系统自己收，不需要手工 Dispose。
     /// </summary>
@@ -115,7 +106,9 @@ public static class SingleInstance
     [SupportedOSPlatform("windows")]
     private static void ActivateExistingWindow()
     {
-        var hwnd = FindWindow(null, WindowTitle);
+        // ⚠️ 标题**只有 AppData 一处定义**，XAML 那边用 x:Static 引的同一个常量——
+        //    原来两处各写一份、靠人记得同步，改一边不报错只会让这里安静地找不着窗口
+        var hwnd = FindWindow(null, AppData.WindowTitle);
         if (hwnd == IntPtr.Zero) return;   // 找不到就算了，安静退出
 
         const int SW_RESTORE = 9;

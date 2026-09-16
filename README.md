@@ -1,6 +1,6 @@
-# ItamiBen — 一袋米要我洗嘞
+# ItamiBen — 痛みを知らせる
 
-> **痛みを感じろ** — feel the pain.
+> **痛みを知らせる** — it lets you know it hurts.
 
 A pomodoro clock with teeth. Pick what you're allowed to work on, commit to a stretch of
 focus, and it watches the foreground window for the whole run. Wander off and those minutes
@@ -246,10 +246,11 @@ installer/            Inno Setup script for the Windows installer
 
 ## Name
 
-**Itami** (痛み) is pain. **Ben** is Big Ben. A clock that is punctual, loud, and impossible
-to negotiate with — and that lets you feel the time you spent.
+**Itami** (痛み) is pain. **Ben** is Big Ben — punctual, loud, impossible to negotiate with.
 
-That is the whole product pitch, so the name is the pitch.
+痛みを知らせる: *to make the pain known*. Not to inflict it — the hours were already gone.
+Just to stop letting them disappear quietly. That is the whole product pitch, so the name
+is the pitch.
 
 ## License
 

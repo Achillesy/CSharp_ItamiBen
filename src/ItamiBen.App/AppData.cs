@@ -39,6 +39,16 @@ public static class AppData
     /// 才入账，库一清这条链就断（DECISIONS F4）。
     /// </summary>
     /// <summary>
+    /// 窗口标题。**只有这一处定义**（2026-09-16）。
+    ///
+    /// ⚠️ 它是**承重**的：Windows 上第二个实例靠 `FindWindow` 按这个标题把已有窗口提到
+    /// 前台（<see cref="SingleInstance"/>）。原来 XAML 里一份、C# 里一份，
+    /// 靠人记得同步——改一边不报错，只会让「第二次双击图标」**静默地什么也不发生**。
+    /// 现在 XAML 用 `{x:Static}` 引这里，物理上不可能对不上。
+    /// </summary>
+    public const string WindowTitle = "ItamiBen — 痛みを知らせる";
+
+    /// <summary>
     /// 把随程序发的 `AGENT.md` 刷进运行时目录，**跟数据库放在同一个文件夹**。
     ///
     /// ⚠️ 配置住在库里、由智能体改（DECISIONS I15），而智能体得先找得到说明。
