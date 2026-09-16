@@ -1,5 +1,5 @@
 ItamiBen — 一袋米要我洗嘞
-Too dumb to make excuses for you
+痛みを感じろ — feel the pain
 
 
 What it is

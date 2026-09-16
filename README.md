@@ -1,6 +1,6 @@
 # ItamiBen — 一袋米要我洗嘞
 
-> **Too dumb to make excuses for you.**
+> **痛みを感じろ** — feel the pain.
 
 A pomodoro clock with teeth. Pick what you're allowed to work on, commit to a stretch of
 focus, and it watches the foreground window for the whole run. Wander off and those minutes
@@ -246,10 +246,10 @@ installer/            Inno Setup script for the Windows installer
 
 ## Name
 
-「一袋米要我洗嘞」is a Chinese mondegreen — a deliberate mishearing of 痛みを感じろ — and so
-is 大笨钟, the everyday Chinese nickname for Big Ben (literally "big **dumb** clock"). Big
-Ben is punctual, loud, and impossible to negotiate with. That is the whole product pitch,
-so the name is the pitch.
+**Itami** (痛み) is pain. **Ben** is Big Ben. A clock that is punctual, loud, and impossible
+to negotiate with — and that lets you feel the time you spent.
+
+That is the whole product pitch, so the name is the pitch.
 
 ## License
 
