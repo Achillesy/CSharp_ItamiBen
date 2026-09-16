@@ -99,6 +99,10 @@ internal static class Config
 
             // 外观那两个键归设置表——它们是「怎么显示」，不是「判定什么」
             var extra = new Dictionary<string, string>();
+            // ⚠️ **老文件有命令就要把闹钟指过去**：老的 executeCommand 是隐式的
+            //    「就跑第 0 条」，库里要显式指名字。漏了这一步的症状是
+            //    「以前闹钟能关机，升级完拨开开关却什么都不发生」——而且不报错。
+            if (commands.Count > 0) extra["alarmCommand"] = $"\"{commands[0].Name}\"";
             if (layout is not null) extra["layout"] = $"\"{layout}\"";
             if (opacity is { } p) extra["opacityPercent"] = p.ToString(System.Globalization.CultureInfo.InvariantCulture);
             if (extra.Count > 0) store.PutSettings(extra);

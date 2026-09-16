@@ -137,7 +137,6 @@ public partial class MainWindow : Window
     /// ——v3 是放在 Settings 里、靠 `Load` 强制复位，那要靠人记得。
     /// </summary>
     private bool _commandArmed;
-    private MenuItem? _closeItem;
 
     /// <summary>
     /// 窗口最后一次**真实**的位置。
@@ -417,7 +416,6 @@ public partial class MainWindow : Window
         this.FindControl<Button>("SettingsBtn")!.Content = ChromeIcons.Gear(palette);
 
         if (_pinItem is not null) _pinItem.IsChecked = _settings.Pinned;
-        if (_closeItem is not null) _closeItem.Icon = ChromeIcons.Close(palette);
     }
 
     /// <summary>当前选中的目标；一个都没选（rules.json 是空的）就是 null。</summary>
@@ -534,10 +532,12 @@ public partial class MainWindow : Window
 
         // 没有标题栏就没有系统菜单，这是唯一能关窗口的地方。只有两项，不做成一整套窗口菜单。
         // 走 Close() 而不是直接退进程——跟点 × 完全同一条路径（会走 OnExit 落盘）。
-        var close = new MenuItem { Header = "Close window", Icon = ChromeIcons.Close() };
+        // ⚠️ **这一项不挂图标**（2026-09-16 用户指出）：图标和勾选标记共用菜单左边那一列，
+        //    而图标比勾号宽，整列被它撑开——另外三项的勾号前面于是多出一截空白。
+        //    四项都不带图标，列宽就只由勾号决定，对齐了。
+        var close = new MenuItem { Header = "Close window" };
         close.Click += (_, _) => Close();
 
-        _closeItem = close;
         _pinItem = new MenuItem { Header = "Keep on top", ToggleType = MenuItemToggleType.CheckBox };
         _pinItem.Click += (_, _) => SetPinned(!_settings.Pinned);
 

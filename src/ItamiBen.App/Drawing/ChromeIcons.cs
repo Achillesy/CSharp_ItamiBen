@@ -182,28 +182,6 @@ public static class ChromeIcons
         return canvas;
     }
 
-    /// <summary>
-    /// 关闭（钟面右键菜单里那一项）。两笔交叉的斜线。
-    ///
-    /// **不加光晕描边**，跟上面两个不一样：它只出现在右键菜单里，菜单自己有不透明背景，
-    /// 不存在直接叠在桌面壁纸上的问题。
-    ///
-    /// ⚠️ 这里的 X 跟 <see cref="Pin"/> 那条「刻意不用 X」是两回事：那条说的是别拿 X
-    /// 表示「图钉关着」（会读成「禁用置顶」，正好相反）；这里 X 就是它字面的意思。
-    /// </summary>
-    public static Control Close(DialPalette? palette = null)
-    {
-        var (ink, _) = Pens(palette);
-        var canvas = new Canvas { Width = Box, Height = Box };
-        canvas.Children.Add(new Path
-        {
-            Data = Geometry.Parse("M 4,4 L 12,12 M 12,4 L 4,12"),
-            Stroke = ink,
-            StrokeThickness = 1.5,
-            StrokeLineCap = PenLineCap.Round,
-        });
-        return canvas;
-    }
 
     /// <summary>光晕垫底 + 正常描边：光晕更粗垫在下面，正常粗细的墨色叠在正上方。</summary>
     private static void AddStroke(Canvas canvas, string data, double thickness, IBrush ink, IBrush halo)
