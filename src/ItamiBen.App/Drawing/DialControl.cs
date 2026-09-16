@@ -34,6 +34,13 @@ public class DialControl : Control
     private const double RAlarmsDot = 1.0, RAlarmsDotRadius = 0.05, RAlarmsDotStroke = 0.022;
 
     /// <summary>
+    /// 点中小红圈的额外容差，**固定像素、不跟着表盘缩放**：红圈在常见尺寸下画出来
+    /// 半径只有 7px 左右，纯几何精确点太挑手感。这圈容差是隐形的——不改画出来的样子，
+    /// 只放宽「算不算点中」。
+    /// </summary>
+    private const double AlarmsDotHitPaddingPx = 6.0;
+
+    /// <summary>
     /// 同一分钟不止一条时，圈**里面**再画一个**实心点**。
     /// ⚠️ 半径 0.020 是量出来的：外圈内缘只在 ≈5.5px 处，想在里面塞「环 + 可见间隙」
     /// 两者各只能分到 1px 出头，非 Retina 屏上是一团糊。实心点离外圈内缘还有 2.7px 空白。
@@ -51,6 +58,15 @@ public class DialControl : Control
         (0.50, 0.68),   // 第 0~59 分钟
         (0.31, 0.46),   // 第 60~119 分钟
     ];
+
+    /// <summary>
+    /// 桶板的最矮高度（占色带径向宽度的比例）。**一半**。
+    ///
+    /// 真实尺寸下一格的径向跨度只有约 25px，太矮的红短板会看不见——但
+    /// ⚠️ **绝不能取 0**：「没记录」画的就是「什么都不画」，零高度会跟它撞上，
+    /// 而这正是最不能混的一对：一个不怪你，一个全怪你。
+    /// </summary>
+    private const double StaveFloor = 0.5;
 
     public static readonly StyledProperty<DialPalette> PaletteProperty =
         AvaloniaProperty.Register<DialControl, DialPalette>(nameof(Palette), DialPalette.Light);
@@ -125,6 +141,32 @@ public class DialControl : Control
         // 给投影留余量，否则会被控件边界裁掉
         var rFace = box / 2 / (RBezelOut + 0.10);
         return (new Point(Bounds.Width / 2, Bounds.Height / 2 - rFace * 0.03), rFace);
+    }
+
+    /// <summary>
+    /// 这一下按下有没有落在小红圈上。
+    ///
+    /// ⚠️ **不做成 Button**：Button 内部会把 `PointerPressed` 标成已处理，挂在钟面上的
+    /// 普通订阅就收不到了（拖窗口正是那么挂的）。改成纯几何判断，跟拖拽**共用同一次
+    /// 按下事件**，命中就分岔、不命中照旧拖。
+    ///
+    /// ⚠️ **必须在按下那一刻判，不能等松开**：`BeginMoveDrag` 只能在按下时调用，
+    /// 等「松开算不算点击」那套判完，拖拽的时机早就过了。
+    ///
+    /// ⚠️ 没画红圈时恒为 false——**没画出来的东西不该点得中**。
+    /// </summary>
+    public bool HitTestAlarmsDot(Point point)
+    {
+        if (AlarmsDotMinutes is not { } minutes) return false;
+        if (FaceGeometry() is not { } geometry) return false;
+        var (c, rFace) = geometry;
+
+        var at = At(c, rFace * RAlarmsDot, minutes % 720 / 2.0);   // 跟 DrawAlarmsDot 同一套公式
+        var hit = rFace * RAlarmsDotRadius + AlarmsDotHitPaddingPx;
+
+        var dx = point.X - at.X;
+        var dy = point.Y - at.Y;
+        return dx * dx + dy * dy <= hit * hit;
     }
 
     public override void Render(DrawingContext ctx)
@@ -244,30 +286,38 @@ public class DialControl : Control
         // 万一将来起点不再对齐，画出来会是错位而不是**安静地错**
         var m0 = start.Minute + start.Second / 60.0;
 
-        // ── 过去：一分钟一格，绿在里、红在外、剩下留白
+        // ── 过去：一分钟一格。**颜色和高度编码同一个量**（DESIGN §4.4）
         //
-        // 「按秒数高度」是连续编码，不分档（DESIGN §4.4）：一格里 focused / offTask /
-        // 没采到三段的高度就是它们的秒数。三种状态在一格里同时读得出来，C7 的两个计数
-        // 因此在视觉上也没有被合并掉。
-        //
-        // ⚠️ 不给最小高度：一格里只有一两秒时那道色确实看不见——**那本来就只有一两秒**，
-        // 给它撑一个假高度等于谎报。
+        // 「这一格该读成什么」由 `cell.Tier` 决定（判定层，规则只写一份），这里只管
+        // 「某种读法画成什么样」。颜色走绿→黄→红的三段色阶，高度跟着一起变——
+        // 一个给正常视觉，一个给所有人（红绿是最常见的色盲混淆对）。
         foreach (var cell in Cells)
         {
-            if (cell.SampledSeconds == 0) continue;
-
             var lane = Math.Min(cell.Index / 60, Lanes.Length - 1);
             var (rIn, rOut) = Lanes[lane];
             var d0 = (m0 + cell.Index) * 6;
-            var band = rOut - rIn;
+            var d1 = d0 + 6;
 
-            var greenTop = rIn + band * (cell.FocusedSeconds / 60.0);
-            var redTop = greenTop + band * (cell.OffTaskSeconds / 60.0);
+            switch (cell.Tier)
+            {
+                case CellTier.FocusFull: Stave(ctx, c, R, rIn, rOut, d0, d1, p.Focus, 1.00); break;
+                case CellTier.FocusMid: Stave(ctx, c, R, rIn, rOut, d0, d1, p.Ramp(0.5), 0.80); break;
+                case CellTier.FocusLow: Stave(ctx, c, R, rIn, rOut, d0, d1, p.Ramp(0.8), 0.60); break;
+                case CellTier.OffTask: Stave(ctx, c, R, rIn, rOut, d0, d1, p.OffTask, 0.50); break;
 
-            if (cell.FocusedSeconds > 0)
-                ctx.DrawGeometry(new SolidColorBrush(p.Focus), null, Annulus(c, R(rIn), R(greenTop), d0, d0 + 6));
-            if (cell.OffTaskSeconds > 0)
-                ctx.DrawGeometry(new SolidColorBrush(p.OffTask), null, Annulus(c, R(greenTop), R(redTop), d0, d0 + 6));
+                // 人不在：**空心虚线框，满高**。一个没有填充的形状，读起来正是
+                // 「这段时间存在，但不属于任何一边」——跟红格（全怪你）和什么都不画
+                // （没记录）都区分得开
+                case CellTier.Away:
+                    ctx.DrawGeometry(null,
+                        new Pen(new SolidColorBrush(p.Absent), R(0.012))
+                        { DashStyle = new DashStyle([2, 2], 0) },
+                        Annulus(c, R(rIn), R(rOut), d0 + 0.4, d1 - 0.4));
+                    break;
+
+                    // CellTier.NotDrawn：什么都不画。落到这里的只有漏拍留下的洞，
+                    // 它不配占任何视觉面积
+            }
         }
 
         // ── 未来：灰色承诺弧 → 淡蓝休息块 → 空白余量
@@ -320,6 +370,19 @@ public class DialControl : Control
 
         // 余量那段什么都不画——DESIGN §5：「淡蓝块尾 → 环终点 = 你还剩多少余量」，
         // 它是被前面三段挤剩下的那一截，**不是一个要画的东西**。
+    }
+
+    /// <summary>
+    /// 一块桶板：**从内缘往外长**，高度是 <paramref name="height"/>。
+    /// 内圈保持一个干净的圆，参差不齐那一边冲着刻度。
+    /// </summary>
+    private void Stave(DrawingContext ctx, Point c, Func<double, double> R,
+                       double rIn, double rOut, double d0, double d1, Color tint, double height)
+    {
+        var top = rIn + (rOut - rIn) * Math.Max(StaveFloor, height);
+        ctx.DrawGeometry(new SolidColorBrush(tint),
+            new Pen(new SolidColorBrush(A(Palette.Face, 0xCC)), R(0.005)),
+            Annulus(c, R(rIn), R(top), d0, d1));
     }
 
     private void DrawTicks(DrawingContext ctx, Point c, Func<double, double> R, double rFace)

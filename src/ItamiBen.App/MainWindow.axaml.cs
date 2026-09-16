@@ -34,6 +34,22 @@ public partial class MainWindow : Window
     /// </summary>
     private const int AlarmsListRings = 2;
 
+    /// <summary>
+    /// 三声通知各响 **2 遍**（v3 的 E11）。比闹钟的 4 遍少，因为**它们各自落在一个
+    /// 留在屏幕上的状态上**（环满了、淡蓝块、格子不再长），漏听还能看回来；
+    /// 闹钟响完什么都不留，所以给 4 遍。
+    /// </summary>
+    private const int NotifyRings = 2;
+
+    /// <summary>
+    /// 键鼠空闲到这个秒数就提醒一次——**还没到「离开」的门槛**（180 秒），
+    /// 人只是飘了。这一声是把你捞回来，不是事后报账。
+    /// </summary>
+    private const int IdleNudgeSeconds = 60;
+
+    /// <summary>上一拍这一轮处在哪个阶段，用来抓「刚刚达成」「刚刚休息完」两个瞬间。</summary>
+    private RoundPhase? _lastPhase;
+
     private readonly Sampler _sampler = new();
     /// <summary>
     /// 目标列表。**单选**——一轮只盯一个目标（DECISIONS C12 因此变成天然成立）。
@@ -151,6 +167,12 @@ public partial class MainWindow : Window
     /// <summary>本轮是否已落盘。**落盘是一个动作，不是一条政策**（DECISIONS C5）。</summary>
     private bool _written;
 
+    /// <summary>关窗口已经问过并得到许可。</summary>
+    private bool _closeApproved;
+
+    /// <summary>正在弹 Give up 的确认框，防止连点弹出两个。</summary>
+    private bool _asking;
+
     private int _focusMinutes = 25;
 
     public MainWindow()
@@ -215,7 +237,7 @@ public partial class MainWindow : Window
         _sampler.Start();
 
         // ⚠️ 关窗和 Cmd+Q 是两条不同的路，但**执行的是同一个写入动作**（C5）
-        Closing += (_, _) => OnExit();
+        Closing += OnClosing;
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.ShutdownRequested += (_, _) => OnExit();
 
@@ -398,6 +420,9 @@ public partial class MainWindow : Window
 
     internal bool CommandArmed => _commandArmed;
 
+    /// <summary>到点会跑的那一条；没配就是 null。设置窗口要显示它（v3 的 E14）。</summary>
+    internal string? CommandForThisOs => _rules.CommandForThisOs();
+
     /// <summary>
     /// 窗口尺寸、不透明度、置顶、拖动、右键菜单——**无边框那一套**。
     ///
@@ -448,6 +473,16 @@ public partial class MainWindow : Window
         dial.PointerPressed += (_, e) =>
         {
             if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+
+            // 先问小红圈：这一下精确落在它上面就当「瞄一眼下一条」处理，不再往下走拖窗口。
+            // ⚠️ **纯读**：不出声、不推进水位线——跟到点真触发那条路完全隔离
+            if (dial.HitTestAlarmsDot(e.GetPosition(dial)))
+            {
+                PeekNextAlarm();
+                e.Handled = true;
+                return;
+            }
+
             BeginMoveDrag(e);   // ⚠️ 只能在**按下那一刻**调，等「松开算不算点击」判完就来不及了
         };
 
@@ -575,6 +610,20 @@ public partial class MainWindow : Window
         //    就会**整个休息期间一直闪**。没有正在跑的一轮同理。
         if (_round is not { Phase: RoundPhase.Focusing }) _drifting = false;
 
+        // 阶段刚变过去的那一拍响一声。⚠️ 抓的是**变化**不是状态，所以要记上一拍
+        if (_round is { } r0 && _lastPhase != r0.Phase)
+        {
+            if (_lastPhase == RoundPhase.Focusing && r0.Phase == RoundPhase.Resting
+                && _settings.FocusDoneEnabled)
+                Sound.Repeat(_settings.FocusDoneSound, NotifyRings);
+
+            if (_lastPhase == RoundPhase.Resting && r0.Ending == EndReason.Completed
+                && _settings.RestDoneEnabled)
+                Sound.Repeat(_settings.RestDoneSound, NotifyRings);
+
+            _lastPhase = r0.Phase;
+        }
+
         // ⚠️ 整分钟那一串排在闹钟**之前**（v3 的 J10）：两边都要出声时，
         //    Windows 的 winmm 是单通道、后响的会掐断先响的，而闹钟响完什么都不留、
         //    清单响完还留着一分钟的提示条 —— 所以让闹钟赢。
@@ -602,10 +651,13 @@ public partial class MainWindow : Window
             _inverted = _drifting && !_inverted;
             ApplyPalette();
 
-            // ⚠️ 这里是**每秒**判断，跟提示条那条（按分钟收）不是一回事：这个标签是秒级的，
-            //    挂在分钟节拍上会一直糊到下一个整分钟
+            // ⚠️ 这两样都按**秒**收，不能挂到分钟节拍上——挂上去会一直糊到下一个整分钟。
+            //    v3 的提示条就是按分钟收的，它自己的注释里记着「点红圈瞄一眼那 3 秒
+            //    其实也有这个毛病，**还没修**」——这里一并修掉。
+            var nowLocal = DateTime.Now;
             var scrub = this.FindControl<TextBlock>("AlarmText")!;
-            if (scrub.IsVisible && DateTime.Now >= _alarmQuietUntil) scrub.IsVisible = false;
+            if (scrub.IsVisible && nowLocal >= _alarmQuietUntil) scrub.IsVisible = false;
+            if (_bannerUntil is { } until && nowLocal >= until) ShowBanner(null);
         }
 
         CheckAlarm();
@@ -626,7 +678,11 @@ public partial class MainWindow : Window
 
     private void OnMinute(DateTime now)
     {
-        if (_bannerUntil is { } until && now >= until) ShowBanner(null);
+        // 飘了就捞一下。⚠️ 只在**专注阶段**、而且只在「还没到离开门槛」那一段——
+        //    过了门槛就是真离开了，那一段既不计入也不算跑偏，催也没用
+        if (_round is { Phase: RoundPhase.Focusing } && _settings.IdleEnabled
+            && _last.Idle >= IdleNudgeSeconds && _last.Idle < AwayMap.ThresholdSeconds)
+            Sound.Repeat(_settings.IdleSound, NotifyRings);
 
         _alarms = LoadAlarms();
         CheckAlarmsList(now);
@@ -681,6 +737,20 @@ public partial class MainWindow : Window
         //    提示条 + 日志」的主链路**无条件每分钟都走**，不受它控制。
         //    关掉它只是消音，不是让提醒消失
         if (_settings.AlarmsEnabled) Sound.Repeat(_settings.AlarmsSound, AlarmsListRings);
+    }
+
+    /// <summary>
+    /// 点一下小红圈：把 12 小时内下一条**瞄一眼**，只留 3 秒。
+    ///
+    /// ⚠️ 停留时长跟到点真触发（一分钟）**分开**：那是提醒，这只是查看。
+    /// </summary>
+    private void PeekNextAlarm()
+    {
+        var next = AlarmsList.NextDue(_alarms, DateTime.Now);
+        if (next.Count == 0) return;
+
+        var extra = next.Count > 1 ? $"  +{next.Count - 1}" : "";
+        ShowBanner($"{next[0].At:HH:mm}{extra}", next[0].Text, DateTime.Now.AddSeconds(3));
     }
 
     private void RefreshAlarmsDot(DateTime now)
@@ -994,9 +1064,7 @@ public partial class MainWindow : Window
     {
         if (_round is { Ending: null })
         {
-            // Give up 是用户的选择，**不拦**（DECISIONS C8）
-            Settle(EndReason.GaveUp);
-            UpdateUi();
+            _ = GiveUpAsync();
             return;
         }
 
@@ -1006,10 +1074,55 @@ public partial class MainWindow : Window
         _written = false;
         _lastRebuiltMinute = -1;
         _lastAwaySpans = 0;
+        _lastPhase = RoundPhase.Focusing;
         _store?.BeginRound(_round.StartedAt, _round.FocusMinutes, _round.Goals);
         Log.Line($"round started: focus={_focusMinutes}min break={_round.BreakMinutes}min "
                + $"deadline=min{_round.DeadlineMinute} budget={_round.BudgetSeconds}s goal={goal}");
         UpdateUi();
+    }
+
+    /// <summary>
+    /// Give up 要问一句——它**作废整轮**。
+    ///
+    /// ⚠️ 问不等于拦（DECISIONS C8）：用户执意放弃是他的选择，这里只是确认他知道
+    /// 按下去会发生什么。**别把它变成劝阻。**
+    /// </summary>
+    private async Task GiveUpAsync()
+    {
+        if (_asking) return;
+        _asking = true;
+        try
+        {
+            if (!await Confirm.AskAsync(this, "The task isn't finished. Give up?")) return;
+            Settle(EndReason.GaveUp);
+            UpdateUi();
+        }
+        finally { _asking = false; }
+    }
+
+    /// <summary>
+    /// 专注途中关窗口 = 作废整轮，所以也要问一句。
+    ///
+    /// ⚠️ **必须先 `e.Cancel = true` 再去 await**：关闭事件不等异步，不拦下来窗口
+    /// 当场就没了，问了也白问。得到许可之后置标志再调一次 <see cref="Window.Close"/>。
+    /// </summary>
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_closeApproved || _round is not { Ending: null } || _asking)
+        {
+            OnExit();
+            return;
+        }
+
+        e.Cancel = true;
+        _asking = true;
+        try
+        {
+            if (!await Confirm.AskAsync(this, "The task isn't finished. Quit anyway?")) return;
+            _closeApproved = true;
+            Close();
+        }
+        finally { _asking = false; }
     }
 
     /// <summary>

@@ -47,6 +47,21 @@ public sealed class Settings
     /// </summary>
     [JsonPropertyName("tickEnabled")] public bool TickEnabled { get; set; }
 
+    /// <summary>专注达成时响一声。</summary>
+    [JsonPropertyName("focusDoneEnabled")] public bool FocusDoneEnabled { get; set; } = true;
+    [JsonPropertyName("focusDoneSound")] public string? FocusDoneSound { get; set; }
+
+    /// <summary>休息走完时响一声。</summary>
+    [JsonPropertyName("restDoneEnabled")] public bool RestDoneEnabled { get; set; } = true;
+    [JsonPropertyName("restDoneSound")] public string? RestDoneSound { get; set; }
+
+    /// <summary>
+    /// 键鼠空闲 60~180 秒时提醒一下——**还没到「离开」但人已经飘了**，
+    /// 这一声是把你捞回来，不是事后报账。
+    /// </summary>
+    [JsonPropertyName("idleEnabled")] public bool IdleEnabled { get; set; } = true;
+    [JsonPropertyName("idleSound")] public string? IdleSound { get; set; }
+
     /// <summary>
     /// **无条件滴答**：不看任何判据，一直响。那才是 force 的字面意思。
     /// 跟 <see cref="TickEnabled"/> 是两个开关：那个只在**跑偏**时响。
@@ -113,6 +128,9 @@ public sealed class Settings
         settings.AlarmsSound ??= Sound.PreferredOrFirst(
             "Ping", "Glass", "Purr", "Submarine",
             "Windows Notify", "chimes", "Alarm02");
+        settings.FocusDoneSound ??= Sound.PreferredOrFirst("Glass", "Hero", "Blow", "chimes", "notify");
+        settings.RestDoneSound ??= Sound.PreferredOrFirst("Submarine", "Purr", "Bottle", "chord", "tada");
+        settings.IdleSound ??= Sound.PreferredOrFirst("Tink", "Pop", "Morse", "ding", "Speech On");
 
         return settings;
     }

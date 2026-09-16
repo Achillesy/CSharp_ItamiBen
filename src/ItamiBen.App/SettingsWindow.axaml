@@ -53,10 +53,36 @@
       </StackPanel>
     </Border>
 
-    <Border Name="CardAlarm" Classes="card">
+    <Border Name="CardFocus" Classes="card">
       <StackPanel Spacing="12">
-        <TextBlock Classes="title" Text="Alarm" />
-        <ComboBox Name="AlarmSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="title" Text="Focus complete" />
+          <ToggleSwitch Name="FocusOn" Grid.Column="1" VerticalAlignment="Center"
+                        OnContent="On" OffContent="Off" />
+        </Grid>
+        <ComboBox Name="FocusSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+      </StackPanel>
+    </Border>
+
+    <Border Name="CardRest" Classes="card">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="title" Text="Break over" />
+          <ToggleSwitch Name="RestOn" Grid.Column="1" VerticalAlignment="Center"
+                        OnContent="On" OffContent="Off" />
+        </Grid>
+        <ComboBox Name="RestSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+      </StackPanel>
+    </Border>
+
+    <Border Name="CardIdle" Classes="card">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="title" Text="Idle Warning" />
+          <ToggleSwitch Name="IdleOn" Grid.Column="1" VerticalAlignment="Center"
+                        OnContent="On" OffContent="Off" />
+        </Grid>
+        <ComboBox Name="IdleSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
       </StackPanel>
     </Border>
 
@@ -71,12 +97,21 @@
       </StackPanel>
     </Border>
 
+    <!-- ⚠️ 这张卡照 v3：开关管「到点跑命令」，下面那个音色是**开关关着时闹钟响的那一声**。
+         两件事在同一张卡上，因为它们是「闹钟到点会发生什么」的两种结果，二选一。
+         开着时底下那行显示到点会跑的**那一条命令原文**——这个值多半是关机命令，
+         按下开关之前有权知道按的是什么。 -->
     <Border Name="CardCommand" Classes="card">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Classes="title" Text="Command" />
-        <ToggleSwitch Name="ExecuteOn" Grid.Column="1" VerticalAlignment="Center"
-                      OnContent="On" OffContent="Off" />
-      </Grid>
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="title" Text="Command" />
+          <ToggleSwitch Name="ExecuteOn" Grid.Column="1" VerticalAlignment="Center"
+                        OnContent="On" OffContent="Off" />
+        </Grid>
+        <ComboBox Name="AlarmSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
+        <TextBlock Name="CommandPreview" IsVisible="False" TextWrapping="Wrap"
+                   FontFamily="Consolas,Menlo,monospace" FontSize="12" Opacity="0.75" />
+      </StackPanel>
     </Border>
 
     <Button Name="OpenFolder" Content="Open config folder" Margin="0,4,0,0"

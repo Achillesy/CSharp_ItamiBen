@@ -83,6 +83,7 @@ public sealed class Round
     private readonly GoalRules _rules;
     private readonly int[] _focused = new int[RingMinutes];
     private readonly int[] _sampled = new int[RingMinutes];
+    private readonly int[] _away = new int[RingMinutes];
     private readonly Dictionary<string, int> _byGoal = new(StringComparer.Ordinal);
 
     /// <summary>已经记过的最后一个秒索引。**只进不退**，这就是「同一秒不会记两遍」的全部机制。</summary>
@@ -201,7 +202,7 @@ public sealed class Round
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, RingMinutes);
-        return new MinuteCell(index, _focused[index], _sampled[index]);
+        return new MinuteCell(index, _focused[index], _sampled[index], _away[index]);
     }
 
     /// <summary>整整 120 格，一格不少——环是一开始就整个存在的，不是长出来的。</summary>
@@ -210,7 +211,7 @@ public sealed class Round
         get
         {
             var cells = new MinuteCell[RingMinutes];
-            for (var i = 0; i < RingMinutes; i++) cells[i] = new MinuteCell(i, _focused[i], _sampled[i]);
+            for (var i = 0; i < RingMinutes; i++) cells[i] = new MinuteCell(i, _focused[i], _sampled[i], _away[i]);
             return cells;
         }
     }
@@ -245,9 +246,11 @@ public sealed class Round
             var j = Judgment.Judge(app, title, away, Goals, _rules);
             judged = j;
 
+            var cell = slot / 60;
+            if (j.Outcome == SecondOutcome.Away) _away[cell]++;
+
             if (j.Sampled)
             {
-                var cell = slot / 60;
                 _sampled[cell]++;
                 if (j.Focused)
                 {

@@ -39,23 +39,36 @@ public partial class SettingsWindow : Window
 
         var available = Sound.Available();
         _loading = true;
-        Fill("AlarmSound", available, _settings.AlarmSound);
+        Fill("FocusSound", available, _settings.FocusDoneSound);
+        Fill("RestSound", available, _settings.RestDoneSound);
+        Fill("IdleSound", available, _settings.IdleSound);
         Fill("AlarmsSound", available, _settings.AlarmsSound);
+        Fill("AlarmSound", available, _settings.AlarmSound);
         this.FindControl<Slider>("TickVol")!.Value = _settings.TickVolume;
         this.FindControl<ToggleSwitch>("ForceOn")!.IsChecked = _settings.ForceTicking;
+        this.FindControl<ToggleSwitch>("FocusOn")!.IsChecked = _settings.FocusDoneEnabled;
+        this.FindControl<ToggleSwitch>("RestOn")!.IsChecked = _settings.RestDoneEnabled;
+        this.FindControl<ToggleSwitch>("IdleOn")!.IsChecked = _settings.IdleEnabled;
         this.FindControl<ToggleSwitch>("AlarmsOn")!.IsChecked = _settings.AlarmsEnabled;
         this.FindControl<ToggleSwitch>("ExecuteOn")!.IsChecked = _owner?.CommandArmed ?? false;
         _loading = false;
 
-        Wire("AlarmSound", name => _settings.AlarmSound = name);
+        Wire("FocusSound", name => _settings.FocusDoneSound = name);
+        Wire("RestSound", name => _settings.RestDoneSound = name);
+        Wire("IdleSound", name => _settings.IdleSound = name);
         Wire("AlarmsSound", name => _settings.AlarmsSound = name);
+        Wire("AlarmSound", name => _settings.AlarmSound = name);
 
         Toggle("ForceOn", on => _owner?.SetForceTicking(on));
+        Toggle("FocusOn", on => _settings.FocusDoneEnabled = on);
+        Toggle("RestOn", on => _settings.RestDoneEnabled = on);
+        Toggle("IdleOn", on => _settings.IdleEnabled = on);
         Toggle("AlarmsOn", on => _settings.AlarmsEnabled = on);
 
         // ⚠️ 到点跑命令**仍然不持久化**（DECISIONS E8）：这里改的是 MainWindow 上那个
         //    内存字段，重启之后一律是关的。设置窗口改不了这一点，也不该能改
-        Toggle("ExecuteOn", on => _owner?.SetCommandArmed(on));
+        Toggle("ExecuteOn", on => { _owner?.SetCommandArmed(on); ShowCommandPreview(); });
+        ShowCommandPreview();
 
         // ⚠️ 音量改了要**当场试听**：合成是按音量烘焙的，不听一下不知道调到哪儿了。
         //    Tick.Play 内部音量一变会重新合成并 MacAudio.Forget——不 Forget 的话拖滑块
@@ -74,6 +87,24 @@ public partial class SettingsWindow : Window
         Closed += (_, _) => _settings.Save();
     }
 
+    /// <summary>
+    /// 开关开着时把**到点会跑的那一条命令原文**显示出来。
+    ///
+    /// ⚠️ 这不是说明文字，是**值**本身——而且这个值多半是关机命令，
+    /// **按下开关之前有权知道按的是什么**（v3 的 E14）。没配好就直说没配好。
+    /// </summary>
+    private void ShowCommandPreview()
+    {
+        var preview = this.FindControl<TextBlock>("CommandPreview")!;
+        var on = _owner?.CommandArmed == true;
+        preview.IsVisible = on;
+        if (!on) return;
+
+        preview.Text = _owner?.CommandForThisOs is { Length: > 0 } cmd
+            ? cmd
+            : "(no executeCommand for this OS in rules.json)";
+    }
+
     /// <summary>卡片底色跟着主题走。取钟面调色板里的值，不新增色号。</summary>
     private void PaintCards()
     {
@@ -82,7 +113,7 @@ public partial class SettingsWindow : Window
         var back = new SolidColorBrush(palette.Card);
         var border = new SolidColorBrush(palette.Tick, 0.25);
 
-        foreach (var name in new[] { "CardTick", "CardAlarm", "CardAlarms", "CardCommand" })
+        foreach (var name in new[] { "CardTick", "CardFocus", "CardRest", "CardIdle", "CardAlarms", "CardCommand" })
         {
             var card = this.FindControl<Border>(name)!;
             card.Background = back;

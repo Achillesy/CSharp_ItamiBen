@@ -37,7 +37,7 @@ public class RoundTests
         Assert.Equal(2, r.FocusedSeconds);
         var cell = r.Cell(0);
         Assert.Equal(2, cell.SampledSeconds);
-        Assert.Equal(58, cell.UnsampledSeconds);
+        Assert.Equal(58, cell.UnrecordedSeconds);
     }
 
     [Fact]
@@ -84,14 +84,41 @@ public class RoundTests
     }
 
     [Fact]
-    public void 人不在的秒两个计数都不加但照样吃余量()
+    public void 人不在的秒不进采样计数但单独记着()
     {
         var r = NewRound();
         for (var i = 0; i < 60; i++) r.Observe(T0.AddSeconds(i), "loginwindow", "Login", away: true);
 
-        Assert.Equal(0, r.Cell(0).SampledSeconds);    // 不画红格：不冤枉人
+        var cell = r.Cell(0);
+        Assert.Equal(0, cell.SampledSeconds);         // 不画红格：不冤枉人
+        Assert.Equal(60, cell.AwaySeconds);           // 但**记着**——它要画成空心虚线框
+        Assert.Equal(0, cell.UnrecordedSeconds);      // 跟「一秒都没记」是两回事
+        Assert.Equal(CellTier.Away, cell.Tier);
         Assert.Equal(0, r.FocusedSeconds);
-        Assert.Equal(60, r.WastedSeconds);            // 但那一分钟确实从环上过去了
+        Assert.Equal(60, r.WastedSeconds);            // 那一分钟确实从环上过去了
+    }
+
+    [Theory]
+    [InlineData(60, CellTier.FocusFull)]
+    [InlineData(41, CellTier.FocusFull)]
+    [InlineData(40, CellTier.FocusMid)]
+    [InlineData(21, CellTier.FocusMid)]
+    [InlineData(20, CellTier.FocusLow)]
+    [InlineData(1, CellTier.FocusLow)]
+    public void 有专注就按秒数分三档(int focused, CellTier expected)
+        => Assert.Equal(expected, new MinuteCell(0, focused, 60, 0).Tier);
+
+    [Fact]
+    public void 一秒专注都没有时取最大的那一类平局倒向更靠后的档位()
+    {
+        // ⚠️ 是 argmax 不是「过半数」：三类混在一起可能谁都不过半，
+        //    按阈值判会默认落进红色——那样「29 秒离开 + 28 秒跑偏」会被整格判成红的，
+        //    而**把离开画成跑偏是冤枉人**
+        Assert.Equal(CellTier.Away, new MinuteCell(0, 0, 28, 29).Tier);
+        Assert.Equal(CellTier.OffTask, new MinuteCell(0, 0, 30, 29).Tier);
+        Assert.Equal(CellTier.OffTask, new MinuteCell(0, 0, 29, 29).Tier);   // 平局倒向红
+        Assert.Equal(CellTier.NotDrawn, new MinuteCell(0, 0, 0, 0).Tier);    // 整格没记
+        Assert.Equal(CellTier.NotDrawn, new MinuteCell(0, 0, 10, 10).Tier);  // 没记的那 40 秒最多
     }
 
     // ── 格子 ─────────────────────────────────────────────────────────────

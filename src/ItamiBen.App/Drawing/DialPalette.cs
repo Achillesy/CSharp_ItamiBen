@@ -11,7 +11,7 @@ namespace ItamiBen.App;
 public sealed record DialPalette(
     Color Face, Color FaceRim, Color Ink, Color Tick,
     Color BezelLit, Color BezelMid, Color BezelDark,
-    Color Focus, Color OffTask, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter, Color Card,
+    Color Focus, Color Amber, Color OffTask, Color Absent, Color Commit, Color Break, Color Sweep, Color Alarm, Color AlarmsDot, Color AlarmsDotOuter, Color Card,
     Color DominoTop, Color DominoFace, Color DominoSide)
 {
     /// <summary>日面：白表盘 + 木边框（照着用户给的那张实物挂钟照片调的）。</summary>
@@ -24,7 +24,10 @@ public sealed record DialPalette(
         BezelMid: Color.FromRgb(0x8C, 0x58, 0x30),
         BezelDark: Color.FromRgb(0x5A, 0x35, 0x1C),
         Focus: Color.FromRgb(0x2F, 0xA3, 0x6B),
+        Amber: Color.FromRgb(0xE0, 0xA0, 0x3A),
         OffTask: Color.FromRgb(0xD6, 0x45, 0x3F),
+        // 「人不在」那个空心虚线框的描边色
+        Absent: Color.FromRgb(0x8A, 0x94, 0xA0),
         Commit: Color.FromRgb(0x8A, 0x94, 0xA0),      // 灰色承诺弧。⚠️ 不能省（DECISIONS D3）
         Break: Color.FromRgb(0x7F, 0xB2, 0xDD),       // 淡蓝休息块
         Sweep: Color.FromRgb(0x33, 0x40, 0x4B),
@@ -59,7 +62,9 @@ public sealed record DialPalette(
         BezelMid: Color.FromRgb(0x8C, 0x58, 0x30),
         BezelDark: Color.FromRgb(0x5A, 0x35, 0x1C),
         Focus: Color.FromRgb(0x46, 0xBE, 0x84),
+        Amber: Color.FromRgb(0xED, 0xB2, 0x55),
         OffTask: Color.FromRgb(0xE9, 0x63, 0x5C),
+        Absent: Color.FromRgb(0x6E, 0x7A, 0x87),
         Commit: Color.FromRgb(0x6E, 0x7A, 0x87),
         Break: Color.FromRgb(0x8F, 0xC4, 0xEE),       // 比日面亮一档，见 D4
         Sweep: Color.FromRgb(0xB8, 0xC4, 0xD0),
@@ -70,6 +75,25 @@ public sealed record DialPalette(
         DominoTop: Color.FromRgb(0x8A, 0x6E, 0x50),
         DominoFace: Color.FromRgb(0x6E, 0x56, 0x3C),
         DominoSide: Color.FromRgb(0x93, 0x77, 0x57));
+
+    /// <summary>
+    /// 绿 → 黄 → 红 三段过渡（<paramref name="impurity"/> 0 = 纯专注，1 = 全跑偏）。
+    ///
+    /// ⚠️ **为什么不直接插值 RGB**：绿红直接插值在 50% 处会落到一坨发暗的橄榄绿，
+    /// 看着像画错了。绕道黄色干净，而且**白捡一个亮度变化**——红绿是最常见的色盲
+    /// 混淆对（约 8% 的男性），亮度差是颜色之外的第二个信号。
+    /// </summary>
+    public Color Ramp(double impurity)
+    {
+        static byte Mix(byte a, byte b, double t) => (byte)Math.Round(a + (b - a) * t);
+        static Color Lerp(Color a, Color b, double t) =>
+            Color.FromRgb(Mix(a.R, b.R, t), Mix(a.G, b.G, t), Mix(a.B, b.B, t));
+
+        impurity = Math.Clamp(impurity, 0, 1);
+        return impurity <= 0.5
+            ? Lerp(Focus, Amber, impurity / 0.5)
+            : Lerp(Amber, OffTask, (impurity - 0.5) / 0.5);
+    }
 
     /// <summary>
     /// 跑偏闪烁用的**半反色调色板**：只把**钟面、刻度、指针**换成另一档，其余原样保留。
