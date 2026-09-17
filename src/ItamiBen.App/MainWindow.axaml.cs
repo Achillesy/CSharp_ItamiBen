@@ -1224,6 +1224,14 @@ public partial class MainWindow : Window
         // ⚠️ **先解绑再关库**：解绑之后再出的事会落回文本，而不是往一个已经关掉的
         //    连接上写——那会抛，而抛在退出路径上最难查
         Events.Unbind();
+
+        // ⚠️ **设置也要一起松开**，理由和上面那句一模一样，只是晚了一步才发现：
+        //    设置窗口开着的时候点 ×，它作为被拥有的窗口会被一并关掉，
+        //    而它的 `Closed` 处理器（`_settings.Save()`）排在这一整段**之后**才跑——
+        //    那时库已经 Dispose 了，`BeginTransaction` 当场抛，
+        //    每关一次就往 `itamiben.log` 里留一条 SQLite 报错（2026-09-18 Windows 实测）。
+        //    上面那遍 `_settings.Save()` 已经写进去了，松开之后那第二遍就是无害的空操作。
+        _settings.Detach();
         _store?.Dispose();
     }
 

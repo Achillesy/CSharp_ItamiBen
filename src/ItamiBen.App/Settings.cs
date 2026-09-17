@@ -202,6 +202,28 @@ public sealed class Settings
         }
     }
 
+    /// <summary>
+    /// 退出路径上**主动松开那个连接**，之后的 <see cref="Save"/> 就跟「库没开」一样
+    /// 安静地什么都不做。
+    ///
+    /// ⚠️ 2026-09-18 在 Windows 上实测到的：设置窗口开着的时候点 ×，
+    /// `MainWindow.OnExit` 先落盘、再 `_store.Dispose()`，而那扇被一并关掉的设置窗口
+    /// 的 `Closed` 处理器**排在这之后**才跑，于是往一个已经 Dispose 的连接上再写一遍：
+    ///
+    /// <code>error settings: Failed to write settings: InvalidOperationException
+    /// BeginTransaction can only be called when the connection is open.</code>
+    ///
+    /// 丢的东西是零（`OnExit` 那一遍已经写进去了，这是重复的第二遍），
+    /// 但它**每次都往 `itamiben.log` 里留一条 SQLite 报错**——而那个文件恰恰是
+    /// 「觉得哪里不对就把它交给 AI」的那一份，不该被一条无害的重复写占着。
+    ///
+    /// ⚠️ 跟 <c>Save</c> 里那句 `if (_store is null) return;` 是同一条语义
+    /// （「库没开就什么都不做」），不是新容错：靠的是一个**显式的信号**，
+    /// 而不是指望 Dispose 之后每一步碰巧都还能跑——跟 <c>OnExit</c> 的 `_exited`
+    /// 是同一条教训。
+    /// </summary>
+    public void Detach() => _store = null;
+
     /// <summary>把自己摊平成「键 → JSON 片段」。null 的键不写，读回来时自然走默认值。</summary>
     private Dictionary<string, string> Flatten()
     {
