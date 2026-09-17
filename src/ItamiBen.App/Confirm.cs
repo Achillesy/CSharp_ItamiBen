@@ -60,9 +60,20 @@ public static class Confirm
             },
         };
 
-        // 底色取钟面调色板那一档，不新增色号；跟设置窗口的卡片同源
+        // 底色取钟面调色板那一档，不新增色号；跟设置窗口的卡片同源。
+        //
+        // ⚠️ **看的是系统主题，不是 owner 的**（2026-09-18 修）。原来这里读
+        //    `owner.ActualThemeVariant`，而 owner 就是主窗口——唯一一扇被那个主题按钮
+        //    改过的窗。于是在 Windows 浅色下把 ItamiBen 切成深色，会得到一个
+        //    **深色底 + 浅色按钮**的确认框：底色跟了按钮，而 Fluent 画的按钮和文字
+        //    跟的是系统。半深半浅，不报错。
+        //
+        //    主题按钮**只管主窗口那只钟**（表盘 / 骨牌 / 卡片），这是设计意图；
+        //    其余每一扇窗都跟系统走。`Application` 是 `RequestedThemeVariant="Default"`，
+        //    所以它的 ActualThemeVariant 就是系统那一档——跟设置窗口读到的是同一个值，
+        //    两扇窗因此永远一致。
         dlg.Background = new SolidColorBrush(
-            (owner.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark
+            (Avalonia.Application.Current?.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark
                 ? DialPalette.Dark : DialPalette.Light).Card);
 
         yes.Click += (_, _) => { result = true; dlg.Close(); };
