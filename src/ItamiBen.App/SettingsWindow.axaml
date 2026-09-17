@@ -100,13 +100,25 @@
     <!-- ⚠️ 这张卡照 v3：开关管「到点跑命令」，下面那个音色是**开关关着时闹钟响的那一声**。
          两件事在同一张卡上，因为它们是「闹钟到点会发生什么」的两种结果，二选一。
          开着时底下那行显示到点会跑的**那一条命令原文**——这个值多半是关机命令，
-         按下开关之前有权知道按的是什么。 -->
+         按下开关之前有权知道按的是什么。
+
+         ⚠️ **这是六张卡里唯一一张 Off 不等于「安静」的**（2026-09-18 用户当场想不起来
+         它管什么，就是这个原因）。另外五张是「响 / 不响」，这张是**二选一**：
+         `CheckAlarm` 里 armed 就跑命令、**并且 return，不响铃**。
+         所以 On/Off 在这里是假的——写 `Run` / `Ring` 才是这两个分支真正的名字，
+         而且不用多一个字的说明（守住这扇窗「一个字说明都没有」那条）。
+
+         ⚠️ 开关**开着时变红**：红在这扇窗里已经有含义了（见底下 Configure online
+         那颗按钮——「利器」）。到点关你的机器正是同一类，所以用的是同一个
+         `#D6453F`——仓库里「利器红」的既定值，**写死、不跟主题**（理由在 App.axaml）。
+         颜色在 `SettingsWindow.PaintArmedSwitch` 里设，不写在这儿，是因为要覆盖
+         Fluent 的三个态资源键，XAML 里铺开太吵。 -->
     <Border Name="CardCommand" Classes="card">
       <StackPanel Spacing="12">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Classes="title" Text="Command" />
           <ToggleSwitch Name="ExecuteOn" Grid.Column="1" VerticalAlignment="Center"
-                        OnContent="On" OffContent="Off" />
+                        OnContent="Run" OffContent="Ring" />
         </Grid>
         <ComboBox Name="AlarmSound" HorizontalAlignment="Stretch" MaxDropDownHeight="300" />
         <TextBlock Name="CommandPreview" IsVisible="False" TextWrapping="Wrap"
