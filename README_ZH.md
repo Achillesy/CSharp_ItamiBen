@@ -7,7 +7,9 @@
 
 不弹窗、不唠叨、也不恭喜你。就是一台笨到没法跟你讲条件的钟。
 
-**状态：早期，但能跑。** macOS 上端到端验过；**Windows 那一半到现在一次都没跑过。**
+**状态：早期，但能跑。** macOS 上端到端验过，Windows 11 上也验过了（2026-09-18）：
+前台程序名与标题、空闲判定、winmm 提示音、到点的提醒和它带的命令、单实例、几条调试查询，
+以及 Inno Setup 安装包从编译到静默升级。
 
 [English](./README.md)
 
@@ -92,7 +94,7 @@ UPDATE setting SET value = '60'        WHERE key = 'opacityPercent';
 
 ```
 macOS    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
-Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
+Windows  %LOCALAPPDATA%\ItamiBen\ItamiBen.sqlite3
 ```
 
 那个库旁边放着一份 **`AGENT.md`**——写给智能体看的，不是写给你看的。
@@ -115,7 +117,7 @@ Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
 
 ## 你的文件
 
-都在 `~/Library/Application Support/ItamiBen/`（macOS）或 `%APPDATA%\ItamiBen\`（Windows）。
+都在 `~/Library/Application Support/ItamiBen/`（macOS）或 `%LOCALAPPDATA%\ItamiBen\`（Windows）。
 
 | 文件 | 是什么 |
 |---|---|
@@ -143,10 +145,15 @@ Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
 
 到点时：
 
-1. 选定的系统音**响 4 遍**（专注相关的那三声只响 2 遍——它们各自都在屏幕上留下了一个
-   看得回来的状态；闹钟响完什么都不留）。
-2. **只有**右键菜单里的「Run command at alarm」开着时，才会跑 `alarmCommand`
-   这个设置**指名**的那条命令。
+**二选一，绝不叠加**——那个开关选的就是走哪一边：
+
+1. **关着（默认）**：选定的系统音**响 4 遍**（专注相关的那三声只响 2 遍——它们各自都在
+   屏幕上留下了一个看得回来的状态；闹钟响完什么都不留）。
+2. **开着**（右键菜单的「Run command at alarm」，或设置里 Command 那张卡上写着
+   `Ring` / `Run` 的开关）：跑 `alarmCommand` 这个设置**指名**的那条命令，
+   **一声都不响**。响铃是「提醒你自己动手」，跑命令是「替你动手」，两件事不叠加。
+
+这个开关**每次启动一律是关的**，从不持久化——那条命令多半是关机。
 
 命令是表里的行，一个平台一列，闹钟**按名字**引用它：
 
@@ -199,8 +206,9 @@ pwsh pack-windows.ps1       # → dist\ItamiBen-<版本>-win-x64.exe（需要 In
 并提出替用户下载；macOS 的 `.dmg` 在 Read Me 里说明。版本号**只有一个出处**：
 `Directory.Build.props` 的 `<Version>`。
 
-⚠️ **Windows 那一半从没在真机上跑过**，`pack-windows.ps1` 和 `installer/ItamiBen.iss`
-都是纸面代码。
+✅ 两边现在都在真机上跑过了。`pack-windows.ps1` 和 `installer/ItamiBen.iss` 2026-09-18
+第一次在 Windows 11 + Inno Setup 6.7.3 上走通：11MB 的按用户安装包，全程不弹 UAC，
+装进 `%LOCALAPPDATA%\Programs\ItamiBen`，覆盖升级也干净。
 
 ## 觉得不对劲的时候
 

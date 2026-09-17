@@ -3,9 +3,15 @@
 ; ⚠️ **由仓库根目录的 pack-windows.ps1 调用，别手工跑**：MyAppVersion 和 StageDir
 ;    要靠 /D 传进来。它是 macOS 那边 pack-macos.sh 的对应物。
 ;
-; ⚠️⚠️ **这个文件和 pack-windows.ps1 到现在一次都没在 Windows 上跑过**，
-;    跟 ForegroundWindow.Win / InputIdle.WindowsElapsed / Sound 的 winmm 那条一样，
-;    是纸面代码。第一次在真机上跑之前，别把它当成「已经能用」。
+; ✅ 2026-09-18 第一次在真机上跑通（Windows 11 + Inno Setup 6.7.3）：向导走完、
+;    静默安装（/VERYSILENT）、覆盖升级、开始菜单三个快捷方式、桌面快捷方式、
+;    HKCU 的卸载项，全都对。**全程没有弹过 UAC**——PrivilegesRequired=lowest 成立，
+;    {autopf} 解析到 %LOCALAPPDATA%\Programs。
+;
+; ⚠️ 下面那段 .NET 运行时检测**只走到了「已装」这一支**：测试机上装着
+;    Microsoft.WindowsDesktop.App 10.0.10，所以 IsDotNetDesktopRuntimeInstalled 返回
+;    True、直接跳过。**下载 + ShellExec('runas') 那一支仍然没在真机上走过**
+;    ——要验它得找一台没装 .NET 10 桌面运行时的机器。
 ;
 ; 跟 macOS 的 .dmg（只在 Read Me 里叫用户自己去装 .NET 运行时）不同，这个安装包会
 ; **主动检测** .NET Desktop Runtime 在不在，不在就提出替用户下载并运行官方安装器

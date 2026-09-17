@@ -8,8 +8,10 @@ simply don't count — the rest block slides further away and you watch it go.
 
 No popups, no nagging, no congratulations. Just a clock that is too dumb to negotiate.
 
-**Status: early, but it runs.** Verified end to end on macOS; **the Windows half has never
-actually been run.**
+**Status: early, but it runs.** Verified end to end on macOS, and now on Windows 11 too
+(2026-09-18): foreground app and title, idle detection, the winmm sounds, the scheduled
+reminder and its command, single-instance, the tray of debug queries, and the Inno Setup
+installer from build to silent upgrade.
 
 [中文说明](./README_ZH.md)
 
@@ -108,7 +110,7 @@ not by hand:
 
 ```
 macOS    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
-Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
+Windows  %LOCALAPPDATA%\ItamiBen\ItamiBen.sqlite3
 ```
 
 Next to that database sits **`AGENT.md`**, written for the agent rather than for you. Point
@@ -135,7 +137,7 @@ by humans too; it just assumes you want the details.
 
 ## Your files
 
-All under `~/Library/Application Support/ItamiBen/` (macOS) or `%APPDATA%\ItamiBen\`
+All under `~/Library/Application Support/ItamiBen/` (macOS) or `%LOCALAPPDATA%\ItamiBen\`
 (Windows).
 
 | file | what it is |
@@ -167,11 +169,18 @@ restart.
 
 When it fires:
 
-1. The chosen system sound plays **four times** (the three focus-related notifications ring
-   twice — they each leave something on screen you can look at afterwards; the alarm leaves
-   nothing).
-2. If — and only if — **Run command at alarm** is switched on in the right-click menu,
-   the command named by the `alarmCommand` setting runs.
+It does **one of two things, never both** — that switch picks which:
+
+1. **Off (the default).** The chosen system sound plays **four times** (the three
+   focus-related notifications ring twice — they each leave something on screen you can look
+   at afterwards; the alarm leaves nothing).
+2. **On** — **Run command at alarm** in the right-click menu, or the Command card in
+   Settings, where the switch reads `Ring` / `Run`. The command named by the `alarmCommand`
+   setting runs, and **nothing rings**. Ringing means "go do it yourself"; running the
+   command means "do it for me". Doing both would be neither.
+
+That switch is **off every time ItamiBen starts** and is never persisted — the command is
+usually a shutdown.
 
 Commands are rows in one table, one column per platform, and the alarm refers to one **by
 name**:
@@ -230,8 +239,10 @@ Windows installer detects it and offers to download it; the macOS `.dmg` says so
 Read Me. The version number has exactly one source: `<Version>` in
 `Directory.Build.props`.
 
-⚠️ **The Windows half has never been run on a real machine.** `pack-windows.ps1` and
-`installer/ItamiBen.iss` are paper code.
+✅ Both halves have now been run on a real machine. `pack-windows.ps1` and
+`installer/ItamiBen.iss` were first exercised on Windows 11 + Inno Setup 6.7.3 on
+2026-09-18: an 11 MB per-user installer that needs no UAC, installs to
+`%LOCALAPPDATA%\Programs\ItamiBen`, and upgrades cleanly over itself.
 
 ## When something looks wrong
 

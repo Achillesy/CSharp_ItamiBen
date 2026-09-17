@@ -8,7 +8,7 @@ There are no configuration files. There is one SQLite database.
 
 ```
 macOS    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
-Windows  %APPDATA%\ItamiBen\ItamiBen.sqlite3
+Windows  %LOCALAPPDATA%\ItamiBen\ItamiBen.sqlite3
 ```
 
 It is created on first run. You can edit it with `sqlite3` while ItamiBen is running —
@@ -26,6 +26,26 @@ UPDATE config SET version = version + 1, changed_at = unixepoch(), note = 'what 
 
 ItamiBen checks that number once a minute and reloads. **Without this the user sees no
 effect until they restart**, decides your change did not work, and asks you to do it again.
+
+Then **confirm the running program actually saw it.** Within a minute it writes one line:
+
+```sql
+SELECT at, text FROM event WHERE kind = 'config' ORDER BY at DESC LIMIT 1;
+-- expect: reloaded at version <the number you just wrote>
+```
+
+⚠️ **If that line never appears, you edited a different file than the one ItamiBen reads.**
+Everything else will have looked like success: the UPDATE reported 1 row, a `SELECT` reads
+your change straight back, `--query config` prints it. All of that is true of your copy and
+says nothing about the user's. This is not hypothetical — it cost a whole session on
+2026-09-18: the agent's shell was inside a sandbox that silently redirected
+`%LOCALAPPDATA%` elsewhere, so hours of configuration went into a shadow database while the
+user's ItamiBen kept seeding itself empty defaults. The `event` table is the only check
+that crosses that boundary, because **the program writes it, not you**.
+
+If the line does not appear, stop writing to the database. Hand the user SQL and have them
+run it through **Settings → Configure online → Apply** instead: that path can only ever
+touch the database ItamiBen itself has open.
 
 **2. Append what you did to `itamiben.log`**, in the same folder as the database:
 
@@ -232,8 +252,26 @@ it replays the judgment engine over the stored observations.
 
 There is deliberately no `--query log`: `itamiben.log` is plain text. Read the file.
 
-On macOS the binary is inside the app bundle:
-`/Applications/ItamiBen.app/Contents/MacOS/ItamiBen`.
+**Neither installer puts `ItamiBen` on the PATH — use the full path:**
+
+```
+macOS    /Applications/ItamiBen.app/Contents/MacOS/ItamiBen --query config
+Windows  cmd /c ""%LOCALAPPDATA%\Programs\ItamiBen\ItamiBen.exe" --query config"
+```
+
+On Windows that is where a per-user install lands (the default). If the user chose a
+machine-wide install instead, it is `%ProgramFiles%\ItamiBen\ItamiBen.exe`.
+
+⚠️ **On Windows you must go through `cmd /c`, and the doubled quotes are not a typo.**
+`ItamiBen.exe` is a GUI-subsystem binary — it has to be, or every launch would flash up a
+console window. PowerShell does not wait for one of those and does not wire up its stdout,
+so running it directly there prints **nothing at all**, and `> file` writes an **empty
+file**. No error, no exit code, no clue — the same silent shape as a rule written for the
+wrong platform. `cmd.exe` does hand over the handles, so through `cmd /c` the output
+arrives in full and can be captured or redirected normally. (Git Bash / WSL also work, but
+they are not on a stock Windows machine.) `cmd`'s own rule for the outer pair of quotes is
+why the command needs `""...path..." --query config"` — drop one and it fails to find the
+executable.
 
 `--query config` prints what **the program** sees, not what you think you wrote. Run it
 after every change.
@@ -304,6 +342,10 @@ much as defaults** — change them, disable them, or delete them freely.
   text. This has already happened once: `UPDATE goal SET enabled = 0 WHERE name = ' 番茄钟 '`
   changed zero rows while the window said it had applied.
 - **Not bumping `config.version`.** The user concludes nothing happened.
+- **Editing a database the program does not read.** Every local signal says success — rows
+  changed, `SELECT` reads it back, `--query config` prints it — and the user sees nothing
+  at all. Confirm the `reloaded at version N` event (rule 1); it is the only check that
+  crosses out of your own view of the filesystem.
 - **Writing a regex for one platform only.** No error, no warning, just red.
 - **Deleting a goal instead of disabling it.** Its rules cascade away and its hours orphan.
 - **Putting command text in `schedule`.** There is no column for it; that is deliberate.

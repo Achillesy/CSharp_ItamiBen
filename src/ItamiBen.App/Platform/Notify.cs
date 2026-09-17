@@ -20,8 +20,9 @@ namespace ItamiBen.App.Platform;
 /// （CLAUDE.md：App 保持 `net10.0`，`-windows` 别加回去）——真正的 WinRT/UWP toast
 /// 绑定需要 `-windows` 系带 TFM 或者签名打包的应用身份，这个项目两样都没有。
 ///
-/// ⚠️ **Windows 那半没在真机上跑过**，跟 <c>ForegroundWindow.Win</c> 一样是纸面代码。
-/// 不过 v3 在真机上把它趟通了，连同下面那个 AppId 的坑——照搬没改。
+/// ✅ **Windows 那半 2026-09-18 在真机上验过了**（Windows 11）：把下面这段脚本原样
+/// 走一遍 <c>-EncodedCommand</c>，<c>powershell.exe</c> 退出码 0、不抛异常，
+/// AppId 认账。v3 当年趟出来的那个坑（裸字符串当 AppId）照搬没改，也照样成立。
 /// </summary>
 public static class Notify
 {

@@ -54,7 +54,15 @@ namespace ItamiBen.App;
 /// ⚠️ **只有 Windows 有「提到前台」那一步**：<c>SetForegroundWindow</c> 是 Win32 API，
 /// macOS 没有零依赖的等价物。macOS 上退化成「安静地拒绝第二个实例」
 /// ——单实例保证本身仍然成立，只是少了把旧窗口叫到前面来的那点体贴。
-/// ⚠️ 这半边**没在真机上跑过**，跟 <c>ForegroundWindow.Win</c> 一样是纸面代码。
+/// ✅ 2026-09-18 在 Windows 11 上验过**锁本身**：第二个实例拿不到锁、安静退出（退出码 0）、
+/// 往对方的 `itamiben.log` 里留下那行 Fallback，头一个实例一点没受影响。
+/// <c>MainWindowHandle</c> 也确实解析得到 Avalonia 那扇窗口。
+///
+/// ⚠️ 但**「提到前台」那一下能不能成，不归这段代码管**：<c>SetForegroundWindow</c> 受
+/// Windows 自己的前台锁约束，只有调用方本身在前台、或者**它是被前台进程启动的**才批准。
+/// 用户双击图标 / 快捷键那条路满足后者（启动者是资源管理器），而从一个不在前台的终端
+/// 里起第二个实例时系统会拒绝——实测就是这样，那时它只闪一下任务栏按钮。
+/// 这正是上面那句「体贴，不是功能」的意思：**失败是预期之内的，别为它加重试。**
 /// </summary>
 public static class SingleInstance
 {

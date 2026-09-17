@@ -15,7 +15,7 @@ the red on the ring, and the rest block being pushed further and further away.
 Where your files live
 =====================
 
-    %APPDATA%\ItamiBen\
+    %LOCALAPPDATA%\ItamiBen\
 
     ItamiBen.sqlite3  Everything: your configuration (goals, rules, commands,
                       schedule) and your history (observations, sessions, the
@@ -68,10 +68,14 @@ exactly like looking at anything else.
 The alarm's command
 ===================
 
-The command list is a table in the database. When the alarm fires, ItamiBen runs
-the one named by the alarmCommand setting -- but ONLY if you switched "Run
-command at alarm" on in the right-click menu, and that switch is OFF every time
-the program starts.
+The command list is a table in the database. When the alarm fires ItamiBen does
+ONE of two things, never both: it rings, or it runs the command named by the
+alarmCommand setting.
+
+The switch picks which -- "Run command at alarm" in the right-click menu, or the
+Command card in Settings, where it reads Ring / Run. Switched to Run, nothing
+rings at all: ringing means "go do it yourself", running the command means "do it
+for me". That switch is OFF every time the program starts.
 
 Settings shows you the exact command before you flip the switch. It is usually a
 shutdown command; you have a right to know what you are arming.
@@ -82,4 +86,4 @@ When something looks wrong
 
 The window will not tell you. That is deliberate.
 
-Hand %APPDATA%\ItamiBen\itamiben.log to an AI and say what you expected.
+Hand %LOCALAPPDATA%\ItamiBen\itamiben.log to an AI and say what you expected.

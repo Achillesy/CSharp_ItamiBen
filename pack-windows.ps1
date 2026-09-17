@@ -1,9 +1,9 @@
 # 打出 dist\ItamiBen-<版本>-win-x64.exe（Inno Setup 安装包）。
 # macOS 那边的对应物是 ./pack-macos.sh。
 #
-# ⚠️⚠️ **这个脚本到现在一次都没在 Windows 上跑过**，跟 ForegroundWindow.Win /
-#    InputIdle.WindowsElapsed / Sound 的 winmm 那条一样，是纸面代码。
-#    第一次在真机上跑之前，别把它当成「已经能用」。
+# ✅ 2026-09-18 第一次在真机上跑通：Windows 11 + Inno Setup 6.7.3，一次就过，
+#    产物 11MB。同一天 ForegroundWindow.Win / InputIdle.WindowsElapsed / Sound 的 winmm
+#    那几条也一并在真机上验了。
 #
 # 跟 macOS 的 .dmg（只在 Read Me 里叫用户自己装 .NET 运行时）不同，这个安装包会
 # 主动检测 .NET Desktop Runtime 在不在，不在就提出替用户下载并运行官方安装器
