@@ -115,9 +115,12 @@ your file, that is what you compare against.
 When something looks wrong
 ==========================
 
-Hand itamiben.log to an AI and say what you expected. It records every
-configuration change ever applied -- what was asked for, what ran, whether it
-worked. It is plain text.
+Hand the relevant configuration file to an AI and say what you expected. Each
+one carries its own instructions, so the AI sees both what you asked for and
+what the program will make of it.
+
+If your rules never seem to match, rules.md tells the AI how to find out what
+an application is really called on this machine.
 
 The window itself never explains anything. That is deliberate.
 NOTE

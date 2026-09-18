@@ -246,12 +246,13 @@ Read Me. The version number has exactly one source: `<Version>` in
 
 ## When something looks wrong
 
-Hand `itamiben.log` to an AI and say what you expected. It holds every configuration change
-ever applied — what was asked for, what ran, whether it worked — which is usually the whole
-story. It is plain text; drag the file in.
+Hand the relevant configuration file to an AI and say what you expected. Each one carries its
+own instructions, so the AI can see both what you asked for and what the program will make of
+it.
 
-If the answer is "your rules never matched anything", open **Configure online** and let the
-AI look at your actual configuration and the list of applications it has really seen.
+If the answer is "my rules never matched anything", `rules.md` tells the AI how to find out
+what an application is really called on your machine — it will ask you to run a round and use
+that application for a minute, then read the name out of the red.
 
 There is nothing for you to run and nothing to memorise.
 

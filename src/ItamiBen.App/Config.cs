@@ -71,7 +71,7 @@ internal static class Config
                 return GoalRules.Empty;
             }
         }
-        return store is null ? GoalRules.Empty : GoalRules.Of(store.Goals(), store.Commands());
+        return GoalRules.Empty;
     }
 
     /// <summary>装配命令清单。</summary>
@@ -87,9 +87,7 @@ internal static class Config
                 return CommandTable.Empty;
             }
         }
-        return store is null
-            ? CommandTable.Empty
-            : CommandTable.Of(store.Commands(), settings.AlarmCommand);
+        return CommandTable.Empty;
     }
 
     /// <summary>
@@ -127,12 +125,7 @@ internal static class Config
             return file.Entries;
         }
 
-        if (store is null) return [];
-        var entries = new List<CronEntry>();
-        foreach (var row in store.Schedule())
-            if (AlarmsList.ParseExpression(row.Cron) is { } schedule)
-                entries.Add(new CronEntry(schedule, row.Text ?? "", row.Run));
-        return entries;
+        return [];
     }
 
     /// <summary>
@@ -145,7 +138,7 @@ internal static class Config
     /// </summary>
     public static string Stamp(SampleStore? store)
     {
-        var parts = new List<string> { (store?.ConfigVersion ?? 0).ToString() };
+        var parts = new List<string>();
         foreach (var p in new[] { AppData.RulesPath(), AppData.CommandsPath(), AppData.SchedulePath() })
         {
             try { parts.Add(File.Exists(p) ? File.GetLastWriteTimeUtc(p).Ticks.ToString() : "-"); }

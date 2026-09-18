@@ -91,4 +91,9 @@ When something looks wrong
 
 The window will not tell you. That is deliberate.
 
-Hand %LOCALAPPDATA%\ItamiBen\itamiben.log to an AI and say what you expected.
+Hand the relevant configuration file to an AI and say what you expected. Each
+one carries its own instructions, so the AI sees both what you asked for and
+what the program will make of it.
+
+If your rules never seem to match, rules.md tells the AI how to find out what
+an application is really called on this machine.

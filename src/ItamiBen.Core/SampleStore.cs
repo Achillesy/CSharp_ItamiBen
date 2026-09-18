@@ -109,67 +109,6 @@ public sealed class SampleStore : IDisposable
               seconds INTEGER NOT NULL
             );
 
-            -- ── 下面四张是**配置**表：智能体改这些，程序读这些 ─────────────────
-            --
-            -- ⚠️ 上面那些是**账本**（sample / app / title / round / event / total）：
-            --    程序写、谁都别改。分界写在 AGENT.md 里，那是给智能体看的那份。
-
-            -- 配置版本号。**只有一行。** 改完配置把 version 加一，
-            -- 运行中的程序下一分钟就会重读——否则改了要等重启才生效，
-            -- 而「改了没反应」正是这个项目最恨的那类失败。
-            CREATE TABLE IF NOT EXISTS config (
-              id         INTEGER PRIMARY KEY CHECK (id = 1),
-              version    INTEGER NOT NULL,
-              changed_at INTEGER NOT NULL,
-              note       TEXT
-            );
-
-            -- 小目标。position 决定界面上的顺序；enabled=0 = 不再用但留着
-            -- （**删了以后想找回来还得重写**）。
-            CREATE TABLE IF NOT EXISTS goal (
-              name     TEXT PRIMARY KEY,
-              enabled  INTEGER NOT NULL DEFAULT 1,
-              position INTEGER NOT NULL DEFAULT 0,
-              note     TEXT
-            );
-
-            -- 匹配规则。**组内任意一条命中就算命中**；一条里 app 和 title 都写就都要中。
-            -- ⚠️ 两个都是正则，而且**区分大小写**：macOS 报 `Code`、Windows 报 `Code.exe`，
-            --    两边都要覆盖就写 `^Code(\.exe)?$`。写成只对一边的，另一边**一条都不中
-            --    而且不报错**——症状是整轮全红，跟「今天确实没干活」长得一模一样。
-            CREATE TABLE IF NOT EXISTS rule (
-              id    INTEGER PRIMARY KEY,
-              goal  TEXT NOT NULL REFERENCES goal(name) ON DELETE CASCADE,
-              app   TEXT,
-              title TEXT,
-              note  TEXT,
-              CHECK (app IS NOT NULL OR title IS NOT NULL)
-            );
-
-            -- 命令清单。**按名字引用**，闹钟和计划表都从这儿挑。
-            -- ⚠️ 可执行的文本**只准出现在这一张表里**：别处（计划表）只存名字。
-            --    这样「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
-            CREATE TABLE IF NOT EXISTS command (
-              name    TEXT PRIMARY KEY,
-              macos   TEXT,
-              windows TEXT,
-              note    TEXT,
-              CHECK (macos IS NOT NULL OR windows IS NOT NULL)
-            );
-
-            -- 计划表（原来的 alarms.cron）。cron 是标准 crontab 的前五列。
-            -- text 是提醒文字，run 是要跑的命令名，**至少写一个**。
-            -- ⚠️ 带 run 的条目**错过了就不补**：合盖两小时再打开，一条 22:00 的关机
-            --    会当场执行。只提醒的条目照旧补放（那正是提醒该有的行为）。
-            CREATE TABLE IF NOT EXISTS schedule (
-              id      INTEGER PRIMARY KEY,
-              cron    TEXT NOT NULL,
-              text    TEXT,
-              run     TEXT REFERENCES command(name),
-              enabled INTEGER NOT NULL DEFAULT 1,
-              note    TEXT,
-              CHECK (text IS NOT NULL OR run IS NOT NULL)
-            );
             """);
 
         return new SampleStore(db);
@@ -343,33 +282,6 @@ public sealed class SampleStore : IDisposable
 
     // ── 配置 ────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// 配置版本号。**运行中的程序靠它知道该重读了**——每分钟看一眼，变了就重新装配置。
-    /// 一行都还没有就是 0。
-    /// </summary>
-    public long ConfigVersion
-    {
-        get
-        {
-            using var cmd = _db.CreateCommand();
-            cmd.CommandText = "SELECT version FROM config WHERE id = 1;";
-            return cmd.ExecuteScalar() is long v ? v : 0;
-        }
-    }
-
-    /// <summary>版本号加一。改完配置**必须调一次**，否则要等重启才生效。</summary>
-    public void BumpConfig(string note)
-    {
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO config (id, version, changed_at, note) VALUES (1, 1, $at, $note)
-            ON CONFLICT(id) DO UPDATE SET version = version + 1, changed_at = $at, note = $note;
-            """;
-        cmd.Parameters.AddWithValue("$at", DateTimeOffset.Now.ToUnixTimeSeconds());
-        cmd.Parameters.AddWithValue("$note", note);
-        cmd.ExecuteNonQuery();
-    }
-
     /// <summary>一个小目标连同它的规则。</summary>
     public readonly record struct GoalRow(string Name, bool Enabled, IReadOnlyList<RuleRow> Rules);
 
@@ -379,8 +291,6 @@ public sealed class SampleStore : IDisposable
     /// <summary>一条命令，按系统分。</summary>
     public readonly record struct CommandRow(string Name, string? MacOS, string? Windows);
 
-    /// <summary>一条计划。<paramref name="Text"/> 和 <paramref name="Run"/> 至少有一个。</summary>
-    public readonly record struct ScheduleRow(string Cron, string? Text, string? Run);
 
     /// <summary>所有目标连同规则，按 position 排。</summary>
     public List<GoalRow> Goals()
@@ -425,245 +335,70 @@ public sealed class SampleStore : IDisposable
         return list;
     }
 
-    /// <summary>启用着的计划，按 id 排。</summary>
-    public List<ScheduleRow> Schedule()
+    /// <summary>配置表是不是一条都还没有——决定要不要播种 / 迁移。</summary>
+    /// <summary>老配置表里**全部**计划行，含停用的。**只给一次性迁移用**。</summary>
+    /// <remarks>
+    /// ⚠️ 跟 <see cref="Schedule"/> 的区别只在这里：那个过滤掉了 `enabled = 0`，
+    /// 因为运行时不需要它们；而迁移要**忠实**——用户停用一条是有意的，
+    /// 搬过去应该是一行注释掉的 crontab，不是凭空消失。
+    /// </remarks>
+    public List<(string Cron, string? Text, string? Run, bool Enabled)> LegacySchedule()
     {
         using var cmd = _db.CreateCommand();
-        cmd.CommandText = "SELECT cron, text, run FROM schedule WHERE enabled != 0 ORDER BY id;";
-        var list = new List<ScheduleRow>();
+        cmd.CommandText = "SELECT cron, text, run, enabled FROM schedule ORDER BY id;";
+        var list = new List<(string, string?, string?, bool)>();
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            list.Add(new ScheduleRow(r.GetString(0),
-                                     r.IsDBNull(1) ? null : r.GetString(1),
-                                     r.IsDBNull(2) ? null : r.GetString(2)));
+            list.Add((r.GetString(0),
+                      r.IsDBNull(1) ? null : r.GetString(1),
+                      r.IsDBNull(2) ? null : r.GetString(2),
+                      r.GetInt64(3) != 0));
         return list;
     }
 
-    /// <summary>配置表是不是一条都还没有——决定要不要播种 / 迁移。</summary>
-    public bool ConfigIsEmpty
+    /// <summary>
+    /// 这个库里还留着**老的配置表**吗（2026-09-18 之前配置住在库里）。
+    ///
+    /// ⚠️ **只给一次性迁移用**：搬进 `.md` 之后调 <see cref="DropLegacyConfig"/> 把它们删掉，
+    /// 新建的库里根本不会有这几张表。所以这个属性对新库永远是 false，
+    /// 迁移代码将来整块删掉时它一起走。
+    /// </summary>
+    public bool HasLegacyConfig
     {
         get
         {
             using var cmd = _db.CreateCommand();
-            cmd.CommandText = "SELECT (SELECT COUNT(*) FROM goal) + (SELECT COUNT(*) FROM command) "
-                            + "+ (SELECT COUNT(*) FROM schedule);";
-            return Convert.ToInt64(cmd.ExecuteScalar()) == 0;
+            cmd.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='goal';";
+            return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
         }
     }
 
-    /// <summary>整批写配置。一个事务——**要么全落，要么一条都不落**。</summary>
-    public void PutConfig(IReadOnlyList<GoalRow> goals, IReadOnlyList<CommandRow> commands,
-                          IReadOnlyList<(ScheduleRow Row, bool Enabled, string? Note)> schedule,
-                          string note)
+    /// <summary>
+    /// 把老的配置表删掉。**迁移完成之后调一次**，此后这个库只装程序自己记的东西。
+    ///
+    /// ⚠️ 顺序无所谓：`rule.goal` 那个外键从来没生效过（`PRAGMA foreign_keys` 默认是关的，
+    /// 这个项目也从没打开过），所以不存在「先删父表报错」。
+    /// </summary>
+    public void DropLegacyConfig()
     {
-        using var tx = _db.BeginTransaction();
-
-        void Run(string sql, params (string Name, object? Value)[] args)
-        {
-            using var cmd = _db.CreateCommand();
-            cmd.Transaction = tx;
-            cmd.CommandText = sql;
-            foreach (var (n, v) in args) cmd.Parameters.AddWithValue(n, v ?? DBNull.Value);
-            cmd.ExecuteNonQuery();
-        }
-
-        for (var i = 0; i < goals.Count; i++)
-        {
-            var g = goals[i];
-            Run("INSERT INTO goal (name, enabled, position) VALUES ($n, $e, $p) "
-              + "ON CONFLICT(name) DO UPDATE SET enabled = excluded.enabled, position = excluded.position;",
-                ("$n", g.Name), ("$e", g.Enabled ? 1 : 0), ("$p", i));
-            foreach (var r in g.Rules)
-                Run("INSERT INTO rule (goal, app, title) VALUES ($g, $a, $t);",
-                    ("$g", g.Name), ("$a", r.App), ("$t", r.Title));
-        }
-        foreach (var c in commands)
-            Run("INSERT INTO command (name, macos, windows) VALUES ($n, $m, $w) "
-              + "ON CONFLICT(name) DO UPDATE SET macos = excluded.macos, windows = excluded.windows;",
-                ("$n", c.Name), ("$m", c.MacOS), ("$w", c.Windows));
-        foreach (var (row, enabled, n) in schedule)
-            Run("INSERT INTO schedule (cron, text, run, enabled, note) VALUES ($c, $t, $r, $e, $n);",
-                ("$c", row.Cron), ("$t", row.Text), ("$r", row.Run), ("$e", enabled ? 1 : 0), ("$n", n));
-
-        Run("INSERT INTO config (id, version, changed_at, note) VALUES (1, 1, $at, $note) "
-          + "ON CONFLICT(id) DO UPDATE SET version = version + 1, changed_at = $at, note = $note;",
-            ("$at", DateTimeOffset.Now.ToUnixTimeSeconds()), ("$note", note));
-
-        tx.Commit();
-    }
-
-    // ── 在线修改配置：导出、执行、账本护栏 ─────────────────────────────────
-
-    /// <summary>一次 SQL 应用的结果。</summary>
-    public readonly record struct SqlResult(bool Ok, int RowsChanged, string Message);
-
-    /// <summary>老 `applied_sql` 表的一行，**只剩迁移在用**。</summary>
-    public readonly record struct AppliedSql(DateTimeOffset At, string? Request, string Statement,
-                                             bool Ok, int RowsChanged, string? Message);
-
-    /// <summary>把整个库复制一份出去。<c>VACUUM INTO</c> 要求目标不存在。</summary>
-    public void BackupTo(string path)
-    {
-        if (File.Exists(path)) File.Delete(path);
         using var cmd = _db.CreateCommand();
-        cmd.CommandText = "VACUUM INTO $p;";
-        cmd.Parameters.AddWithValue("$p", path);
+        cmd.CommandText = """
+            DROP TABLE IF EXISTS rule;
+            DROP TABLE IF EXISTS goal;
+            DROP TABLE IF EXISTS command;
+            DROP TABLE IF EXISTS schedule;
+            DROP TABLE IF EXISTS config;
+            """;
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>
-    /// 执行一段外来 SQL（多半是网页 AI 写的），**全程在一个事务里**。
-    ///
-    /// 整段在一个事务里：**要么全落，要么一条都不落**。出错自动回滚。
-    /// 跑完顺手把 `config.version` 加一——AI 很可能忘了写那句，而忘了的症状是
-    /// 「改了没反应」，正是这个项目最恨的那类失败。
-    ///
-    /// ⚠️ **这里没有「账本被改了就回滚」那道闸**，2026-09-16 拆掉的（DECISIONS I23）：
-    /// 它只守得住这扇窗，而智能体走 `sqlite3` 直连那道门根本不经过它——**一道只守住
-    /// 两扇门里一扇的闸是摆设**，更糟的是它让文档里「动账本会被挡回去」那句话
-    /// 变成一句只在某一条路上为真的话。真正的退路是**跑之前那份备份**和
-    /// **`itamiben.log` 里那条记录**：出了事看得见、回得去。
-    ///
-    /// ⚠️ **整段当一条命令跑，不按分号切**：字符串里的分号会把切分器骗过去，
-    /// 为了好看的逐条报错引入一个会切错的解析器不划算。出错时 SQLite 的异常里
-    /// 本来就带着出错的位置。
-    /// </summary>
-    public SqlResult ApplySql(string sql)
-    {
-        var changesBefore = TotalChanges();
-
-        using var tx = _db.BeginTransaction();
-        try
-        {
-            using (var cmd = _db.CreateCommand())
-            {
-                cmd.Transaction = tx;
-                cmd.CommandText = sql;
-                cmd.ExecuteNonQuery();
-            }
-
-            // ⚠️ **在 bump 之前结账。** 下面那句 `config.version` 是**程序自己的记账**，
-            //    它必然改 1 行。算进去的话这个数字**永远不可能是 0**——而
-            //    「我这句到底匹配上没有」正是它唯一该回答的问题。
-            //    2026-09-16 实测撞到：`UPDATE goal SET enabled = 0 WHERE name = ' 番茄钟 '`
-            //    （名字被网页 AI 加了前后空格）一行都没匹配，界面却报
-            //    「Applied. 1 row(s) changed」——**一次静默失败被报成了成功**。
-            var changed = (int)(TotalChanges() - changesBefore);
-
-            using (var bump = _db.CreateCommand())
-            {
-                bump.Transaction = tx;
-                bump.CommandText = "INSERT INTO config (id, version, changed_at, note) VALUES (1, 1, $at, 'applied SQL') "
-                                 + "ON CONFLICT(id) DO UPDATE SET version = version + 1, changed_at = $at, note = 'applied SQL';";
-                bump.Parameters.AddWithValue("$at", DateTimeOffset.Now.ToUnixTimeSeconds());
-                bump.ExecuteNonQuery();
-            }
-
-            tx.Commit();
-            return new SqlResult(true, changed, "");
-        }
-        catch (Exception e)
-        {
-            try { tx.Rollback(); } catch { }
-            return new SqlResult(false, 0, e.Message);
-        }
-    }
-
-    /// <summary>
-    /// 老的 `applied_sql` 表还在的话，把行取出来（给迁移用）。表不在就返回空。
-    ///
-    /// ⚠️ 这张表 2026-09-16 搬去文件了（DECISIONS I21）：**SQLite 够不着普通文件**，
-    /// 所以那份记录根本不在任何一句外来 SQL 的射程之内——比原来靠指纹拦
-    /// `DELETE FROM applied_sql` 硬。
-    /// </summary>
-    public List<AppliedSql> TakeAppliedSqlRows()
-    {
-        var list = new List<AppliedSql>();
-        try
-        {
-            using var cmd = _db.CreateCommand();
-            cmd.CommandText = "SELECT at, request, statement, ok, rows_changed, message FROM applied_sql ORDER BY id;";
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                list.Add(new AppliedSql(
-                    DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
-                    r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2),
-                    r.GetInt64(3) != 0, r.GetInt32(4), r.IsDBNull(5) ? null : r.GetString(5)));
-        }
-        catch { /* 表不在，说明早就搬完了 */ }
-        return list;
-    }
-
-    /// <summary>搬完之后把老表删掉。**调用方负责先确认文件写成功了。**</summary>
-    public void DropAppliedSqlTable() => Execute(_db, "DROP TABLE IF EXISTS applied_sql;", ignoreErrors: true);
+    // ── 在线修改配置：导出、执行、账本护栏 ─────────────────────────────────
 
     private long TotalChanges()
     {
         using var cmd = _db.CreateCommand();
         cmd.CommandText = "SELECT total_changes();";
         return Convert.ToInt64(cmd.ExecuteScalar());
-    }
-
-    /// <summary>
-    /// 把当前配置导成一段给网页 AI 看的 SQL。
-    ///
-    /// ⚠️ **`sample` 和 `title` 一行都不进来**，这条由程序钉死、不靠用户记得删：
-    /// `title` 是用户开过的每一个窗口标题（看了什么、刷了谁、哪个文件名），
-    /// **那是要被贴进网页对话框的东西**。程序名单另给一段，因为 AI 写 `app` 正则时
-    /// 确实需要它——**程序名泄露的是「装了什么」，窗口标题泄露的是「在干什么」，
-    /// 这两者不是一个量级。**
-    ///
-    /// ⚠️ 程序名单写成**注释**而不是 `INSERT`：`app` 是账本表，写成 INSERT 会诱导
-    /// AI 往里插东西，而那会被账本护栏挡下、白跑一趟。
-    /// </summary>
-    public string DumpConfig(IReadOnlyList<string> agentEditableSettings)
-    {
-        var b = new System.Text.StringBuilder();
-        b.AppendLine($"-- ItamiBen configuration as of {DateTime.Now:yyyy-MM-dd HH:mm}, config version {ConfigVersion}.");
-        b.AppendLine("-- This is the CURRENT state, shown for reference. Do not repeat it back.");
-        b.AppendLine("-- The ledger (sample / title / round / event / total) is deliberately not included.");
-        b.AppendLine();
-
-        foreach (var g in Goals())
-        {
-            b.AppendLine($"INSERT INTO goal (name, enabled) VALUES ({Q(g.Name)}, {(g.Enabled ? 1 : 0)});");
-            foreach (var r in g.Rules)
-                b.AppendLine($"INSERT INTO rule (goal, app, title) VALUES ({Q(g.Name)}, {Q(r.App)}, {Q(r.Title)});");
-        }
-        b.AppendLine();
-        foreach (var c in Commands())
-            b.AppendLine($"INSERT INTO command (name, macos, windows) VALUES ({Q(c.Name)}, {Q(c.MacOS)}, {Q(c.Windows)});");
-        b.AppendLine();
-
-        using (var cmd = _db.CreateCommand())
-        {
-            cmd.CommandText = "SELECT cron, text, run, enabled FROM schedule ORDER BY id;";
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                b.AppendLine($"INSERT INTO schedule (cron, text, run, enabled) VALUES ("
-                           + $"{Q(r.GetString(0))}, {Q(r.IsDBNull(1) ? null : r.GetString(1))}, "
-                           + $"{Q(r.IsDBNull(2) ? null : r.GetString(2))}, {r.GetInt64(3)});");
-        }
-        b.AppendLine();
-
-        var settings = Settings();
-        foreach (var key in agentEditableSettings)
-            if (settings.TryGetValue(key, out var v))
-                b.AppendLine($"INSERT INTO setting (key, value) VALUES ({Q(key)}, {Q(v)});");
-
-        b.AppendLine();
-        b.AppendLine("-- Application names this machine has actually been seen running.");
-        b.AppendLine("-- Use these to write `app` rules that really match. (Window titles are NOT listed.)");
-        using (var cmd = _db.CreateCommand())
-        {
-            cmd.CommandText = "SELECT name FROM app ORDER BY name;";
-            using var r = cmd.ExecuteReader();
-            while (r.Read()) b.AppendLine($"--   {r.GetString(0)}");
-        }
-
-        return b.ToString();
-
-        static string Q(string? v) => v is null ? "NULL" : "'" + v.Replace("'", "''") + "'";
     }
 
     /// <summary>每个目标的终身累计秒数。</summary>

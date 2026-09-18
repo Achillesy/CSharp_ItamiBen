@@ -20,7 +20,6 @@ namespace ItamiBen.App;
 /// 它要把判定引擎重放一遍，任何 SQL 都算不出来。
 ///
 /// <code>
-/// ItamiBen --query config   [起] [止]    当前的规则 / 命令 / 计划表（起止不管用）
 /// ItamiBen --query samples  [起] [止]    一秒一行的原始观测
 /// ItamiBen --query events   [起] [止]    别处留不下痕迹的事（闹钟 / 提醒 / 命令 / 出错）
 /// ItamiBen --query minutes  [起] [止]    每一轮逐分钟的构成，红的还给出是哪扇窗口
@@ -47,43 +46,18 @@ internal static class Query
 
         switch (what)
         {
-            case "config": ConfigDump(db); break;
             case "samples": Samples(db, start, end); break;
             case "events": Events(db, start, end); break;
             case "rounds": Rounds(db, start, end); break;
             case "minutes": Minutes(db, start, end); break;
             default:
-                Console.Error.WriteLine($"unknown query '{what}' — try: config | samples | events | rounds | minutes");
+                Console.Error.WriteLine($"unknown query '{what}' — try: samples | events | rounds | minutes");
                 break;
         }
 
         static DateTimeOffset? Parse(string? s) => DateTimeOffset.TryParse(s, out var t) ? t : null;
     }
 
-    /// <summary>
-    /// 当前配置。**智能体改完应该跑一遍这个看看自己改对没有**——
-    /// 比它自己拼 SQL 去查省事，也保证看到的跟程序读到的是同一份。
-    /// </summary>
-    private static void ConfigDump(SampleStore db)
-    {
-        Console.WriteLine($"# config version {db.ConfigVersion}");
-        Console.WriteLine();
-        Console.WriteLine("## goals");
-        foreach (var g in db.Goals())
-        {
-            Console.WriteLine($"  {(g.Enabled ? "on " : "off")} {g.Name}");
-            foreach (var r in g.Rules)
-                Console.WriteLine($"        app={r.App ?? "*"}  title={r.Title ?? "*"}");
-        }
-        Console.WriteLine();
-        Console.WriteLine("## commands");
-        foreach (var c in db.Commands())
-            Console.WriteLine($"  {c.Name}\n        macos={c.MacOS ?? "(none)"}\n        windows={c.Windows ?? "(none)"}");
-        Console.WriteLine();
-        Console.WriteLine("## schedule (enabled only)");
-        foreach (var e in db.Schedule())
-            Console.WriteLine($"  {e.Cron,-16} text={e.Text ?? "(none)"}  run={e.Run ?? "(none)"}");
-    }
 
     private static void Samples(SampleStore db, DateTimeOffset from, DateTimeOffset to)
     {

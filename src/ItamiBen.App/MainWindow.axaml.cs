@@ -208,8 +208,11 @@ public partial class MainWindow : Window
         //    这里拿到的是一套默认值——程序照样跑，只是记不住上次的选择。
         _settings = Settings.Load(_store);
         _totals = Totals.Load(_store);
-        // ⚠️ **必须排在 LoadConfig 之前**：全新安装时运行时目录是空的，
-        //    先把随程序发的 defaults/ 补进去，装配才读得到东西
+        // ⚠️ **三步的顺序是承重的**：先把老库里的配置搬成文件，再用出厂默认补缺的，
+        //    最后才装配。反过来的话，播种会先用默认值把文件建出来，
+        //    迁移看见「文件已经在了」就什么都不做——症状是
+        //    **升级之后配置变回默认，而且不报错**。
+        ConfigMigration.Run(_store, _settings);
         AppData.SeedDefaults();
         LoadConfig();
         // ⚠️ 外观**只在这里读一次**，之后全程不变（见 Config.LoadLayout）

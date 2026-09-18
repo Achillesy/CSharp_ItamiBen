@@ -31,6 +31,16 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
+  <!--
+    ⚠️ **只为 `ConfigMigration` 开的口子。** 那段代码把老库里的配置搬进 `.md`，
+    在每台机器上**只跑一次**，写错了就是配置静默丢失、事后还查不出来——
+    它必须有往返测试（老库 → 文本 → 真解析器读回来 → 一模一样），
+    而把它改成 public 只为了测试，等于为了测试放大公开面。
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ItamiBen.App.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />

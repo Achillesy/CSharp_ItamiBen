@@ -67,12 +67,6 @@ public partial class SettingsWindow : Window
 
         // ⚠️ 到点跑命令**仍然不持久化**（DECISIONS E8）：这里改的是 MainWindow 上那个
         //    内存字段，重启之后一律是关的。设置窗口改不了这一点，也不该能改
-        this.FindControl<Button>("ConfigureOnline")!.Click += async (_, _) =>
-        {
-            if (_owner is not { } owner) return;
-            await new SqlWindow(owner, owner.Store).ShowDialog(this);
-            ShowCommandBranch();
-        };
 
         Toggle("ExecuteOn", on => { _owner?.SetCommandArmed(on); ShowCommandBranch(); });
         ShowCommandBranch();
@@ -151,15 +145,16 @@ public partial class SettingsWindow : Window
     /// Command 那个开关**扳到 Run 那一侧时是红的**，其余五个照旧走系统强调色。
     ///
     /// ⚠️ 为什么只有它特殊：另外五个是「响 / 不响」，关掉最坏就是安静；这一个扳过去
-    /// 是**到点替你执行一条命令**（多半是关机）。红在这扇窗里已经有含义——底下
-    /// <c>ConfigureOnline</c> 那颗按钮就是红的，注释写着「这一整块是利器」。同一类，同一个红。
+    /// 是**到点替你执行一条命令**（多半是关机）。
     ///
     /// ⚠️ **只在开着时喊**：关着的时候它本来就无害，静息态跟别的开关长一样是对的，
     /// 不该让一张卡永远看起来像报错。
     ///
     /// ⚠️ **写死 <c>#D6453F</c>，不跟主题走**——这是这个仓库里「利器红」的既定值，
-    /// 另外三处一字不差：<c>App.axaml</c> 的 Give up、本窗口的 <c>ConfigureOnline</c>、
-    /// <c>SqlWindow.axaml</c> 的 Apply。理由写在 App.axaml 上：**底色是语义色，不跟主题**。
+    /// 另一处一字不差：<c>App.axaml</c> 的 Give up。理由写在 App.axaml 上：
+    /// **底色是语义色，不跟主题**。搜 <c>D6453F</c> 能一次找齐这两处，那是故意的。
+    /// （2026-09-18 之前还有两处——设置窗的 Configure online 和 SqlWindow 的 Apply，
+    /// 那扇窗随配置离开数据库一起删了。）
     ///
     /// ⚠️ **别改成 <see cref="DialPalette.OffTask"/>**（2026-09-18 我就这么写过一版）：
     /// 调色板里那两档红是**给表盘用的**——盘面会从白换成深色，红得跟着换才看得清。

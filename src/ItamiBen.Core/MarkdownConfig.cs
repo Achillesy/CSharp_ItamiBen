@@ -75,6 +75,67 @@ public static class MarkdownConfig
             $"no ```…{Marker} block found — the configuration block is missing or its fence is not closed");
     }
 
+    /// <summary>
+    /// 把一份 `.md` 里那个配置块的正文换成 <paramref name="body"/>，**其余一字不动**。
+    ///
+    /// ⚠️ 用途是拿出厂参考件当模板：说明部分照抄，只换最后那段数据。
+    /// 这样迁移出来的文件**一上来就自带完整说明**，跟播种出来的没有区别。
+    ///
+    /// ⚠️ 跟 <see cref="Extract"/> 用同一套围栏判定——**一份文件一条读取路径**，
+    /// 不许这里另写一套「找配置块」的规则。
+    /// </summary>
+    public static string Replace(string markdown, string body)
+    {
+        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        var (start, end) = Locate(lines);
+
+        var kept = new List<string>();
+        kept.AddRange(lines[..(start + 1)]);      // 含开围栏那一行
+        kept.AddRange(body.Replace("\r\n", "\n").Split('\n'));
+        kept.AddRange(lines[end..]);              // 从收围栏那一行起
+        return string.Join('\n', kept);
+    }
+
+    /// <summary>配置块的开围栏行号和收围栏行号。找不到或找到多个都抛。</summary>
+    private static (int Start, int End) Locate(string[] lines)
+    {
+        int start = -1, end = -1, fence = 0;
+        var keeping = false;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            var ticks = Backticks(line);
+
+            if (fence == 0)
+            {
+                if (ticks < 3) continue;
+                fence = ticks;
+                keeping = HasMarker(line[ticks..]);
+                if (keeping)
+                {
+                    if (start >= 0)
+                        throw new InvalidDataException(
+                            $"more than one `{Marker}` block — there must be exactly one");
+                    start = i;
+                }
+                continue;
+            }
+
+            if (ticks >= fence && line.Trim().Length == ticks)
+            {
+                if (keeping) end = i;
+                fence = 0;
+                keeping = false;
+            }
+        }
+
+        if (start < 0 || end < 0)
+            throw new InvalidDataException(
+                $"no ```…{Marker} block found — the configuration block is missing or its fence is not closed");
+        return (start, end);
+    }
+
     private static int Backticks(string line)
     {
         var n = 0;

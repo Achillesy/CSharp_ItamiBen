@@ -62,33 +62,6 @@ public static class Log
     public static void Error(string what, Exception e)
         => Fallback($"error {what}: {e.GetType().Name} {e.Message}");
 
-    /// <summary>
-    /// 记一次手动改配置。<paramref name="request"/> 是用户当时写的那句需求。
-    ///
-    /// ⚠️ **意图和产物要配在一起**：光有 SQL，谁也看不出智能体有没有理解错那句话。
-    /// ⚠️ **成功失败都记**，失败的更值钱——尤其是「这段 SQL 想干什么、为什么没跑成」。
-    /// </summary>
-    public static void Applied(string? request, string statement, bool ok, int rows, string? message)
-    {
-        lock (Gate)
-        {
-            try
-            {
-                Directory.CreateDirectory(AppData.Dir);
-                var head = ok ? $"OK  {rows} row(s)" : $"FAILED  {message}";
-                File.AppendAllText(Path_, $"""
-
-                    ────────────────────────────────────────────────────────
-                    {DateTime.Now:yyyy-MM-dd HH:mm:ss}  applied  {head}
-                    {(string.IsNullOrWhiteSpace(request) ? "asked: (not recorded)" : "asked: " + request.Trim())}
-
-                    {statement.Trim()}
-
-                    """);
-            }
-            catch { }
-        }
-    }
 
     /// <summary>整份读出来给 <c>--query log</c>。</summary>
     public static string Read()

@@ -72,3 +72,48 @@ public class MarkdownConfigTests
         Assert.Equal("{\n  \"a\": 1\n\n  \n}", MarkdownConfig.Extract(md));
     }
 }
+
+public class MarkdownReplaceTests
+{
+    private const string Md = """
+        # 标题
+
+        示例：
+
+        ```json
+        { "不要动我": 1 }
+        ```
+
+        ## 配置
+
+        ```json itamiben
+        { "老的": 1 }
+        ```
+
+        结尾的话。
+        """;
+
+    [Fact]
+    public void 只换配置块_说明部分一字不动()
+    {
+        var after = MarkdownConfig.Replace(Md, """{ "新的": 2 }""");
+
+        Assert.Contains("不要动我", after);      // 示例块没被碰
+        Assert.Contains("结尾的话", after);      // 块后面的话还在
+        Assert.Contains("# 标题", after);
+        Assert.DoesNotContain("老的", after);
+    }
+
+    [Fact]
+    public void 换完还能被自己读回来_往返闭合()
+    {
+        // ⚠️ 这一条守的是 Replace 和 Extract 用同一套围栏判定
+        var body = "{\n  \"a\": 1\n}";
+        Assert.Equal(body, MarkdownConfig.Extract(MarkdownConfig.Replace(Md, body)));
+    }
+
+    [Fact]
+    public void 没有配置块的文件_换不了就抛()
+        => Assert.Throws<InvalidDataException>(
+               () => MarkdownConfig.Replace("# 只有标题\n", "{}"));
+}
