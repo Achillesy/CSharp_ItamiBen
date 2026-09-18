@@ -28,7 +28,7 @@ public class DialControl : Control
     private const double RAlarm = 0.62;
 
     /// <summary>
-    /// alarms.cron 的小红圈：圆心落在表盘边缘（1.0），**故意允许盖到木框上**——
+    /// schedule.md 的小红圈：圆心落在表盘边缘（1.0），**故意允许盖到木框上**——
     /// 跟色环（0.31~0.68）、闹钟黄针（0.62）都不在同一层，不会被看成同一件事。
     /// </summary>
     private const double RAlarmsDot = 1.0, RAlarmsDotRadius = 0.05, RAlarmsDotStroke = 0.022;
@@ -98,7 +98,7 @@ public class DialControl : Control
         AvaloniaProperty.Register<DialControl, double>(nameof(AlarmMinutes));
 
     /// <summary>
-    /// alarms.cron 下一条的角度位置（0~719 分钟），null = 不画。
+    /// schedule.md 下一条的角度位置（0~719 分钟），null = 不画。
     /// **由调用方每拍整个重算**——跟盘面上其它一切一样，条件不满足这一拍的结果直接就是
     /// 「不画」，不存在「清除上一次画的圆」这回事。
     /// </summary>
@@ -186,7 +186,7 @@ public class DialControl : Control
     }
 
     /// <summary>
-    /// alarms.cron 下一条的小红圈。空心圆环而不是实心点，圆心移到表盘边缘、故意盖到
+    /// schedule.md 下一条的小红圈。空心圆环而不是实心点，圆心移到表盘边缘、故意盖到
     /// 木框上，好让它在一堆细刻度和数字旁边一眼就能看见。
     /// </summary>
     private void DrawAlarmsDot(DrawingContext ctx, Point c, Func<double, double> R)

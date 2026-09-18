@@ -124,8 +124,9 @@ public static class AppData
     /// 程序**自己那些文件**的写法。不转义非 ASCII：目标名可能是任何语言，这个文件是
     /// 给人看的（想把某个目标清零就是手动改它）。
     ///
-    /// ⚠️ **不许拿它去读写 rules.json**——那份是用户手写的，解析选项（注释、尾逗号、
-    /// 大小写不敏感）在 <see cref="Core.GoalRules"/> 里，一个文件只有一条读取路径。
+    /// ⚠️ **不许拿它去读写那四份配置 `.md`**——它们的解析各自收口在 Core 里
+    /// （<see cref="Core.GoalRules"/> / <see cref="Core.CommandTable"/> / …），
+    /// 一个文件只有一条读取路径。
     /// </summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -133,7 +134,7 @@ public static class AppData
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>在访达 / 资源管理器里打开运行时目录——rules.json 就在那儿等着被手写。</summary>
+    /// <summary>在访达 / 资源管理器里打开运行时目录——四份配置 `.md` 和两份日志都在那儿。</summary>
     public static void OpenInFileManager()
     {
         try

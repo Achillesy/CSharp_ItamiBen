@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     private const int AlarmRings = 4;
 
     /// <summary>
-    /// alarms.cron 到点响几遍。**2 遍**（v3 的 J10）：它响完还留着一分钟的提示条，
+    /// schedule.md 到点响几遍。**2 遍**（v3 的 J10）：它响完还留着一分钟的提示条，
     /// 漏听还能看回来；闹钟给 4 遍是因为它响完什么都不留。
     /// </summary>
     private const int AlarmsListRings = 2;
@@ -109,11 +109,11 @@ public partial class MainWindow : Window
     /// </summary>
     private int _lastAwaySpans;
 
-    /// <summary>alarms.cron，每分钟重读一次——用户手写的文件，改完不该还要重启。</summary>
+    /// <summary>schedule.md，每分钟重读一次——用户手写的文件，改完不该还要重启。</summary>
     private IReadOnlyList<CronEntry> _alarms = [];
 
     /// <summary>
-    /// alarms.cron 的去重水位线。**纯内存、不持久化，初始化成启动那一刻**（v3 的 J7）：
+    /// schedule.md 的去重水位线。**纯内存、不持久化，初始化成启动那一刻**（v3 的 J7）：
     /// 程序关闭期间错过的条目重开后直接跳过，不倒回去补。
     /// </summary>
     private DateTime _alarmsProcessedThrough = DateTime.Now;
@@ -220,7 +220,7 @@ public partial class MainWindow : Window
 
         BuildGoals();
 
-        // 把上次选的那个选回来；它没了（rules.json 改过）就退回第一个——
+        // 把上次选的那个选回来；它没了（配置改过）就退回第一个——
         // **永远有一个是选中的**，不让用户面对一个「什么都没选」的起点
         var saved = _goalBoxes.FirstOrDefault(b => (string)b.Content! == _settings.SelectedGoal);
         if (saved is not null) saved.IsChecked = true;
@@ -312,7 +312,7 @@ public partial class MainWindow : Window
         _configStamp = Config.Stamp(_store);
 
         _rulesError = _rules.SelectableGoals.Count == 0
-            ? "no goals configured — ask an agent to read AGENT.md"
+            ? "no goals configured — hand rules.md to an AI and say what counts as work"
             : null;
     }
 
@@ -353,7 +353,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// 目标列表：一行一个，**左边勾选框、右边累计小时**（跟 v3 一致）。
-    /// rules.json 有几个目标就有几行，窗口高度跟着走。
+    /// rules.md 有几个目标就有几行，窗口高度跟着走。
     /// </summary>
     /// <summary>
     /// 铺目标行。**必须可以重复调**——配置一改就会重铺（`ReloadConfigIfChanged`）。
@@ -471,7 +471,7 @@ public partial class MainWindow : Window
         if (_pinItem is not null) _pinItem.IsChecked = _settings.Pinned;
     }
 
-    /// <summary>当前选中的目标；一个都没选（rules.json 是空的）就是 null。</summary>
+    /// <summary>当前选中的目标；一个都没选（配置里一个目标都没有）就是 null。</summary>
     private string? Picked()
         => _goalBoxes.FirstOrDefault(b => b.IsChecked == true)?.Content as string;
 
@@ -518,13 +518,6 @@ public partial class MainWindow : Window
     /// <summary>到点会跑的那一条；没配就是 null。设置窗口要显示它（v3 的 E14）。</summary>
     internal string? CommandForThisOs => _commands.TextFor(_commands.AlarmName);
 
-    /// <summary>
-    /// 把内存里的设置写回库。**给 <see cref="SqlWindow"/> 在跑外来 SQL 之前调。**
-    ///
-    /// ⚠️ 设置在内存里有一份、退出时整份写回，所以 SQL 改了 `setting` 的某一行，
-    /// **退出时会被内存里那份盖掉**。先 flush 让库成为唯一真相，冲突就不存在了。
-    /// </summary>
-    internal void FlushSettings() => _settings.Save();
 
     /// <summary>
     /// 外来 SQL 跑完之后当场重装。**不关程序**——关窗口会把正在跑的那一轮作废掉
@@ -559,7 +552,7 @@ public partial class MainWindow : Window
     {
         var metrics = WindowLayout.Current;
         Width = metrics.WindowWidth;
-        // ⚠️ 高度不设：SizeToContent="Height" 自己长，rules.json 有几个目标就有几行
+        // ⚠️ 高度不设：SizeToContent="Height" 自己长，rules.md 有几个目标就有几行
         this.FindControl<DialControl>("Dial")!.Height = metrics.DialHeight;
         this.FindControl<DominoRow>("Dominoes")!.Height = metrics.DominoHeight;
         // ⚠️ 骨牌行的边距**分档**，不在 XAML 里写死（见 LayoutMetrics.DominoMargin）
@@ -839,7 +832,7 @@ public partial class MainWindow : Window
     /// <list type="number">
     ///   <item>提示条到期收起——⚠️ 必须排在画新提示条**之前**，反过来会把第 ② 步
     ///         刚画上的那条当场擦掉；</item>
-    ///   <item>alarms.cron 到点检查（响 2 遍 + 提示条 + 日志）；</item>
+    ///   <item>schedule.md 到点检查（响 2 遍 + 提示条 + 日志）；</item>
     ///   <item>小红圈位置重算——每拍整个重算，不存在「清除上一次画的圆」这回事。</item>
     /// </list>
     /// </summary>
@@ -1027,7 +1020,7 @@ public partial class MainWindow : Window
     ///   <item>还在两小时环里 ⇒ 接着跑，界面把目标和档位一并还原；</item>
     ///   <item>离现在超过两小时（或余量早就耗尽）⇒ <see cref="Round.Advance"/> 会让它
     ///         当场触底，走同一个终结动作；</item>
-    ///   <item>rules.json 改过、那个目标没了 ⇒ 没法重放，就地终结，不猜。</item>
+    ///   <item>配置改过、那个目标没了 ⇒ 没法重放，就地终结，不猜。</item>
     /// </list>
     /// </summary>
     private void ResumeRound()
@@ -1258,7 +1251,7 @@ public partial class MainWindow : Window
         //    设置窗口开着的时候点 ×，它作为被拥有的窗口会被一并关掉，
         //    而它的 `Closed` 处理器（`_settings.Save()`）排在这一整段**之后**才跑——
         //    那时库已经 Dispose 了，`BeginTransaction` 当场抛，
-        //    每关一次就往 `itamiben.log` 里留一条 SQLite 报错（2026-09-18 Windows 实测）。
+        //    每关一次就往错误日志里留一条 SQLite 报错（2026-09-18 Windows 实测）。
         //    上面那遍 `_settings.Save()` 已经写进去了，松开之后那第二遍就是无害的空操作。
         _settings.Detach();
         _store?.Dispose();
@@ -1429,7 +1422,7 @@ public partial class MainWindow : Window
         if (_store is null)
         {
             ShowStatus("Cannot open the database",
-                       "Nothing is being recorded, so every round will run out. See itamiben.log.");
+                       "Nothing is being recorded, so every round will run out. See error.log.");
             this.FindControl<Border>("StatusBar")!.Background = new SolidColorBrush(Color.FromRgb(0xC4, 0x5A, 0x28));
             this.FindControl<Button>("GrantBtn")!.IsVisible = false;
             return;

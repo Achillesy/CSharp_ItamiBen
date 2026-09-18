@@ -3,7 +3,7 @@ using ItamiBen.App.Platform;
 namespace ItamiBen.App.Tests;
 
 /// <summary>
-/// <see cref="Command"/> 必须把 `rules.json` 里那条命令**原样**交给 shell——
+/// <see cref="Command"/> 必须把 `commands.md` 里那条命令**原样**交给 shell——
 /// 尤其是命令自己带双引号的时候。
 ///
 /// 这是 v3 在 2026-08-08 修过的那个真 bug 的回归防线（它的 L1）：当时 macOS 分支把命令
@@ -16,7 +16,7 @@ namespace ItamiBen.App.Tests;
 /// 当时唯一还正常的那一环，拿它当断言什么都测不出来。断言的是
 /// **命令的副作用真的发生了，而且引号原封不动**。
 ///
-/// ⚠️ **只喂无害命令**，绝不碰 `rules.json` 里真实那条：这台机器上
+/// ⚠️ **只喂无害命令**，绝不碰 `commands.md` 里真实那条：这台机器上
 /// `executeCommand.macos[0]` 就是重启。所以测的是 <see cref="Command.RunDetached"/>
 /// 而不是 <see cref="Command.LaunchDetached"/>——后者到点会现读 rules.json。
 /// 两者走的是同一条起进程的代码，引号那段一个字节都没绕开。

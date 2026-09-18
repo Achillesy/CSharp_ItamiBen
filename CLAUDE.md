@@ -36,11 +36,11 @@ Itami（痛み）是痛，Ben 是 Big Ben。**名字、核心视觉、惩罚机�
 | ✅ 产品界面 | 勾目标 → 选 10/25/50 → Start / Give up；累计落 `total` 表 |
 | ✅ 闹钟 / 声音 | 从 v3 搬完：滚轮拨针 + 黄针 + 一次性 + 加速；只用系统音，响 4 遍（DESIGN §8） |
 | ✅ 实机验收 | 2026-09-16 端到端跑通，结果见 DESIGN §7.1 和 §8.1 |
-| ✅ 计划表 | `schedule` 表，标准 crontab + 钟面小红圈 + 提示条（DESIGN §10） |
-| ✅ 窗口外观 | 无边框 + 透明底 + 置顶；右上角图钉 / 主题两个矢量图标；`setting` 表的 `layout` / `opacityPercent`（**只在启动时读一次**，DESIGN §11） |
+| ✅ 计划表 | `schedule.md`，标准 crontab + 行尾 `!命令名` + 钟面小红圈 + 提示条（DESIGN §10） |
+| ✅ 窗口外观 | 无边框 + 透明底 + 置顶；右上角图钉 / 主题两个矢量图标；`layout.md`（**只在启动时读一次**，DESIGN §11） |
 | ✅ 骨牌 / 界面布局 | 七个骨牌 = 星期几；绿红按钮、无数字滑块、目标单选行、版权行（DECISIONS C14） |
 | ✅ 滴答声 | 运行时合成，不打包音频；喇叭图标 + 右键菜单联动（DECISIONS E7） |
-| ✅ 到点跑命令 | `command` 表存正文、`setting.alarmCommand` 指名字；**开关每次启动都是关的**（DECISIONS E8） |
+| ✅ 到点跑命令 | `commands.md` 存正文、`Alarm` 分系统指名字；**开关每次启动都是关的**（DECISIONS E8） |
 | ✅ 设置窗口 | 齿轮图标打开；只放音色和音量，开关都在右键菜单（DECISIONS E11） |
 | ✅ 应用图标 | 矢量青番茄（带条纹），打包时现导 .icns / .ico（DECISIONS G10 / G12） |
 | ✅ 单实例 | 运行时目录里的独占文件锁。⚠️ **v3 那个命名 Mutex 在 macOS 上根本不生效**（DECISIONS I1） |

@@ -62,7 +62,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 <dict>
 $LS_ENV
   <!-- ⚠️ CFBundleName 钉死在 ItamiBen：macOS 的 localizedName 报的就是它，
-       **写进 samples.db、被 rules.json 匹配的都是这个字符串**（DECISIONS A4）。 -->
+       **写进库里、被 rules.md 匹配的都是这个字符串**（DECISIONS A4）。 -->
   <key>CFBundleName</key>              <string>ItamiBen</string>
   <key>CFBundleDisplayName</key>       <string>ItamiBen</string>
   <key>CFBundleExecutable</key>        <string>ItamiBen</string>

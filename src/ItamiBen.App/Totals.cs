@@ -3,7 +3,7 @@ using ItamiBen.Core;
 namespace ItamiBen.App;
 
 /// <summary>
-/// <see cref="GoalTotals"/> 的**落盘那一半**——现在落在 `samples.db` 的 `total` 表里
+/// <see cref="GoalTotals"/> 的**落盘那一半**——现在落在库的 `total` 表里
 /// （2026-09-16 从 `during.json` 搬进来，DECISIONS I13）。
 ///
 /// ⚠️ **纯逻辑和写盘必须分在两层**，这是从 v3 买回来的教训（它的 I5）：两者写在一个

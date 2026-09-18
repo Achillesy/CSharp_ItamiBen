@@ -6,7 +6,7 @@ namespace ItamiBen.Core;
 /// <summary>
 /// 每个目标的累计专注秒数。
 ///
-/// ⚠️ **账本本身住在 `samples.db` 的 `total` 表里**（2026-09-16 起，DECISIONS I13）；
+/// ⚠️ **账本本身住在库的 `total` 表里**（2026-09-16 起，DECISIONS I13）；
 /// 这个类只是它在内存里的读数视图。<see cref="Parse"/> 留着**只为迁移**——
 /// 把老的 `during.json` 搬进库那一次，格式是：
 ///

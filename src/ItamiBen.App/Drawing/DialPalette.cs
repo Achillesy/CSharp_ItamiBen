@@ -33,7 +33,7 @@ public sealed record DialPalette(
         Sweep: Color.FromRgb(0x33, 0x40, 0x4B),
         // 闹钟黄针：老式闹钟那种暖黄。比分针短、比时针粗
         Alarm: Color.FromRgb(0xF0, 0xC0, 0x40),
-        // alarms.cron 的小红圈。⚠️ 独立色号，**别复用 OffTask 的红**——数值相近也不共用，
+        // schedule.md 的小红圈。⚠️ 独立色号，**别复用 OffTask 的红**——数值相近也不共用，
         // 以后想单独调其中一个不会牵动另一个（v3 的 J 组同款理由）
         AlarmsDot: Color.FromRgb(0xD6, 0x45, 0x3F),
         // 同一分钟不止一条时外圈换橙。⚠️ 取值要偏艳橙：这个标记的圆心压在木框上

@@ -50,7 +50,7 @@
       <local:DominoRow Name="Dominoes" />
 
       <!--
-        alarms.cron 到点的提示条，**刚好显示一分钟**。
+        schedule.md 到点的提示条，**刚好显示一分钟**。
         ⚠️ **两层实色文字**（墨色一份 + 亮蓝一份偏移 −2,−2 叠在上面），跟画指针阴影
            同一个手法：窗口是透明的，提示条背后可能是任何壁纸，单色文字会糊进去。
         ⚠️ `MaxLines` / `MaxWidth` 在代码里按档位设，**不是保守取值是算出来的硬上限**：
@@ -99,7 +99,7 @@
                 Minimum="10" Maximum="50" TickFrequency="5"
                 IsSnapToTickEnabled="True" TickPlacement="BottomRight" Value="25" />
 
-        <!-- 目标列表：一行一个，**单选**，右边是累计小时。rules.json 有几个就有几行 -->
+        <!-- 目标列表：一行一个，**单选**，右边是累计小时。rules.md 有几个就有几行 -->
         <StackPanel Name="GoalsPanel" Spacing="2" />
 
         <!--

@@ -7,11 +7,11 @@ using ItamiBen.Core;
 namespace ItamiBen.App;
 
 /// <summary>
-/// 程序自己的设置，**存在 `samples.db` 的 `setting` 表里**（2026-09-16 从 `settings.json`
+/// 程序自己的设置，**存在库的 `setting` 表里**（2026-09-16 从 `settings.json`
 /// 搬进来，DECISIONS I12）。
 ///
-/// ⚠️ **这些从来不是用户手写的**，跟 `rules.json` / `alarms.cron` / `layout.json`
-/// 不是一类东西：那三份**用户写、程序只读**；这些**程序写、用户只看**
+/// ⚠️ **这些从来不是用户手写的**，跟那四份配置 `.md` 不是一类东西：
+/// 那四份**用户和 AI 写、程序只读**；这些**程序写、用户只看**
 /// （v3 的 K25 说的就是这个区别）。既然用户不用手改，那就没理由为它单开一个文件——
 /// 数据库随时都在，顺手就查了。
 ///
@@ -34,7 +34,7 @@ public sealed class Settings
 
     /// <summary>
     /// 上次选的专注时长和目标。**纯粹是省事**：开程序不用每次重新挑一遍。
-    /// 目标名对不上了（rules.json 改过）就自然勾不上，不猜也不报错。
+    /// 目标名对不上了（rules.md 改过）就自然勾不上，不猜也不报错。
     /// </summary>
     [JsonPropertyName("focusMinutes")] public int? FocusMinutes { get; set; }
     [JsonPropertyName("selectedGoal")] public string? SelectedGoal { get; set; }
@@ -76,7 +76,7 @@ public sealed class Settings
     /// </summary>
     [JsonPropertyName("forceTicking")] public bool ForceTicking { get; set; }
 
-    /// <summary>alarms.cron 到点响不响铃。⚠️ 只管**响不响**——检查清单那条主链路无条件每分钟都做。</summary>
+    /// <summary>schedule.md 到点响不响铃。⚠️ 只管**响不响**——检查清单那条主链路无条件每分钟都做。</summary>
     [JsonPropertyName("alarmsEnabled")] public bool AlarmsEnabled { get; set; } = true;
 
     /// <summary>滴答音量 0~100。音色是合成的，没有可挑的（见 <see cref="Platform.Tick"/>）。</summary>
@@ -92,8 +92,8 @@ public sealed class Settings
     /// 所以恢复之后必须过一遍夹取（`MainWindow.ClampIntoScreen`）。
     /// </summary>
     /// <summary>
-    /// 窗口档位和不透明度。**智能体可以改这两个**（AGENT.md 里点了名），
-    /// 其余的键是程序自己记的，改了也会被下一次写盘覆盖。
+    /// 窗口档位和不透明度。**2026-09-18 搬去 `layout.md` 了**（DECISIONS I30）——
+    /// 它们没有任何界面能改，是配置不是程序状态。这里留着只为迁移时读一次老值。
     /// </summary>
     [JsonPropertyName("layout")] public string? Layout { get; set; }
 
@@ -110,7 +110,7 @@ public sealed class Settings
     [JsonPropertyName("windowX")] public int? WindowX { get; set; }
     [JsonPropertyName("windowY")] public int? WindowY { get; set; }
 
-    /// <summary>alarms.cron 到点的音色。跟闹钟分开挑，好让两者听起来不一样。</summary>
+    /// <summary>schedule.md 到点的音色。跟闹钟分开挑，好让两者听起来不一样。</summary>
     [JsonPropertyName("alarmsSound")]
     public string? AlarmsSound { get; set; }
 
@@ -214,7 +214,7 @@ public sealed class Settings
     /// BeginTransaction can only be called when the connection is open.</code>
     ///
     /// 丢的东西是零（`OnExit` 那一遍已经写进去了，这是重复的第二遍），
-    /// 但它**每次都往 `itamiben.log` 里留一条 SQLite 报错**——而那个文件恰恰是
+    /// 但它**每次都留一条 SQLite 报错**——而错误日志恰恰是
     /// 「觉得哪里不对就把它交给 AI」的那一份，不该被一条无害的重复写占着。
     ///
     /// ⚠️ 跟 <c>Save</c> 里那句 `if (_store is null) return;` 是同一条语义

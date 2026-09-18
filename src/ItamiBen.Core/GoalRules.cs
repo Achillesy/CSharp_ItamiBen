@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace ItamiBen.Core;
 
-/// <summary>rules.json 里的一条匹配规则。App / Title 至少要有一个。</summary>
+/// <summary>`rules.md` 里的一条匹配规则。App / Title 至少要有一个。</summary>
 public sealed class MatchRule
 {
     public string? App { get; init; }
@@ -14,9 +14,9 @@ public sealed class MatchRule
 /// <summary>
 /// 一个小目标。**组内任意一条规则命中就算命中**。
 ///
-/// ⚠️ 这里没有「累计秒数」字段：rules.json 是**用户手写的**，程序只读不写
-/// （写一次注释就全没了——`JsonCommentHandling.Skip` 读的时候就扔了，序列化时
-/// 没有任何东西能还原）。累计值在 <see cref="GoalTotals"/> 里，另一个文件。
+/// ⚠️ 这里没有「累计秒数」字段：`rules.md` 是**人和 AI 写的，程序只读不写**。
+/// 累计值在 <see cref="GoalTotals"/> 里，住在库中——**谁写谁放哪**，这是 2026-09-18
+/// 重画的那条分界线（DECISIONS I30）。
 /// </summary>
 public sealed class GoalGroup
 {
@@ -27,7 +27,7 @@ public sealed class GoalGroup
 }
 
 /// <summary>
-/// rules.json 的整份类型模型。**这个文件有什么，这个类就要有什么字段。**
+/// `rules.md` 里那个配置块的整份类型模型。**块里有什么，这个类就要有什么字段。**
 ///
 /// ⚠️ v3 在这里栽过（它的 §15.4）：`executeCommand` 一度不在这个类里，App 另起一条
 /// `JsonDocument` 路径再读一遍——**一个文件两条读取路径、两套解析选项，靠人记得同步**，
@@ -38,7 +38,7 @@ public sealed class RulesFile
 {
     /// <summary>
     /// ⚠️ **键名保持 v3 的 <c>Groups</c>**：DESIGN §2.1 实测「标题跟 AW 记的逐字节相同」，
-    /// 结论是「现有 rules.json 可以原样搬过来」——改键名就等于把这个结论作废。
+    /// 结论是「v3 的规则可以原样搬过来」——改键名就等于把这个结论作废。
     /// 文件本身仍然是**两份**（DECISIONS A6：运行时目录跟 v3 完全隔离），共用的只是格式。
     /// </summary>
     public Dictionary<string, GoalGroup> Groups { get; init; } = [];
@@ -169,7 +169,8 @@ public sealed class GoalRules
     public static GoalRules Empty { get; } = new([], new Dictionary<string, (string?, string?)>(), null, null);
 
     /// <summary>
-    /// 从库里的行装配——**正常路径走这一条**（<see cref="Parse"/> 只剩迁移在用）。
+    /// 从库里的行装配——**只剩一次性迁移在用**（DECISIONS I30 之后正常路径是
+    /// <see cref="Parse"/>，从 `rules.md` 读）。
     /// </summary>
     public static GoalRules Of(IReadOnlyList<SampleStore.GoalRow> goals,
                                IReadOnlyList<SampleStore.CommandRow> commands,
@@ -192,16 +193,16 @@ public sealed class GoalRules
     }
 
     /// <summary>
-    /// 老 `rules.json` 的解析，**只给迁移用**（2026-09-16 起配置住在库里，DECISIONS I15）。
+    /// 解析 `rules.md` 里那个配置块——**这是正常路径**（2026-09-18 起配置回到文件，
+    /// DECISIONS I30）。<see cref="Of"/> 只剩一次性迁移在用。
     ///
-    /// ⚠️ 老文件的 `executeCommand` 是个**无名的有序清单、只跑第 0 条**。库里的命令**按名字
-    /// 引用**，所以这里只把每个系统的第 0 条搬成一条叫 <c>alarm</c> 的命令——
-    /// 其余几条留在改名后的旧文件里，**不会凭空消失**，要的话让智能体加回来。
+    /// ⚠️ 传进来的是**块的正文**，不是整份 `.md`：抠块那一步在
+    /// <see cref="MarkdownConfig.Extract"/> 里，一个文件只有一条读取路径。
     /// </summary>
     public static GoalRules Parse(string json)
     {
         var file = JsonSerializer.Deserialize<RulesFile>(json, JsonOpts)
-                   ?? throw new InvalidDataException("rules.json is empty.");
+                   ?? throw new InvalidDataException("the rules block is empty.");
 
         var groups = new List<CompiledGroup>();
         foreach (var (name, g) in file.Groups)

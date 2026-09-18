@@ -26,7 +26,7 @@ public readonly record struct AlarmEntry(DateTime At, string Text, string Expres
 public sealed record CronEntry(Cron Schedule, string Text, string? Run = null);
 
 /// <summary>
-/// Alarms 清单（DESIGN §10）。**从 v3 原样搬过来**，跟 AW 无关：解析 <c>alarms.cron</c>、挑出该响哪一条。**纯函数，
+/// Alarms 清单（DESIGN §10）。**从 v3 原样搬过来**，跟 AW 无关：解析 <c>schedule.md</c>、挑出该响哪一条。**纯函数，
 /// <c>now</c> 永远是参数**，跟 <see cref="AlarmClock"/> 一样的路数，不用等真实时间就能测。
 ///
 /// 3.7.0 起数据源从 Markdown 清单（一堆展开好的绝对时间戳）换成一份**标准 crontab**

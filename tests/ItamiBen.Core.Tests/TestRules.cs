@@ -2,7 +2,7 @@ using ItamiBen.Core;
 
 namespace ItamiBen.Core.Tests;
 
-/// <summary>几个测试共用的规则。故意写成跟用户手写的 rules.json 一模一样的样子。</summary>
+/// <summary>几个测试共用的规则。故意写成跟 rules.md 里那个配置块一模一样的样子。</summary>
 internal static class TestRules
 {
     public const string Json = """

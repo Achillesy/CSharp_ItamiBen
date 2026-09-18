@@ -57,7 +57,7 @@ public class JudgmentTests
     [Fact]
     public void 想让盯钟面算专注就自己写条规则()
     {
-        // 删掉硬编码豁免之后，这件事回到 rules.json 里——是配置，不是特例（v3 的做法）
+        // 删掉硬编码豁免之后，这件事回到 rules.md 里——是配置，不是特例（v3 的做法）
         var rules = GoalRules.Parse("""{ "Groups": { "刷钟面": { "Rules": [ { "App": "^ItamiBen" } ] } } }""");
         var j = Judgment.Judge("ItamiBen", "", false, ["刷钟面"], rules);
         Assert.Equal(SecondOutcome.Focused, j.Outcome);

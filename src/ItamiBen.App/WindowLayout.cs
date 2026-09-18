@@ -9,7 +9,7 @@ public enum LayoutMode { Standard, Compact }
 /// <summary>
 /// 一档的尺寸。**唯一定义处**——XAML 里一个都不写死，免得同一个量两处定义。
 /// 窗口高度不在这里：它是 <c>SizeToContent="Height"</c> 自己长出来的，
-/// rules.json 有几个目标就有几行，窗口跟着走。
+/// rules.md 有几个目标就有几行，窗口跟着走。
 /// </summary>
 /// <param name="BannerMaxLines">提示条最多列几条，同时也是 <c>TextBlock.MaxLines</c>。</param>
 /// <param name="BannerMaxWidth">提示条正文的折行宽度。</param>
@@ -40,7 +40,7 @@ public sealed record LayoutMetrics(
 /// ⚠️ **这个类自己不读任何东西**，只负责**怎么解释**：值由 <see cref="Settings"/>
 /// 装好递进来。
 ///
-/// ⚠️ 这两个键是设置表里**少数几个智能体该动的**，AGENT.md 里点了名。
+/// ⚠️ 这两个键住在 `layout.md` 里，**只在启动时读一次**（DECISIONS I30）。
 ///
 /// ⚠️ **只在启动时读一次，运行中改了不生效**——这是用户要的语义，也顺带免掉了
 /// 「运行中换档要重新夹回屏幕、提示条正显示着怎么办」的一整类边界情况。

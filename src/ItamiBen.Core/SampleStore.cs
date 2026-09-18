@@ -77,8 +77,8 @@ public sealed class SampleStore : IDisposable
               end_reason    TEXT
             );
             -- 程序自己的设置（音色、置顶、窗口位置、闹钟时刻……）。
-            -- ⚠️ **这些从来不是用户手写的**，跟 rules.json / alarms.cron / layout.json
-            -- 不是一类东西：那三份用户写、程序只读；这些程序写、用户只看。
+            -- ⚠️ **这些从来不是用户手写的**，跟那四份配置 `.md` 不是一类东西：
+            -- 那四份用户和 AI 写、程序只读；这些程序写、用户只看。
             -- 放这儿是为了少一个文件，也为了**不用再整份重写**——JSON 那套「一次写全部」
             -- 正是两个实例互相覆盖的根源（I1）。
             -- ⚠️ `value` 存的是**JSON 片段**（字符串带引号、数字不带），因为读写复用的是
@@ -388,7 +388,7 @@ public sealed class SampleStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    // ── 在线修改配置：导出、执行、账本护栏 ─────────────────────────────────
+    // ── 一次性迁移：把 2026-09-18 之前住在库里的配置搬进 `.md` ──────────────
 
     private long TotalChanges()
     {

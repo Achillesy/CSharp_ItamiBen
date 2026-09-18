@@ -4,7 +4,7 @@ using System.Text;
 namespace ItamiBen.App.Platform;
 
 /// <summary>
-/// `alarms.cron` 到点时弹的**系统通知**（2026-09-16 从 v3 搬过来，DESIGN §10）。
+/// `schedule.md` 到点时弹的**系统通知**（2026-09-16 从 v3 搬过来，DESIGN §10）。
 ///
 /// ⚠️ **跟骨牌上那条自绘提示条并存，不是二选一。** 两者各补对方的短板：
 /// 提示条保证**屏幕上一定看得见**（系统通知可能被「请勿打扰」吞掉、可能压根没权限），
@@ -13,8 +13,8 @@ namespace ItamiBen.App.Platform;
 /// **通知中心这一份才是不丢内容的那份**（v3 的用户 2026-09-03 点名要的）。
 ///
 /// ⚠️ **这不是闹钟的「到点跑命令」**（<see cref="Command"/>）：那边跑的是用户写在
-/// rules.json 里的命令、而且有开关；这里永远只是「弹一条带这段文字的通知」，
-/// **无条件执行，不受任何开关控制**——`alarms.cron` 的那个开关只管响不响铃（v3 的 J6）。
+/// `commands.md` 里的命令、而且有开关；这里永远只是「弹一条带这段文字的通知」，
+/// **无条件执行，不受任何开关控制**——`schedule.md` 的那个开关只管响不响铃（v3 的 J6）。
 ///
 /// 两个平台都靠**起一个短命的子进程**做到，不加任何包依赖、不碰 TFM
 /// （CLAUDE.md：App 保持 `net10.0`，`-windows` 别加回去）——真正的 WinRT/UWP toast
@@ -114,7 +114,7 @@ public static class Notify
     /// <summary>
     /// ⚠️ 用 <c>ArgumentList</c> 而不是拼一整条 <c>Arguments</c> 字符串——每个元素原样交给
     /// 子进程的 argv，不用再操心一层 shell 转义。（跟 <see cref="Command"/> 不一样：
-    /// 那边命令本身就是用户写在 rules.json 里的一整条 shell 命令，没法回避 shell。）
+    /// 那边命令本身就是用户写在 `commands.md` 里的一整条 shell 命令，没法回避 shell。）
     /// </summary>
     private static void Run(string exe, IReadOnlyList<string> args)
     {
