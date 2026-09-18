@@ -246,3 +246,80 @@ look identical on screen, and the user would believe a value took effect that ne
 `commands.json` are meant to travel between a user's machines unchanged; a tier and an
 opacity chosen for a laptop may be wrong on a desktop. When you migrate a configuration,
 ask before carrying this one over.
+
+---
+
+## `schedule.cron` — recurring reminders, and optionally a command
+
+```
+macOS    ~/Library/Application Support/ItamiBen/schedule.cron
+Windows  %LOCALAPPDATA%\ItamiBen\schedule.cron
+```
+
+Plain text, one entry per line, **standard crontab timing** — Vixie semantics, including the
+day-of-month / day-of-week OR rule: when both are restricted, a day matches if **either**
+matches. `@daily`, `@hourly` and the other aliases work in place of the five fields.
+
+```
+<minute> <hour> <day-of-month> <month> <day-of-week>  <reminder text>  [!command]
+
+0 9  * * 1   海贼王
+0 23 * * *   該睡了 !sleep
+```
+
+### How a line is read
+
+Strip the five timing fields. The rest is the reminder — **except that if its last
+whitespace-separated word begins with `!`, that word names a command in `commands.json`**,
+and everything before it is the reminder text.
+
+The command goes last because that is where a crontab reader looks for "what runs". The `!`
+is there to say out loud that the real command text lives in `commands.json`, not here.
+
+⚠️ **Reminder text is mandatory.** A line that carries only a command is not valid and is
+skipped. This is deliberate and structural: it makes "the machine did something and never
+said why" impossible to write down.
+
+⚠️ A reminder must therefore not **end** with a word that begins with `!`. (`快去做作业!` is
+fine — that `!` is not at the start of a word.)
+
+### Text and command do not gate each other
+
+The banner and the system notification come from the text; the command comes from the `!`
+word. They run as two independent passes, so **a mistyped command name never swallows the
+reminder** — the banner still appears, and the failure goes to `itamiben.log`.
+
+### ⚠️ An entry with a command is never replayed
+
+If the machine was asleep when the minute passed, the command does **not** fire late: close
+the lid for two hours and a 22:00 shutdown will not run when you open it. Reminders without a
+command **are** replayed, up to 12 hours — seeing a missed reminder is useful, running a
+missed shutdown is not.
+
+⚠️ **ItamiBen only runs commands while it is open.** It is not a substitute for `launchd` or
+Task Scheduler. Do not schedule anything here that must happen.
+
+### Comments, and how to disable an entry
+
+`#` at the **start of a line** is a comment, exactly as in crontab. A `#` anywhere else is
+ordinary reminder text.
+
+**Disable an entry by commenting it out.** That is the crontab idiom and it keeps the line for
+later; there is no `enabled` flag.
+
+### A line that cannot be read is skipped — and logged
+
+A bad cron expression, too few fields, or a command with no text: the line is skipped and one
+line is written to `itamiben.log`.
+
+```
+schedule.cron line 7 skipped: a command needs reminder text before it
+```
+
+⚠️ **The program cannot catch a wrong name.** `!sleap` parses perfectly; it fails when the
+minute arrives, and that failure also lands in `itamiben.log`. Check the name against
+`commands.json` yourself.
+
+### The file is plain text
+
+UTF-8 without a BOM, LF line endings. Reminder text may be any language.
