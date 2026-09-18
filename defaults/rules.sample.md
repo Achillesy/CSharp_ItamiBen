@@ -56,23 +56,36 @@ they need no special handling. A rule may set `App`, `Title`, or both; when both
 
 ### When you do not know what an application is called
 
-Do not guess. Have the user show you.
-
-1. Ask them to **start a round**, then use that application for a minute.
-   ⚠️ ItamiBen records only while a round is running and in its focus phase. With no round in
-   progress nothing is written and you will find nothing — do not conclude from an empty
-   result that the application has no name.
-2. It counts as off-task, so it turns red. That red is the evidence.
-3. Ask for the time and read the name the system actually reported:
+**Do not guess. Ask the machine.** It keeps every name it has ever seen:
 
 ```
-ItamiBen --query minutes "2026-09-17 01:50"
-01:52  focus=46  off=14  ...  ← 5s [Doubao] FNT格式与在线解题 - 豆包
-                                   ^^^^^^^^ this is the name for the rule
+ItamiBen --query apps
+#   seconds  last seen          name
+#      4821  2026-09-18 12:30  Code
+#      1902  2026-09-18 11:58  Google Chrome
 ```
 
-4. That name is ground truth for **this** platform only. For the other one, either have the
-   user repeat this on that machine, or tell them plainly that the other half is a guess.
+That is ground truth for this platform: copy the name exactly. On macOS the binary is at
+`/Applications/ItamiBen.app/Contents/MacOS/ItamiBen`; on Windows it is `ItamiBen.exe` in the
+install folder. It prints and exits, and works while ItamiBen is running.
+
+For `Title` rules there is a second one, deliberately separate:
+
+```
+ItamiBen --query titles            # today; pass a start and end to widen
+```
+
+⚠️ They are separate because they leak different things: an application list says **what you
+have installed**, a title list says **what you were doing**. Ask the user before putting
+titles anywhere.
+
+**If the application is not in the list**, it has never been in front of them during a round
+— ItamiBen only records while a round is running and in its focus phase. Ask them to start a
+round and use it for a minute, then run the command again. Do not conclude from an empty
+result that the name does not exist.
+
+**The other platform is never in that list.** For the half you cannot see, either have the
+user run the same command on that machine, or tell them plainly that it is a guess.
 
 ### Rules that apply to the block itself
 

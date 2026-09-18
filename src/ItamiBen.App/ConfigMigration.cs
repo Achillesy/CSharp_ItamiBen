@@ -46,6 +46,36 @@ internal static class ConfigMigration
         }
     }
 
+    /// <summary>
+    /// 老库里那张 `event` 表倒进 `event.log`，然后删掉。
+    ///
+    /// ⚠️ **倒完再删，不是直接删**：那是用户的历史。事件换了住处不该让历史凭空消失，
+    /// 而「以前的事去哪了」这种问题事后没人答得上来。
+    ///
+    /// ⚠️ 倒过去的行**原样带着当时的时间戳**，所以 `event.log` 不是按写入顺序而是
+    /// 按事件顺序——这正是读它的人想要的。
+    ///
+    /// ⚠️ **必须排在本次启动那条 `start` 之前**（所以它在 `OpenStore` 里紧跟着开库，
+    /// 而不是跟别的迁移一起）。排在后面的话，历史会被追加到本次启动的下面，
+    /// 文件里就出现了「写入序 ≠ 时间序」——只发生一次，但读它的人会困惑。
+    /// </summary>
+    public static void MoveEvents(SampleStore store)
+    {
+        if (!store.HasLegacyEvents) return;
+        try
+        {
+            var rows = store.LegacyEvents();
+            foreach (var (at, level, kind, text) in rows)
+                Log.WriteAt(at, level, kind, text);
+            store.DropLegacyEvents();
+            Events.Info("config", $"moved {rows.Count} event(s) out of the database into event.log");
+        }
+        catch (Exception e)
+        {
+            Events.Error("config", "Could not move the old events into event.log", e);
+        }
+    }
+
     /// <summary>拿出厂参考件当模板，只换配置块。文件已经在就什么都不做。</summary>
     private static void Put(string path, string sample, string? body)
     {

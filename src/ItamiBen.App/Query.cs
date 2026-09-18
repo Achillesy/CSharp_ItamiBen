@@ -20,8 +20,9 @@ namespace ItamiBen.App;
 /// 它要把判定引擎重放一遍，任何 SQL 都算不出来。
 ///
 /// <code>
+/// ItamiBen --query apps                  见过的每一个程序名（写 App 规则用）
+/// ItamiBen --query titles   [起] [止]    见过的窗口标题（写 Title 规则用）
 /// ItamiBen --query samples  [起] [止]    一秒一行的原始观测
-/// ItamiBen --query events   [起] [止]    别处留不下痕迹的事（闹钟 / 提醒 / 命令 / 出错）
 /// ItamiBen --query minutes  [起] [止]    每一轮逐分钟的构成，红的还给出是哪扇窗口
 /// ItamiBen --query rounds   [起] [止]    开过哪些轮、怎么结束的
 /// </code>
@@ -42,22 +43,42 @@ internal static class Query
         var end = Parse(to) ?? start.AddDays(1);
 
         using var db = SampleStore.Open(path);
-        Console.WriteLine($"# {path}   {start:yyyy-MM-dd HH:mm} → {end:yyyy-MM-dd HH:mm}");
+        Console.WriteLine($"# {path}");
+
+        // ⚠️ `apps` **不受区间约束**（见 SampleStore.AppNames），所以表头不印区间——
+        //    印了会让人以为「换个日期能查出别的」，而那是假的
+        if (what != "apps")
+            Console.WriteLine($"# {start:yyyy-MM-dd HH:mm} → {end:yyyy-MM-dd HH:mm}");
 
         switch (what)
         {
+            case "apps": Names(db.AppNames(), "application"); break;
+            case "titles": Names(db.TitleTexts(start, end), "window title"); break;
             case "samples": Samples(db, start, end); break;
-            case "events": Events(db, start, end); break;
             case "rounds": Rounds(db, start, end); break;
             case "minutes": Minutes(db, start, end); break;
             default:
-                Console.Error.WriteLine($"unknown query '{what}' — try: samples | events | rounds | minutes");
+                Console.Error.WriteLine($"unknown query '{what}' — try: apps | titles | samples | rounds | minutes");
                 break;
         }
 
         static DateTimeOffset? Parse(string? s) => DateTimeOffset.TryParse(s, out var t) ? t : null;
     }
 
+
+    /// <summary>
+    /// 见过的名字，多的在前。**给写规则用**：`App` / `Title` 正则照着这里抄，不用猜。
+    ///
+    /// ⚠️ 只有**专注阶段**才采样（DECISIONS F4）。没在任何一轮里用过的程序不会出现，
+    /// 所以表头要说清楚——否则「我明明一直开着 Chrome，这里怎么没有」会被当成 bug。
+    /// </summary>
+    private static void Names(List<SampleStore.SeenName> rows, string what)
+    {
+        Console.WriteLine($"# {rows.Count} {what}(s) seen while a round was running");
+        Console.WriteLine("# seconds  last seen          name");
+        foreach (var n in rows)
+            Console.WriteLine($"{n.Seconds,9}  {n.Last:yyyy-MM-dd HH:mm}  {n.Text}");
+    }
 
     private static void Samples(SampleStore db, DateTimeOffset from, DateTimeOffset to)
     {
@@ -67,13 +88,6 @@ internal static class Query
             Console.WriteLine($"{o.At:yyyy-MM-dd HH:mm:ss}\t{o.IdleSeconds}\t{o.App}\t{o.Title}");
     }
 
-    private static void Events(SampleStore db, DateTimeOffset from, DateTimeOffset to)
-    {
-        var rows = db.Events(from, to);
-        Console.WriteLine($"# {rows.Count} events");
-        foreach (var e in rows)
-            Console.WriteLine($"{e.At:yyyy-MM-dd HH:mm:ss}\t{e.Level,-5}\t{e.Kind,-10}\t{e.Text}");
-    }
 
     private static void Rounds(SampleStore db, DateTimeOffset from, DateTimeOffset to)
     {

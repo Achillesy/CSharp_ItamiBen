@@ -91,7 +91,7 @@ public static class SingleInstance
         {
             // ⚠️ **准备阶段出意外就放行**：单实例是便利，不是安全边界。
             //    让程序起来，比让它因为一个锁文件起不来强。
-            Log.Fallback($"single-instance check skipped ({e.GetType().Name}: {e.Message})");
+            Events.Warn("start", $"single-instance check skipped ({e.GetType().Name}: {e.Message})");
             return true;
         }
 
@@ -109,7 +109,7 @@ public static class SingleInstance
         catch (UnauthorizedAccessException e)
         {
             // 权限问题不等于有人在跑（目录只读、被安全软件挡住……），同样放行
-            Log.Fallback($"single-instance check skipped ({e.GetType().Name}: {e.Message})");
+            Events.Warn("start", $"single-instance check skipped ({e.GetType().Name}: {e.Message})");
             return true;
         }
     }
@@ -154,7 +154,7 @@ public static class SingleInstance
         catch (Exception e)
         {
             // 提到前台是**体贴，不是功能**：失败了也得让第二个实例安静退出
-            Log.Fallback($"could not raise the running window ({e.GetType().Name}: {e.Message})");
+            Events.Warn("start", $"could not raise the running window ({e.GetType().Name}: {e.Message})");
         }
     }
 

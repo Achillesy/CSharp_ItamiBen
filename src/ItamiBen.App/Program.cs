@@ -17,11 +17,12 @@ internal static class Program
         // 谁也说不清发生了什么
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            if (e.ExceptionObject is Exception ex) Log.Error("Unhandled exception; the program is about to exit", ex);
+            if (e.ExceptionObject is Exception ex)
+                Events.Error("crash", "Unhandled exception; the program is about to exit", ex);
         };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            Log.Error("Unobserved exception in a background task", e.Exception);
+            Events.Error("crash", "Unobserved exception in a background task", e.Exception);
             e.SetObserved();
         };
 
@@ -62,10 +63,9 @@ internal static class Program
         //    没理由因为「已经有一个在跑」而被挡住（打包时程序多半正开着）。
         if (!SingleInstance.TryAcquire())
         {
-            // ⚠️ **不能用 Log.Line**：日志还没 Start，那句会被静默丢掉；
-            //    而 Log.Start 是整份重写，会把**正在跑的那个实例**的日志擦干净。
-            //    Aside 只追加一行，落在对方的日志里，正好是想要的。
-            Log.Fallback($"another instance (pid {Environment.ProcessId}) tried to start — exiting");
+            // ⚠️ 日志是**追加**的，所以这一行落在对方的 `event.log` 里正好——
+            //    被挡回去的这个进程什么都做不了，留一句话是它唯一能做的事。
+            Events.Warn("start", $"another instance (pid {Environment.ProcessId}) tried to start — exiting");
             return;
         }
 

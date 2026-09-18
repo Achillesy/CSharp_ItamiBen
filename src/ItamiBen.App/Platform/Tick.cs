@@ -92,7 +92,7 @@ public static class Tick
         }
         catch (Exception e)
         {
-            Log.Error("Tick failed; skipping this one", e);
+            Events.Error("tick", "Tick failed; skipping this one", e);
         }
     }
 

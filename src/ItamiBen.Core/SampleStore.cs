@@ -76,18 +76,6 @@ public sealed class SampleStore : IDisposable
               ended_at      INTEGER,               -- NULL = 还在跑
               end_reason    TEXT
             );
-            -- 值得记一笔的事。⚠️ **凡是能从 sample / round 推出来的，这里一律不记**
-            -- （DECISIONS I11）：那就成了第二份副本，而副本迟早跟正本对不上。
-            -- 这张表只放**别处留不下痕迹**的东西：闹钟响了、提醒到点了、命令跑了、
-            -- 出错了。正常跑一轮，它一行都不该长。
-            -- ⚠️ `at` 不是主键：同一秒可以有好几件事。
-            CREATE TABLE IF NOT EXISTS event (
-              at    INTEGER NOT NULL,
-              level TEXT NOT NULL,                 -- info / warn / error
-              kind  TEXT NOT NULL,                 -- alarm / cron / command / stop / ...
-              text  TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS event_at ON event(at);
             -- 程序自己的设置（音色、置顶、窗口位置、闹钟时刻……）。
             -- ⚠️ **这些从来不是用户手写的**，跟 rules.json / alarms.cron / layout.json
             -- 不是一类东西：那三份用户写、程序只读；这些程序写、用户只看。
@@ -209,8 +197,6 @@ public sealed class SampleStore : IDisposable
                                                 IReadOnlyList<string> Goals,
                                                 DateTimeOffset? EndedAt, string? EndReason);
 
-    /// <summary>`event` 表的一行。时刻已在边界上归一成本地时间。</summary>
-    public readonly record struct EventRow(DateTimeOffset At, string Level, string Kind, string Text);
 
     /// <summary>
     /// 开一轮。
@@ -259,26 +245,6 @@ public sealed class SampleStore : IDisposable
             r.GetString(2).Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    /// <summary>
-    /// 记一笔事。⚠️ **能从 `sample` / `round` 推出来的东西一律别往这儿写**
-    /// （DECISIONS I11）——那是第二份副本，副本迟早跟正本对不上。
-    ///
-    /// 写失败一律吞掉：**记不上账绝不能把程序搞崩**，跟日志同一条原则。
-    /// </summary>
-    public void Note(DateTimeOffset at, string level, string kind, string text)
-    {
-        try
-        {
-            using var cmd = _db.CreateCommand();
-            cmd.CommandText = "INSERT INTO event (at, level, kind, text) VALUES ($at, $l, $k, $t);";
-            cmd.Parameters.AddWithValue("$at", at.ToUnixTimeSeconds());
-            cmd.Parameters.AddWithValue("$l", level);
-            cmd.Parameters.AddWithValue("$k", kind);
-            cmd.Parameters.AddWithValue("$t", text);
-            cmd.ExecuteNonQuery();
-        }
-        catch { }
-    }
 
     // ── 配置 ────────────────────────────────────────────────────────────────
 
@@ -372,6 +338,36 @@ public sealed class SampleStore : IDisposable
             return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
         }
     }
+
+    /// <summary>
+    /// 老库里那张 `event` 表还在吗（2026-09-18 之前事件住在库里）。**只给一次性迁移用。**
+    /// </summary>
+    public bool HasLegacyEvents
+    {
+        get
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='event';";
+            return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+        }
+    }
+
+    /// <summary>老 `event` 表里的全部行，按时间。**只给一次性迁移用。**</summary>
+    public List<(DateTimeOffset At, string Level, string Kind, string Text)> LegacyEvents()
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT at, level, kind, text FROM event ORDER BY at;";
+        var list = new List<(DateTimeOffset, string, string, string)>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add((DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
+                      r.GetString(1), r.GetString(2), r.GetString(3)));
+        return list;
+    }
+
+    /// <summary>倒进 `event.log` 之后把那张表删掉。**只给一次性迁移用。**</summary>
+    public void DropLegacyEvents()
+        => Execute(_db, "DROP TABLE IF EXISTS event;", ignoreErrors: true);
 
     /// <summary>
     /// 把老的配置表删掉。**迁移完成之后调一次**，此后这个库只装程序自己记的东西。
@@ -512,21 +508,60 @@ public sealed class SampleStore : IDisposable
     }
 
     /// <summary>一段时间里记过的事，按时间先后。</summary>
-    public List<EventRow> Events(DateTimeOffset from, DateTimeOffset to)
+    /// <summary>见过的一个名字：它本身、被观测到多少秒、最后一次是什么时候。</summary>
+    public readonly record struct SeenName(string Text, long Seconds, DateTimeOffset? Last);
+
+    /// <summary>
+    /// **这台机器上见过的每一个程序名**，按观测秒数从多到少。写 `App` 规则时照着抄。
+    ///
+    /// ⚠️ **不受时间区间约束**，列的是有史以来的全部：写规则要的是「这个程序在这台
+    /// 机器上到底叫什么」，那是个跟今天无关的事实。
+    ///
+    /// ⚠️ 只有**专注阶段**才采样（DECISIONS F4），所以没在任何一轮里用过的程序
+    /// 不会出现在这里。查不到不等于名字不存在。
+    /// </summary>
+    public List<SeenName> AppNames()
     {
         using var cmd = _db.CreateCommand();
-        cmd.CommandText = "SELECT at, level, kind, text FROM event WHERE at >= $from AND at < $to ORDER BY at;";
+        cmd.CommandText = """
+            SELECT a.name, count(s.at), max(s.at)
+            FROM app a LEFT JOIN sample s ON s.app_id = a.id
+            GROUP BY a.id ORDER BY count(s.at) DESC, a.name;
+            """;
+        return ReadNames(cmd);
+    }
+
+    /// <summary>
+    /// 区间内见过的窗口标题，按观测秒数从多到少。写 `Title` 规则时照着抄。
+    ///
+    /// ⚠️ **跟 <see cref="AppNames"/> 分开是有意的**：程序名泄露「装了什么」，
+    /// 窗口标题泄露「在干什么」，不是一个量级。分成两个入口，用户才能只交出
+    /// 需要交的那一半——这是结构，不是一句警告。
+    /// </summary>
+    public List<SeenName> TitleTexts(DateTimeOffset from, DateTimeOffset to)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = """
+            SELECT t.text, count(*), max(s.at)
+            FROM sample s JOIN title t ON t.id = s.title_id
+            WHERE s.at >= $from AND s.at < $to
+            GROUP BY t.id ORDER BY count(*) DESC, t.text;
+            """;
         cmd.Parameters.AddWithValue("$from", from.ToUnixTimeSeconds());
         cmd.Parameters.AddWithValue("$to", to.ToUnixTimeSeconds());
+        return ReadNames(cmd);
+    }
 
-        var list = new List<EventRow>();
+    private static List<SeenName> ReadNames(SqliteCommand cmd)
+    {
+        var list = new List<SeenName>();
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            list.Add(new EventRow(
-                DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)).ToLocalTime(),
-                r.GetString(1), r.GetString(2), r.GetString(3)));
+            list.Add(new SeenName(r.GetString(0), r.GetInt64(1),
+                                  r.IsDBNull(2) ? null : DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(2))));
         return list;
     }
+
 
     /// <summary>
     /// 三张表各有多少行。**给日志和测试用**——去重是这个设计的要点

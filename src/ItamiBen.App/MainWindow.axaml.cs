@@ -1072,8 +1072,11 @@ public partial class MainWindow : Window
             _store = SampleStore.Open(AppData.DbPath());
             _recorder = new Recorder(_store, () => (_last.App, _last.Title), () => _last.Idle);
 
-            // 库开起来了，从这一刻起要记的事都进 `event` 表，不再落文本（见 Events）
-            Events.Bind(_store);
+            // ⚠️ **必须排在下面那条 `start` 之前**：老库里的事件带着当时的时间戳搬进
+            //    `event.log`，排在后面的话历史会被追加到本次启动下面，
+            //    文件里就出现「写入序 ≠ 时间序」。
+            ConfigMigration.MoveEvents(_store);
+
 
             // ⚠️ **每次启动记一行，这是唯一破例记「正常事件」的地方**：
             //    sample 只在专注阶段才写，所以采样流里到处是空档。少了这一行，
@@ -1087,7 +1090,7 @@ public partial class MainWindow : Window
             // 录不上也不能崩：环会退化成「一秒都没采到」，但程序照跑
             // ⚠️ **这一条只能落文本**：库都没打开，事件表压根写不进去——
             //    这正是那份「最后的求救信」存在的全部理由
-            Log.Error("Failed to open the database", e);
+            Events.Error("db", "Failed to open the database", e);
         }
     }
 
@@ -1250,9 +1253,6 @@ public partial class MainWindow : Window
         }
         _settings.Save();
 
-        // ⚠️ **先解绑再关库**：解绑之后再出的事会落回文本，而不是往一个已经关掉的
-        //    连接上写——那会抛，而抛在退出路径上最难查
-        Events.Unbind();
 
         // ⚠️ **设置也要一起松开**，理由和上面那句一模一样，只是晚了一步才发现：
         //    设置窗口开着的时候点 ×，它作为被拥有的窗口会被一并关掉，

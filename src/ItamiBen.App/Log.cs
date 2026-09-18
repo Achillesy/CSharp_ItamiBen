@@ -1,40 +1,47 @@
 namespace ItamiBen.App;
 
 /// <summary>
-/// **库里装不下的那些话。** 两类，都在这个文件里：
+/// 两份纯文本日志，跟配置文件放在同一个文件夹里。
 ///
-/// <list type="number">
-///   <item><b>每一次手动改配置</b>（<see cref="Applied"/>）——用户要的是什么、实际跑的
-///   是什么、成没成。这是整个程序里唯一不可逆、且由外人写的动作，而**结果在库里、
-///   那句话推不出来**。⚠️ 它**必须在数据库外面**：SQLite 够不着普通文件
-///   （`ATTACH` 只能挂另一个库），所以这份记录不在任何一句外来 SQL 的射程之内；
-///   库坏了要修的时候，「我到底干过什么」也不在那个坏掉的库里面。</item>
-///
-///   <item><b>够不着数据库时的求救</b>（<see cref="Fallback"/>）——库打不开、被单实例
-///   挡回去、启动早期或退出之后崩了。</item>
+/// <list type="bullet">
+///   <item><c>event.log</c> —— **完整时间线**：启动、退出、闹钟、提醒到点、命令跑了、
+///   配置重装、以及每一次出错。</item>
+///   <item><c>error.log</c> —— **只有 warn 和 error**，而且这些行在 `event.log` 里
+///   也有一份。</item>
 /// </list>
 ///
-/// ⚠️ **原来这个文件是二值的**（里面有东西 = 出事了），2026-09-16 用户把记账并进来，
-/// 这个性质就没了——**这是知情的取舍**：换来的是智能体只有一个地方要写。
-/// 找毛病改成翻 `error` / `FAILED` 那几行，或者 `--query events`。
+/// ⚠️ **重复是有意的，而且不会漂**：两行是同一次调用里写的，append-only，没有第二个
+/// 真相来源。`error.log` 的价值在于**它通常是空的**——看一眼文件大小就知道出没出事，
+/// 而 `event.log` 是一条不缺的时间线（少了错误那几行，时间线上就会有洞：
+/// 「23:00 跑了命令、23:05 关机」，中间那次失败却不在线上）。
 ///
-/// ⚠️ **不滚存、不截断**：滚掉的正好是最早、最难回忆的那些改动。一次几百字节、
-/// 一个月几次，一年也就几 KB。
+/// ⚠️ **从库里的 `event` 表搬出来的**（2026-09-18 用户定）。原来事件住在库里，理由是
+/// 「v4 自己就是记录者，再单开一份文本就是第二个真相来源」。那条理由对**观测数据**
+/// 仍然成立，对事件不成立：用户的诊断路径是「把文件交给 AI」，而库是二进制的、
+/// 得教人敲 `--query`（DECISIONS I24 明令不教）。
+///
+/// ⚠️ 搬出来顺带删掉了一整类 bug：事件住在库里时，`Events` 需要 `Bind`/`Unbind`
+/// 和「库关了就回退到文本」的机制，因为**库会被关掉而文件不会**。2026-09-18 当天修的
+/// 两个 bug（I26 的 stop 事件、`Settings.Detach`）都长在那块土壤上——都是
+/// 「退出时谁先谁后」。文件没有这个问题，`Unbind` 这个概念不存在了。
+///
+/// ⚠️ **不滚存**。实测这个程序一天产生个位数的事件（3 天 9 条，不算我反复重编的
+/// start/stop），一年十几 KB。最坏情况是某件事每分钟失败一次，被去重节流压到
+/// 1 分钟 1 行 ≈ 90KB/天——那时候**文件变大本身就是信号**，滚掉它反而是帮倒忙。
 ///
 /// 写失败一律吞掉——**记不上话绝不能把程序搞崩**。
 /// </summary>
 public static class Log
 {
     private static readonly Lock Gate = new();
-    private static readonly string Path_ = System.IO.Path.Combine(AppData.Dir, "itamiben.log");
 
     /// <summary>
     /// <see cref="Arm"/> 调过没有。**没调过就一个字都不写。**
     ///
     /// ⚠️ 这不是开关，是护栏：`ItamiBen.App.Tests` 引的是 App 工程本身，被测到的代码
-    /// （比如 <see cref="Platform.Sound"/> 读不到文件时）照样会报错，而那时数据库是空的、
-    /// 会落到这里来——于是**单元测试往用户真实的 itamiben.log 里写东西**
-    /// （2026-09-16 实测撞上过，看见日志里冒出 `itamiben-no-such-file.wav` 才发现）。
+    /// （比如 <see cref="Platform.Sound"/> 读不到文件时）照样会报错，于是
+    /// **单元测试会往用户真实的日志里写东西**（2026-09-16 实测撞上过，
+    /// 看见日志里冒出 `itamiben-no-such-file.wav` 才发现）。
     ///
     /// ⚠️ 挂在 <c>Program.Main</c> 的最前面，**不是挂在窗口里**：被单实例挡回去的那个
     /// 进程根本走不到窗口，而它恰恰是最需要留句话的那一个。
@@ -43,30 +50,31 @@ public static class Log
 
     public static void Arm() => _armed = true;
 
-    /// <summary>留一句话。<paramref name="text"/> 自带级别和分类，这里只管落盘。</summary>
-    public static void Fallback(string text)
+    /// <summary>
+    /// 记一行。**warn / error 同时进 `error.log`。**
+    /// </summary>
+    public static void Write(string level, string kind, string text)
+        => WriteAt(DateTimeOffset.Now, level, kind, text);
+
+    /// <summary>
+    /// 带指定时刻记一行。**只有从老 `event` 表往 `event.log` 搬历史时才用**——
+    /// 那些行必须带着当时的时间戳，否则时间线就成了「搬运的那一刻」。
+    /// </summary>
+    public static void WriteAt(DateTimeOffset at, string level, string kind, string text)
     {
         if (!_armed) return;
+
+        var line = $"{at:yyyy-MM-dd HH:mm:ss}  {level,-5}  {kind,-9} {text}\n";
         lock (Gate)
         {
             try
             {
                 Directory.CreateDirectory(AppData.Dir);
-                File.AppendAllText(Path_,
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} pid={Environment.ProcessId}  {text}\n");
+                File.AppendAllText(Path.Combine(AppData.Dir, "event.log"), line);
+                if (level != "info")
+                    File.AppendAllText(Path.Combine(AppData.Dir, "error.log"), line);
             }
             catch { }
         }
-    }
-
-    public static void Error(string what, Exception e)
-        => Fallback($"error {what}: {e.GetType().Name} {e.Message}");
-
-
-    /// <summary>整份读出来给 <c>--query log</c>。</summary>
-    public static string Read()
-    {
-        try { return File.Exists(Path_) ? File.ReadAllText(Path_) : ""; }
-        catch (Exception e) { return $"(could not read {Path_}: {e.Message})"; }
     }
 }

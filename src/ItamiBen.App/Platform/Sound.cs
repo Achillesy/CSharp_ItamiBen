@@ -67,7 +67,7 @@ public static class Sound
             }
             catch (Exception e)
             {
-                Log.Error($"Failed to enumerate system sounds in {dir}", e);
+                Events.Error("sound", $"Failed to enumerate system sounds in {dir}", e);
             }
         }
 
@@ -138,7 +138,7 @@ public static class Sound
         }
         catch (Exception e)
         {
-            Log.Error($"Failed to repeat sound: {path}", e);
+            Events.Error("sound", $"Failed to repeat sound: {path}", e);
         }
     }
 
@@ -154,7 +154,7 @@ public static class Sound
         }
         catch (Exception e)
         {
-            Log.Error($"Failed to play sound: {path}", e);
+            Events.Error("sound", $"Failed to play sound: {path}", e);
         }
     }
 

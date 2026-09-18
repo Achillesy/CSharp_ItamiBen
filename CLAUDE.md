@@ -44,7 +44,7 @@ Itami（痛み）是痛，Ben 是 Big Ben。**名字、核心视觉、惩罚机�
 | ✅ 设置窗口 | 齿轮图标打开；只放音色和音量，开关都在右键菜单（DECISIONS E11） |
 | ✅ 应用图标 | 矢量青番茄（带条纹），打包时现导 .icns / .ico（DECISIONS G10 / G12） |
 | ✅ 单实例 | 运行时目录里的独占文件锁。⚠️ **v3 那个命名 Mutex 在 macOS 上根本不生效**（DECISIONS I1） |
-| ✅ 记录 | 观测 / 事件都在库里（I11）；`itamiben.log` 只装每次手动改配置的流水账 + 够不着库时的求救（I23 / I24） |
+| ✅ 记录 | 观测在库里；事件和错误在 `event.log` / `error.log` 两份纯文本里（2026-09-18） |
 | ✅ 系统通知 | 计划表到点，提示条 + 系统通知**并存**，一条事件一个（I4） |
 | ✅ 打包发布 | `pack-macos.sh` → .dmg、`pack-windows.ps1` + Inno Setup **两条都实测跑通**（含静默升级） |
 | ✅ 开发工具 | `--dial-specimens` 钟面样张、跑偏归因日志（I6 / I7） |
@@ -80,7 +80,7 @@ DECISIONS E4 记着理由。闹钟出声不矛盾：它是墙上时钟的功能�
 | 文件 | 内容 | 改代码前 |
 |---|---|---|
 | `DESIGN.md` | 当前设计 + **所有实测数据**（§2 那几张表是量出来的，不是推断） | **必读相关章节** |
-| `DECISIONS.md` | 护栏（已到 I27）：被推翻的方案、知情代价、「不要做成」 | **动手前先查** |
+| `DECISIONS.md` | 护栏（已到 I31）：被推翻的方案、知情代价、「不要做成」 | **动手前先查** |
 | `README.md` / `README_ZH.md` | 进 git 的说明文档，中英各一份 | 用户可见行为变了要同步 |
 
 ⚠️ **面向用户的文档一共四份，改一份就要过一遍另外三份**（v3 漏过一次）：
@@ -141,22 +141,23 @@ pwsh pack-windows.ps1       # 发布：publish → Inno Setup → dist/ItamiBen-
 
 ```bash
 B=dist/ItamiBen.app/Contents/MacOS/ItamiBen
-$B --query events  "2026-09-16 00:00"   # 闹钟 / 提醒 / 命令 / 出错——别处留不下痕迹的
+$B --query apps                         # 见过的每一个程序名——写 App 规则照着抄
+$B --query titles  "2026-09-18 00:00"   # 见过的窗口标题（敏感，故意跟上面分开）
 $B --query rounds  "2026-09-16 00:00"   # 开过哪些轮、怎么结束的
 $B --query minutes "2026-09-16 12:10"   # 逐分钟构成，红的给出是哪扇窗口
 $B --query samples "2026-09-16 12:10"   # 一秒一行的原始观测
 ```
 
-⚠️ **这个程序没有运行日志了**（2026-09-16 起，DECISIONS I11）：**库本身**就是记录。
-`itamiben.log` 只装**库里装不下的两类话**：每次手动改配置的流水账（I23），
-以及够不着库时的求救。查毛病翻 `error` / `FAILED` 那几行：
+事件和错误是**纯文本**，直接看：
 
 ```bash
-cat ~/Library/"Application Support"/ItamiBen/itamiben.log   # 纯文本，直接读
+D=~/Library/"Application Support"/ItamiBen
+cat "$D/event.log"    # 完整时间线：启动 / 退出 / 闹钟 / 提醒 / 命令 / 配置重装 / 出错
+cat "$D/error.log"    # 只有 warn 和 error，**正常情况下这个文件不存在**
 ```
 
-⚠️ **没有 `--query log`**（DECISIONS I24）：日志是纯文本，为它做一条出口等于把 `cat`
-包装一遍。`--query` 只留给**二进制的库**，而 `minutes` 更是非它不可——它要重放判定引擎。
+⚠️ **`--query` 只留给二进制的库**（DECISIONS I24）：纯文本文件不配有出口，
+为它做一条等于把 `cat` 包装一遍。`minutes` 更是非它不可——它要重放判定引擎。
 
 ⚠️ **教训**：2026-09-15 调试时因为没有眼睛，来回问了用户好几轮窗口上写了什么。
 **给程序装眼睛，比省那几行代码重要得多**——只是眼睛现在长在数据库上，不在文本文件里。
@@ -183,16 +184,19 @@ tests/ItamiBen.App.Tests/    **只测 App 层里的纯逻辑**（音频文件头
 signing/                     证书材料，不进 git
 
 运行时目录（macOS `~/Library/Application Support/ItamiBen/`）：
-  ItamiBen.sqlite3  **那一个库**：配置（目标/规则/命令/计划）+ 观测 + 轮次 + 事件
-                    + 设置 + 累计账本。2026-09-16 起配置也住进来了（I15）
-  AGENT.md          随程序发、每次启动刷新——**给智能体看的那份说明**
-  itamiben.log      每次手动改配置（要什么 / 跑了什么 / 成没成）+ 够不着库时的求救
+  rules.md / commands.md / schedule.md / layout.md   **配置**，人和 AI 写，程序只读
+  *.sample.md       随程序发的参考件，**每次启动覆盖刷新**，程序自己从不读
+  ItamiBen.sqlite3  程序自己记的：app / title / sample / round / setting / total 六张表
+  event.log         完整时间线
+  error.log         只有 warn 和 error；**正常情况下它不存在**
 
-⚠️ **没有配置文件了**：rules.json / alarms.cron / layout.json / settings.json / during.json
-全部作废，旧文件自动改名成 .migrated。配置由**智能体**改，用法在 AGENT.md。
-⚠️ 分界线：`goal` / `rule` / `command` / `schedule` / `config` 是**配置**（智能体改）；
-`sample` / `app` / `title` / `round` / `event` / `total` 是**账本**（谁都别改）。
-⚠️ 改完配置要 `UPDATE config SET version = version + 1`，程序每分钟看一眼才重装。
+⚠️ **分界线是「谁写」，不是「配置 vs 账本」**（2026-09-18）：人和 AI 写的进文件，
+程序自己写的留在库里。切口干净之后，**智能体连库的写权限都不需要**。
+⚠️ 每份配置是三段式 Markdown（给人的说明 → 给 AI 的规矩 → 标记好的配置块），
+所以**把单个文件扔给任何 AI 就够了**，不再有 `AGENT.md`。
+⚠️ 配置块靠围栏信息串里的 `itamiben` 认（```json itamiben），全文件有且只有一个
+——**不能用「第一个/最后一个代码块」**，说明部分本身就带示例代码块。
+⚠️ 改完一分钟内生效（程序比四个文件的 mtime）。`layout.md` 例外，只在启动时读一次。
 ```
 
 - git：默认分支 **`master`**，还没有远端（用户 2026-09-15：「先不用 github」）。

@@ -287,19 +287,5 @@ public class StoreLedgerTests
         Assert.Equal("3", s["b"]);
     }
 
-    [Fact]
-    public void 事件按时间读得回来()
-    {
-        using var db = Memory();
-        var t0 = new DateTimeOffset(2026, 9, 16, 10, 0, 0, TimeSpan.FromHours(8));
-        db.Note(t0, "info", "alarm", "响了");
-        db.Note(t0, "warn", "db", "对不上");          // 同一秒可以有好几件事
-        db.Note(t0.AddHours(2), "info", "stop", "退出");
-
-        var rows = db.Events(t0, t0.AddHours(1));
-        Assert.Equal(2, rows.Count);
-        Assert.Equal("alarm", rows[0].Kind);
-        Assert.Equal(TimeZoneInfo.Local.GetUtcOffset(t0), rows[0].At.Offset);
-    }
 }
 
