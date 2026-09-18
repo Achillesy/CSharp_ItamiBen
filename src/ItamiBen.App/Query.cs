@@ -21,7 +21,6 @@ namespace ItamiBen.App;
 ///
 /// <code>
 /// ItamiBen --query apps                  见过的每一个程序名（写 App 规则用）
-/// ItamiBen --query titles   [起] [止]    见过的窗口标题（写 Title 规则用）
 /// ItamiBen --query samples  [起] [止]    一秒一行的原始观测
 /// ItamiBen --query minutes  [起] [止]    每一轮逐分钟的构成，红的还给出是哪扇窗口
 /// ItamiBen --query rounds   [起] [止]    开过哪些轮、怎么结束的
@@ -46,19 +45,22 @@ internal static class Query
         Console.WriteLine($"# {path}");
 
         // ⚠️ `apps` **不受区间约束**（见 SampleStore.AppNames），所以表头不印区间——
-        //    印了会让人以为「换个日期能查出别的」，而那是假的
+        //    印了会让人以为「换个日期能查出别的」，而那是假的。
+        //    ⚠️ **没有 `--query titles`**：标题不是系统报的标识符，是用户自己挑的语义片段
+        //    （`经济学`），不需要查；真要看实际标题，`minutes` 早就在红格后面印了。
+        //    而单开一个入口等于给「屏幕上出现过的一切」做一键导出——
+        //    这个程序里最敏感的数据，不该有专用出口。
         if (what != "apps")
             Console.WriteLine($"# {start:yyyy-MM-dd HH:mm} → {end:yyyy-MM-dd HH:mm}");
 
         switch (what)
         {
             case "apps": Names(db.AppNames(), "application"); break;
-            case "titles": Names(db.TitleTexts(start, end), "window title"); break;
             case "samples": Samples(db, start, end); break;
             case "rounds": Rounds(db, start, end); break;
             case "minutes": Minutes(db, start, end); break;
             default:
-                Console.Error.WriteLine($"unknown query '{what}' — try: apps | titles | samples | rounds | minutes");
+                Console.Error.WriteLine($"unknown query '{what}' — try: apps | samples | rounds | minutes");
                 break;
         }
 

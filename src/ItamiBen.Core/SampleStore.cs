@@ -531,26 +531,6 @@ public sealed class SampleStore : IDisposable
         return ReadNames(cmd);
     }
 
-    /// <summary>
-    /// 区间内见过的窗口标题，按观测秒数从多到少。写 `Title` 规则时照着抄。
-    ///
-    /// ⚠️ **跟 <see cref="AppNames"/> 分开是有意的**：程序名泄露「装了什么」，
-    /// 窗口标题泄露「在干什么」，不是一个量级。分成两个入口，用户才能只交出
-    /// 需要交的那一半——这是结构，不是一句警告。
-    /// </summary>
-    public List<SeenName> TitleTexts(DateTimeOffset from, DateTimeOffset to)
-    {
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = """
-            SELECT t.text, count(*), max(s.at)
-            FROM sample s JOIN title t ON t.id = s.title_id
-            WHERE s.at >= $from AND s.at < $to
-            GROUP BY t.id ORDER BY count(*) DESC, t.text;
-            """;
-        cmd.Parameters.AddWithValue("$from", from.ToUnixTimeSeconds());
-        cmd.Parameters.AddWithValue("$to", to.ToUnixTimeSeconds());
-        return ReadNames(cmd);
-    }
 
     private static List<SeenName> ReadNames(SqliteCommand cmd)
     {

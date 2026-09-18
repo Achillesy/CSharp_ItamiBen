@@ -3,8 +3,10 @@ using Xunit;
 namespace ItamiBen.Core.Tests;
 
 /// <summary>
-/// `--query apps` / `--query titles` 背后的两条查询。它们存在的理由只有一个：
-/// **写 `App` / `Title` 正则时不用猜**——照着这台机器真实见过的名字抄。
+/// `--query apps` 背后那条查询。它存在的理由只有一个：
+/// **写 `App` 正则时不用猜**——照着这台机器真实见过的名字抄。
+///
+/// ⚠️ **没有对应的 titles 版本**：标题是用户自己挑的语义片段，不是系统报的标识符。
 /// </summary>
 public class SeenNamesTests
 {
@@ -36,19 +38,6 @@ public class SeenNamesTests
         //    第二天才出现的 Obsidian 也必须在列表里。
         using var db = Filled();
         Assert.Contains("Obsidian", db.AppNames().Select(r => r.Text));
-    }
-
-    [Fact]
-    public void 标题受区间约束_查得到也查得漏()
-    {
-        using var db = Filled();
-        var day1 = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.FromHours(8));
-
-        var first = db.TitleTexts(day1, day1.AddDays(1)).Select(r => r.Text).ToList();
-        Assert.Equal(["main.cs", "GitHub"], first);
-        Assert.DoesNotContain("笔记", first);              // 第二天的，不在这个区间
-
-        Assert.Contains("笔记", db.TitleTexts(day1, day1.AddDays(2)).Select(r => r.Text));
     }
 
     [Fact]

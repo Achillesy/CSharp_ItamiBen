@@ -80,7 +80,7 @@ DECISIONS E4 记着理由。闹钟出声不矛盾：它是墙上时钟的功能�
 | 文件 | 内容 | 改代码前 |
 |---|---|---|
 | `DESIGN.md` | 当前设计 + **所有实测数据**（§2 那几张表是量出来的，不是推断） | **必读相关章节** |
-| `DECISIONS.md` | 护栏（已到 I31）：被推翻的方案、知情代价、「不要做成」 | **动手前先查** |
+| `DECISIONS.md` | 护栏（已到 I32）：被推翻的方案、知情代价、「不要做成」 | **动手前先查** |
 | `README.md` / `README_ZH.md` | 进 git 的说明文档，中英各一份 | 用户可见行为变了要同步 |
 
 ⚠️ **面向用户的文档一共四份，改一份就要过一遍另外三份**（v3 漏过一次）：
@@ -142,7 +142,6 @@ pwsh pack-windows.ps1       # 发布：publish → Inno Setup → dist/ItamiBen-
 ```bash
 B=dist/ItamiBen.app/Contents/MacOS/ItamiBen
 $B --query apps                         # 见过的每一个程序名——写 App 规则照着抄
-$B --query titles  "2026-09-18 00:00"   # 见过的窗口标题（敏感，故意跟上面分开）
 $B --query rounds  "2026-09-16 00:00"   # 开过哪些轮、怎么结束的
 $B --query minutes "2026-09-16 12:10"   # 逐分钟构成，红的给出是哪扇窗口
 $B --query samples "2026-09-16 12:10"   # 一秒一行的原始观测

@@ -54,6 +54,10 @@ A plain regex against the window title. Titles are usually the same text on both
 they need no special handling. A rule may set `App`, `Title`, or both; when both are present
 **both** must match.
 
+Ask the user what the window says — they are the one who decides which part of a title means
+"this is work". If a title rule never seems to match, `ItamiBen --query minutes "<the time>"`
+prints the application and the real title behind every red minute.
+
 ### When you do not know what an application is called
 
 **Do not guess. Ask the machine.** It keeps every name it has ever seen:
@@ -69,15 +73,10 @@ That is ground truth for this platform: copy the name exactly. On macOS the bina
 `/Applications/ItamiBen.app/Contents/MacOS/ItamiBen`; on Windows it is `ItamiBen.exe` in the
 install folder. It prints and exits, and works while ItamiBen is running.
 
-For `Title` rules there is a second one, deliberately separate:
-
-```
-ItamiBen --query titles            # today; pass a start and end to widen
-```
-
-⚠️ They are separate because they leak different things: an application list says **what you
-have installed**, a title list says **what you were doing**. Ask the user before putting
-titles anywhere.
+**There is no equivalent for `Title`, on purpose.** An application name is an identifier the
+operating system hands you — you cannot guess it. A title pattern is a piece of meaning the
+user chooses (`GitHub`, `经济学`); they already know what it is. And a command that lists
+every window title would be a one-press export of the most private thing this program holds.
 
 **If the application is not in the list**, it has never been in front of them during a round
 — ItamiBen only records while a round is running and in its focus phase. Ask them to start a
