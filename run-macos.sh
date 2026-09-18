@@ -19,7 +19,7 @@ if [ "${1:-}" = "--run-only" ]; then
   pkill -f "ItamiBen.app/Contents/MacOS/ItamiBen" 2>/dev/null || true
   sleep 1
   open "$OUT"
-  echo "已启动。日志：~/Library/Application Support/ItamiBen/itamiben.log"
+  echo "已启动。日志：~/Library/Application Support/ItamiBen/event.log（出错看 error.log）"
   exit 0
 fi
 
