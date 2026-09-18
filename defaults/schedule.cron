@@ -1,0 +1,10 @@
+# ItamiBen schedule — the first five columns are standard crontab fields.
+# <min> <hour> <dom> <mon> <dow>  <reminder text>  [!command]
+# See AGENT.md for the rules.
+
+# Example: an hourly nudge. Off by default — delete the leading # to turn it on.
+# 0 * * * *   Nice work. Keep it up.
+
+# Example: put the machine to sleep at 23:00, and say why.
+# The name after ! refers to commands.json.
+# 0 23 * * *   Time to sleep !sleep

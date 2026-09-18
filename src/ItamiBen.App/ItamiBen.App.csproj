@@ -53,6 +53,23 @@
   </ItemGroup>
 
   <!--
+    出厂默认配置。**首次运行时拷进运行时目录**（那个目录里没有同名文件才拷）。
+
+    ⚠️ **两个安装包都不用改**：`bundle-macos.sh` 是 `cp -R "$SRC/." Contents/MacOS/`，
+    `installer/ItamiBen.iss` 是 `Source: "{#StageDir}\*" ... recursesubdirs`——
+    两边都把 publish 产物整个吞进去，所以这一条 Content 同时覆盖 .dmg 和 .exe 安装包。
+
+    ⚠️ **默认值从「代码里播种」改成「发一份文件」**（原来是 Config.EnsureSeeded）。
+    改动的代价是：文件可能跟解析器漂开，而代码播种不会。对冲办法是
+    `DefaultsTests` —— 它拿**真解析器**读这几份文件，漂了就编译期之后立刻红。
+    别删那个测试，它是这次改动唯一的安全带。
+  -->
+  <ItemGroup>
+    <Content Include="..\..\defaults\**" Link="defaults\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
     发布时删掉所有 .pdb。
 
     ⚠️ **不是为了「干净」，是量出来的**：不删的话 publish 目录 127MB，删完 27MB。

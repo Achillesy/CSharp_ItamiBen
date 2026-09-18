@@ -22,4 +22,11 @@
     <ProjectReference Include="..\..\src\ItamiBen.Core\ItamiBen.Core.csproj" />
   </ItemGroup>
 
+
+  <!-- 出厂默认配置：DefaultsTests 拿真解析器读它们，漂了就红 -->
+  <ItemGroup>
+    <Content Include="..\..\defaults\**" Link="defaults\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

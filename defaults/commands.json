@@ -1,0 +1,33 @@
+{
+  "Alarm": {
+    "MacOS": "open-config",
+    "Windows": "open-config"
+  },
+  "Commands": {
+    "open-config": {
+      "MacOS": "open ~/\"Library/Application Support/ItamiBen\"",
+      "Windows": "explorer \"%LOCALAPPDATA%\\ItamiBen\"",
+      "Note": "Windows untested"
+    },
+    "sleep": {
+      "MacOS": "pmset sleepnow",
+      "Windows": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+      "Note": "untested"
+    },
+    "lock": {
+      "MacOS": "pmset displaysleepnow",
+      "Windows": "rundll32.exe user32.dll,LockWorkStation",
+      "Note": "untested"
+    },
+    "restart": {
+      "MacOS": "osascript -e 'tell application \"System Events\" to restart'",
+      "Windows": "shutdown /r /t 0",
+      "Note": "untested"
+    },
+    "shutdown": {
+      "MacOS": "osascript -e 'tell application \"System Events\" to shut down'",
+      "Windows": "shutdown /s /t 0",
+      "Note": "untested"
+    }
+  }
+}
