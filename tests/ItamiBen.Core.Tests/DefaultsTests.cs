@@ -15,13 +15,15 @@ namespace ItamiBen.Core.Tests;
 /// </summary>
 public class DefaultsTests
 {
+    /// <summary>读出厂参考件里**标记过的那个配置块**——跟程序走的是同一条路。</summary>
     private static string Read(string name)
-        => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "defaults", name));
+        => MarkdownConfig.Extract(
+               File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "defaults", name)));
 
     [Fact]
-    public void 出厂的_rules_json_真解析器读得懂_而且至少留一个可选目标()
+    public void 出厂的_rules_真解析器读得懂_而且至少留一个可选目标()
     {
-        var rules = GoalRules.Parse(Read("rules.json"));
+        var rules = GoalRules.Parse(Read("rules.sample.md"));
 
         // ⚠️ 一个可选目标都没有的话，全新安装是一台**按不下 Start** 的钟
         Assert.NotEmpty(rules.SelectableGoals);
@@ -34,18 +36,18 @@ public class DefaultsTests
     }
 
     [Fact]
-    public void 出厂的_schedule_cron_读得懂_而且一条都不生效()
+    public void 出厂的_schedule_读得懂_而且一条都不生效()
     {
         // ⚠️ **样例不该有副作用**（跟库里那条默认 schedule 设成 enabled=0 是同一条理由）：
         //    用户没要求过的东西，不该装完就每小时打扰一次。
         //    crontab 里「停用」的惯用法就是注释掉，所以这里应当解析出 0 条。
-        Assert.Empty(AlarmsList.Parse(Read("schedule.cron")));
+        Assert.Empty(AlarmsList.Parse(Read("schedule.sample.md")));
     }
 
     [Fact]
-    public void 出厂的_commands_json_是合法_JSON_而且闹钟绑的命令真的存在()
+    public void 出厂的_commands_闹钟绑的命令真的存在()
     {
-        using var doc = JsonDocument.Parse(Read("commands.json"));
+        using var doc = JsonDocument.Parse(Read("commands.sample.md"));
         var root = doc.RootElement;
 
         var names = root.GetProperty("Commands").EnumerateObject().Select(p => p.Name).ToList();
@@ -64,9 +66,9 @@ public class DefaultsTests
     }
 
     [Fact]
-    public void 出厂的_layout_json_是合法_JSON_而且两个键都在()
+    public void 出厂的_layout_两个键都在()
     {
-        using var doc = JsonDocument.Parse(Read("layout.json"));
+        using var doc = JsonDocument.Parse(Read("layout.sample.md"));
         Assert.Contains(doc.RootElement.GetProperty("Layout").GetString(),
                         new[] { "standard", "compact" });
         var p = doc.RootElement.GetProperty("OpacityPercent").GetDouble();

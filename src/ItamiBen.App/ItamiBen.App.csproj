@@ -43,17 +43,12 @@
   </ItemGroup>
 
   <!--
-    ⚠️ **AGENT.md 要跟程序一起发**：配置现在住在数据库里、由智能体改，而智能体得先
-    找得到说明。程序启动时把它刷进运行时目录，**跟数据库放在同一个文件夹**——
-    智能体拿到那个目录就同时拿到了库和用法。
-    每次启动都覆盖：它是随二进制发的，**不该被改，也就不会跟代码漂开**。
-  -->
-  <ItemGroup>
-    <Content Include="..\..\AGENT.md" Link="AGENT.md" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+    出厂配置参考件 `*.sample.md`。**每次启动刷新到运行时目录**，
+    用户自己那份 `*.md` 只在缺失时从它播一次（见 `AppData.SeedDefaults`）。
 
-  <!--
-    出厂默认配置。**首次运行时拷进运行时目录**（那个目录里没有同名文件才拷）。
+    ⚠️ **不再单独发 `AGENT.md`**：说明已经并进每一份配置文件里（三段式 Markdown）。
+    说明和它描述的数据分居两个文件，就是「一件事写了两份、靠人记得同步」——
+    这个项目为这个形状栽过四次。
 
     ⚠️ **两个安装包都不用改**：`bundle-macos.sh` 是 `cp -R "$SRC/." Contents/MacOS/`，
     `installer/ItamiBen.iss` 是 `Source: "{#StageDir}\*" ... recursesubdirs`——

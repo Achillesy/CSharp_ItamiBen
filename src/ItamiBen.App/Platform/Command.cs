@@ -4,11 +4,8 @@ using ItamiBen.Core;
 namespace ItamiBen.App.Platform;
 
 /// <summary>
-/// 闹钟到点要跑的那条命令：`setting.alarmCommand` 记的是名字，正文在库的 `command` 表里。
+/// 到点要跑的那条命令。正文只住在 `commands.json`，这里**按名字取**。
 /// 从 v3 搬过来，跟 AW 无关。
-///
-/// **永远只执行第 0 条**（v3 的 E9）：那是个常用命令的收藏夹，不是配置格式——
-/// 想换命令就去文件里重排顺序，**不做界面去选**。
 ///
 /// ⚠️ **起完就返回，绝不 await**：那条命令多半是关机/重启/休眠，等它「跑完」没有意义，
 /// 而且命令挂死也卡不到分钟节拍。输出交给后台任务收进日志。
@@ -18,15 +15,15 @@ public static class Command
     /// <summary>
     /// 闹钟到点：按名字从命令清单里取出这台机器该跑的那条，跑掉。
     ///
-    /// ⚠️ **只按名字取，不接受命令原文**（DECISIONS I15）：可执行的文本只住在
-    /// `command` 表里，这样「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
+    /// ⚠️ **只按名字取，不接受命令原文**：可执行的文本只住在 `commands.json`，
+    /// 这样「这台机器上有哪些命令能被自动跑」永远只要看一个地方。
     ///
-    /// ⚠️ 配置**现在就在库里**，运行中改了下一分钟就重装，所以这里不用再去现读文件
-    /// （原来那条「到点现读 rules.json」的路连同它的容错一起删掉了）。
+    /// ⚠️ 清单是启动时装好、改了下一分钟重装的，所以这里**不去现读文件**——
+    /// 原来那条「到点现读 rules.json」的路连同它的容错一起删掉了。
     /// </summary>
-    public static void LaunchDetached(GoalRules rules, string? name)
+    public static void LaunchDetached(CommandTable commands, string? name)
     {
-        if (rules.CommandNamed(name) is not { Length: > 0 } cmd)
+        if (commands.TextFor(name) is not { Length: > 0 } cmd)
         {
             Events.Warn("command", $"Alarm fired with the command armed, but there is no command named "
                                  + $"'{name ?? "(none)"}' for this OS");
@@ -41,8 +38,8 @@ public static class Command
     /// 把**这一条**命令原样交给 shell 跑，起完就返回。
     ///
     /// ⚠️ 从 <see cref="LaunchDetached"/> 里拆出来，**只为了能测**：
-    /// `LaunchDetached` 取的是这台机器上真实配置里的命令，而那条命令就是重启
-    /// （`command` 表里 `alarm` 那行）——测试要是调它，当场把机器重启了。
+    /// `LaunchDetached` 取的是这台机器上真实配置里的命令，而那条多半是关机或重启
+    /// ——测试要是调它，当场把机器带走。
     /// 拆开之后测试只喂一条自己写的无害命令，走的却是同一条起进程的代码，
     /// 引号那条路径一个字节都没绕开。
     /// </summary>

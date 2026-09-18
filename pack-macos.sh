@@ -39,9 +39,9 @@ echo "==> 装配 bundle"
 
 echo "==> 装 .dmg"
 ln -s /Applications "$STAGE/dmg/Applications"
-# ⚠️ **没有示例配置文件了**（2026-09-16 起配置住在库里，DECISIONS I15）。
-#    改放 AGENT.md：装之前就能读到「怎么让智能体改配置」。
-cp AGENT.md "$STAGE/dmg/"
+# ⚠️ **把四份配置参考件放进 .dmg**：装之前就能读到「配置长什么样、怎么让 AI 改」。
+#    它们同时也在 .app 里（csproj 的 Content），这里这一份纯粹是为了「装之前先看看」。
+cp defaults/*.sample.md "$STAGE/dmg/"
 
 # ⚠️ 这份 Read Me 是**面向用户的文档之一**（另外两份是 README.md 和 installer/README.txt）。
 #    用户可见的行为变了，三份都要跟着改——v3 漏过一次。
@@ -87,24 +87,29 @@ pane for you. No restart needed: the next sample picks it up.
 Configuring it: ask an AI
 =========================
 
-There are no configuration files. Goals, matching rules, the command list and
-the schedule are rows in one database, and they are meant to be written by an
-AI, not by hand:
+Configuration lives in four Markdown files, in
 
-    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
+    ~/Library/Application Support/ItamiBen/
 
-Next to it sits AGENT.md -- written for the AI, not for you. A copy is in this
-disk image if you want to look first.
+    rules.md      what counts as work
+    commands.md   everything this machine may be made to run
+    schedule.md   recurring reminders, standard crontab format
+    layout.md     how wide and how see-through the window is
 
-If you have a coding assistant with access to your files, point it at that
-folder and say what you want:
+Each one explains itself: a short note for you, detailed instructions for an
+AI, and the settings in a marked block at the end. Copies are in this disk
+image if you want to look before installing.
 
-    Read AGENT.md and set ItamiBen up so only VS Code counts as work.
+Give one whole file to any AI -- a coding assistant that can read the folder,
+or a web chat you paste it into -- and say what you want:
 
-If you do not, open Settings (the gear) and press the red "Configure online"
-button. It shows you your current configuration, lets you write what you want
-in plain words, and copies the whole lot to your clipboard. Paste that into any
-web AI, bring the answer back, and press Apply.
+    Only count VS Code and Chrome when the title mentions GitHub.
+
+Replace the file with what comes back. There is nothing else to install and no
+second document the AI needs.
+
+Next to each one sits a *.sample.md, rewritten every launch. If an AI mangles
+your file, that is what you compare against.
 
 
 When something looks wrong

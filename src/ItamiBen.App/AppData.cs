@@ -52,20 +52,49 @@ public static class AppData
     public const string WindowTitle = "痛みを知らせる";
 
     /// <summary>
-    /// 把随程序发的 `AGENT.md` 刷进运行时目录，**跟数据库放在同一个文件夹**。
+    /// 四份配置文件。**智能体写、程序只读**（2026-09-18 起，配置从库里搬回文件）。
     ///
-    /// ⚠️ 配置住在库里、由智能体改（DECISIONS I15），而智能体得先找得到说明。
-    /// 拿到那个目录 = 同时拿到库和用法，不用再去翻仓库。
-    ///
-    /// ⚠️ **每次启动都覆盖**：它是随二进制发的，不该被人改——也就不会跟代码漂开。
-    /// 复制失败一声不吭：少一份说明不该让程序起不来。
+    /// ⚠️ 分界线是**谁写**，不是「配置 vs 账本」：这四份由人或智能体写，
+    /// 库里剩下的全部由程序自己写。切口干净之后，智能体**连库的写权限都不需要**。
     /// </summary>
-    public static void RefreshAgentDoc()
+    public static string RulesPath()    => Path.Combine(Dir, "rules.md");
+    public static string CommandsPath() => Path.Combine(Dir, "commands.md");
+    public static string LayoutPath()   => Path.Combine(Dir, "layout.md");
+    public static string SchedulePath() => Path.Combine(Dir, "schedule.md");
+
+    /// <summary>
+    /// 每次启动都摆好配置文件。**两种文件，两种待遇**：
+    ///
+    /// <list type="bullet">
+    ///   <item><c>*.sample.md</c> —— 随程序发的**参考件**，每次启动覆盖刷新。
+    ///   程序自己从不读它；它存在只为一件事：用户那份被 AI 改坏了，旁边有个完好的对照。
+    ///   因为它跟二进制同源，**永远不会跟代码漂开**。</item>
+    ///   <item><c>*.md</c> —— **用户自己那份**，只在不存在时从参考件播一次，
+    ///   之后永不覆盖。人和智能体写的东西永远优先。</item>
+    /// </list>
+    ///
+    /// ⚠️ 配置文件是三段式的 Markdown（给人的说明 → 给 AI 的规矩 → 标记好的配置块），
+    /// 所以**播种就是原样拷贝**：用户拿到的第一份就已经自带完整说明，
+    /// 把它整个扔给任何 AI 就够了——不需要再配一份 `AGENT.md`。
+    ///
+    /// ⚠️ 拷不动一声不吭：少一份配置不该让程序起不来，界面上本来就会说「没有目标」。
+    /// </summary>
+    public static void SeedDefaults()
     {
         try
         {
-            var src = Path.Combine(AppContext.BaseDirectory, "AGENT.md");
-            if (File.Exists(src)) File.Copy(src, Path.Combine(Dir, "AGENT.md"), overwrite: true);
+            var src = Path.Combine(AppContext.BaseDirectory, "defaults");
+            if (!Directory.Exists(src)) return;
+            Directory.CreateDirectory(Dir);
+
+            foreach (var from in Directory.EnumerateFiles(src, "*.sample.md"))
+            {
+                var sample = Path.GetFileName(from);
+                File.Copy(from, Path.Combine(Dir, sample), overwrite: true);
+
+                var mine = Path.Combine(Dir, sample.Replace(".sample.md", ".md"));
+                if (!File.Exists(mine)) File.Copy(from, mine);
+            }
         }
         catch { }
     }

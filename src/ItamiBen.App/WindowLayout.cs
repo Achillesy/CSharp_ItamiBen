@@ -88,9 +88,15 @@ public static class WindowLayout
     /// </summary>
     private static LayoutSettings _current = new(LayoutMode.Standard, DefaultOpacity);
 
-    /// <summary>设置读出来之后装上去。**一次启动只该调一次。**</summary>
-    public static void Bind(Settings settings)
-        => _current = new LayoutSettings(ModeOf(settings.Layout), OpacityOf(settings.OpacityPercent));
+    /// <summary>
+    /// 读出来的值装上去。**一次启动只该调一次。**
+    ///
+    /// ⚠️ 吃的是 <see cref="LayoutFile"/> 而不是 <see cref="Settings"/>：这两个键
+    /// 2026-09-18 搬回文件了（`layout.json`），因为它们**没有任何界面能改**——
+    /// 是配置不是程序状态。`Settings` 里其余十九个键都有界面，留在库里。
+    /// </summary>
+    public static void Bind(LayoutFile file)
+        => _current = new LayoutSettings(ModeOf(file.Layout), OpacityOf(file.OpacityPercent));
 
     public static LayoutMode Mode => _current.Mode;
 

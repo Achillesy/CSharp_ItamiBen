@@ -61,6 +61,12 @@ public partial class MainWindow : Window
     private readonly List<TextBlock> _goalTotals = [];
 
     private GoalRules _rules = GoalRules.Empty;
+
+    /// <summary>
+    /// 命令清单（`commands.json`）。**跟规则并列的一份配置，不再挂在 `GoalRules` 上**
+    /// ——它们原来同住 `rules.json` 才被揉在一起，现在是两份文件、两件事。
+    /// </summary>
+    private CommandTable _commands = CommandTable.Empty;
     private string? _rulesError;
     private GoalTotals _totals = new();
     private Round? _round;
@@ -113,7 +119,8 @@ public partial class MainWindow : Window
     private DateTime _alarmsProcessedThrough = DateTime.Now;
 
     /// <summary>上一次装配时的配置版本。跟库里对不上就重装（<see cref="ReloadConfigIfChanged"/>）。</summary>
-    private long _configVersion;
+    /// <summary>配置指纹：四个文件的写入时刻 + 库版本。见 <see cref="Config.Stamp"/>。</summary>
+    private string _configStamp = "";
 
     /// <summary>提示条显示到哪一刻。null = 没在显示。⚠️ 用截止时刻不用布尔量，同 E6。</summary>
     private DateTime? _bannerUntil;
@@ -201,10 +208,12 @@ public partial class MainWindow : Window
         //    这里拿到的是一套默认值——程序照样跑，只是记不住上次的选择。
         _settings = Settings.Load(_store);
         _totals = Totals.Load(_store);
-        WindowLayout.Bind(_settings);
-        AppData.RefreshAgentDoc();
-        if (_store is { } db) Config.EnsureSeeded(db);
+        // ⚠️ **必须排在 LoadConfig 之前**：全新安装时运行时目录是空的，
+        //    先把随程序发的 defaults/ 补进去，装配才读得到东西
+        AppData.SeedDefaults();
         LoadConfig();
+        // ⚠️ 外观**只在这里读一次**，之后全程不变（见 Config.LoadLayout）
+        WindowLayout.Bind(Config.LoadLayout(_settings));
 
         BuildGoals();
 
@@ -294,9 +303,10 @@ public partial class MainWindow : Window
     /// </summary>
     private void LoadConfig()
     {
-        _rules = Config.LoadRules(_store, _settings);
+        _rules = Config.LoadRules(_store);
+        _commands = Config.LoadCommands(_store, _settings);
         _alarms = Config.LoadSchedule(_store);
-        _configVersion = _store?.ConfigVersion ?? 0;
+        _configStamp = Config.Stamp(_store);
 
         _rulesError = _rules.SelectableGoals.Count == 0
             ? "no goals configured — ask an agent to read AGENT.md"
@@ -304,22 +314,38 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 有人改过配置就重装。**每分钟看一眼版本号。**
+    /// 有人改过配置就重装。**每分钟比一次指纹。**
     ///
     /// ⚠️ 没有这一步的话，智能体改完要等你重启才生效——而「改了没反应」正是这个项目
-    /// 最恨的那类失败。版本号是**智能体自己负责加一**的，AGENT.md 里写死了。
+    /// 最恨的那类失败。
+    ///
+    /// ⚠️ 指纹是**文件的写入时刻**（见 <see cref="Config.Stamp"/>），不再是库里那个
+    /// 要智能体自己加一的版本号。那个号是库那一版的头号坑：改完忘了 bump，
+    /// 用户就以为你根本没改成。现在由操作系统替我们维护。
+    ///
+    /// ⚠️ **装不出来就不换**：解析失败时保留上一份能用的配置，别让一次手滑的编辑
+    /// 把正在跑的那一轮判成全红。
     /// </summary>
     private void ReloadConfigIfChanged()
     {
-        if (_store is not { } store) return;
-        long version;
-        try { version = store.ConfigVersion; }
-        catch (Exception e) { Events.Error("config", "Cannot read the config version", e); return; }
-        if (version == _configVersion) return;
+        string stamp;
+        try { stamp = Config.Stamp(_store); }
+        catch (Exception e) { Events.Error("config", "Cannot read the config stamp", e); return; }
+        if (stamp == _configStamp) return;
 
+        var before = _rules;
         LoadConfig();
+
+        // 原来有目标、重装之后一个都没有 ⇒ 这次编辑是坏的，退回上一份
+        if (before.SelectableGoals.Count > 0 && _rules.SelectableGoals.Count == 0)
+        {
+            _rules = before;
+            _rulesError = "the new configuration could not be used — keeping the previous one";
+            Events.Warn("config", "new configuration unusable; kept the previous one");
+        }
+
         BuildGoals();
-        Events.Info("config", $"reloaded at version {version}");
+        Events.Info("config", "reloaded");
     }
 
     /// <summary>
@@ -487,7 +513,7 @@ public partial class MainWindow : Window
     internal bool CommandArmed => _commandArmed;
 
     /// <summary>到点会跑的那一条；没配就是 null。设置窗口要显示它（v3 的 E14）。</summary>
-    internal string? CommandForThisOs => _rules.CommandNamed(_settings.AlarmCommand);
+    internal string? CommandForThisOs => _commands.TextFor(_commands.AlarmName);
 
     /// <summary>
     /// 把内存里的设置写回库。**给 <see cref="SqlWindow"/> 在跑外来 SQL 之前调。**
@@ -872,7 +898,7 @@ public partial class MainWindow : Window
         //    （错过的那一分钟不会事后执行）。命令只按名字取，原文只住在 command 表里。
         foreach (var e in due)
             if (e.Run is { } name)
-                Platform.Command.LaunchDetached(_rules, name);
+                Platform.Command.LaunchDetached(_commands, name);
 
         // ⚠️ 这个开关**只管响不响铃**（v3 的 J6）：上面那条「检查清单 → 挑出到点的 →
         //    提示条 + 系统通知 + 日志」的主链路**无条件每分钟都走**，不受它控制。
@@ -1136,7 +1162,7 @@ public partial class MainWindow : Window
         if (_commandArmed)
         {
             Events.Info("alarm", $"{_alarm.FireAt:HH:mm} fired → running the command");
-            Command.LaunchDetached(_rules, _settings.AlarmCommand);
+            Command.LaunchDetached(_commands, _commands.AlarmName);
             return;
         }
 

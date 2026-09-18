@@ -10,14 +10,19 @@ namespace ItamiBen.Core;
 /// <param name="Run">要跑的命令名。null = 这条只提醒，不跑任何东西。</param>
 public readonly record struct AlarmEntry(DateTime At, string Text, string Expression = "", string? Run = null);
 
-/// <summary>清单里的一行：一条 crontab 时间表达式 + 它的提醒文字。</summary>
+/// <summary>清单里的一行：一条 crontab 时间表达式 + 提醒文字 + 可选的命令名。</summary>
 /// <remarks>
-/// ⚠️ <see cref="Text"/> **永远只是文字，永远不会被执行**（v3 的 J17）。这份文件
-/// 长得跟一份真 crontab 一模一样，而这个程序另有一条真会跑命令的路（`executeCommand`，
-/// 内容多半是关机），两者离得太近——一旦合流，一份看着人畜无害的提醒文件就能关机器。
-/// 将来若要向 Linux 看齐做成可执行，必须单独设计、单独确认，不许"顺手统一"。
+/// ⚠️ <see cref="Text"/> **永远只是文字，永远不会被执行**（v3 的 J17）。会跑的东西
+/// 只能来自 <see cref="Run"/>，而 <see cref="Run"/> 里存的是**名字不是正文**——
+/// 正文只住在 `commands.json` 里。这两条合起来，一份看着人畜无害的提醒文件
+/// **仍然关不了机器**：它最多能点名一条用户自己写进命令表的命令。
+///
+/// ⚠️ J17 原话是「将来若要向 Linux 看齐做成可执行，**必须单独设计、单独确认，
+/// 不许顺手统一**」。2026-09-18 走完了那个流程（用户逐条拍板），落点是：
+/// 命令写在行尾、以 `!` 开头、**提醒文字必填**。最后那条是这次设计的核心——
+/// 它让「机器自己做了事却没说为什么」在语法上就写不出来。
 /// </remarks>
-/// <param name="Run">要跑的命令名（库里 `schedule.run` 那一列）。null = 只提醒。</param>
+/// <param name="Run">要跑的命令名（`commands.json` 里的键）。null = 只提醒。</param>
 public sealed record CronEntry(Cron Schedule, string Text, string? Run = null);
 
 /// <summary>
@@ -43,27 +48,91 @@ public static class AlarmsList
     public const int HorizonMinutes = 12 * 60;
 
     /// <summary>
-    /// 解析整份文件。**每一行独立**：不认识的行（空行、<c>#</c> 注释、写错的表达式、
-    /// <c>@reboot</c>）一律安静跳过，不拖累整份文件，也**不记日志、不提示**
-    /// ——见 <see cref="Cron"/> 的类注释。
-    ///
-    /// 行的形状就是 crontab 的：五个空白分隔的字段（或者一个 <c>@</c> 别名），
-    /// **剩下的到行尾全是提醒文字**。文字为空的行跳过：没有文字的提醒没有意义。
+    /// 一份 <c>schedule.cron</c> 读出来的结果：认得的条目，以及**读不懂的行和原因**。
     /// </summary>
-    public static IReadOnlyList<CronEntry> Parse(string text)
+    /// <param name="Skipped">
+    /// 一行一条，形如 <c>line 7: a command needs reminder text before it</c>。
+    /// ⚠️ 调用方负责把它写进 `error.log`（DECISIONS I29）——Core 不碰文件。
+    /// </param>
+    public sealed record ScheduleFile(
+        IReadOnlyList<CronEntry> Entries, IReadOnlyList<string> Skipped);
+
+    /// <summary>
+    /// 解析整份文件。**每一行独立**，一行读不懂不拖累其余。
+    ///
+    /// 行的形状：五个空白分隔的字段（或一个 <c>@</c> 别名），然后是提醒文字，
+    /// **行尾可以再跟一个 <c>!命令名</c>**：
+    ///
+    /// <code>
+    /// 0 9  * * 1   海贼王
+    /// 0 23 * * *   该睡了 !sleep
+    /// </code>
+    ///
+    /// ⚠️ **提醒文字必填**（2026-09-18 用户定）：只有命令没有文字的行**不合法**，
+    /// 跳过并记一条原因。这条是结构性的——它让「机器自己做了事却没说为什么」
+    /// 写不出来，比在文档里叮嘱一句硬得多。
+    ///
+    /// ⚠️ **命令放行尾不放行首**：标准 crontab 的第 6 字段就是命令、就在行尾，
+    /// 放行首反而破坏 cron 的阅读习惯。代价是一条可陈述的约束——
+    /// **提醒文字不能以 `!` 开头的词结尾**（`快去做作业!` 不受影响，那个 `!` 不在词首）。
+    ///
+    /// ⚠️ **不校验命令名的形状**。`!Sleep` 照样当成命令引用交出去，让它在到点那一刻
+    /// 因为「没有这个名字」而失败——那条路会记日志，而且**提醒照常弹**。
+    /// 在这里拦下来的话，一个大小写错误会把整行连同提醒一起吞掉。
+    ///
+    /// 空行和 <c>#</c> 注释**不算读不懂**，安静跳过不记账：注释掉正是 crontab 里
+    /// 「这条先别响」的惯用法。
+    /// </summary>
+    public static ScheduleFile Read(string text)
     {
-        var result = new List<CronEntry>();
+        var entries = new List<CronEntry>();
+        var skipped = new List<string>();
+        var no = 0;
+
         foreach (var raw in text.Split('\n'))
         {
+            no++;
             var line = raw.Trim();
-            if (line.Length == 0 || line[0] == '#') continue;
+            if (line.Length == 0 || line[0] == '#') continue;   // 注释和空行不算错
 
             var (schedule, label) = line[0] == '@' ? ParseAlias(line) : ParseFields(line);
-            if (schedule is null || label.Length == 0) continue;
+            if (schedule is null)
+            {
+                skipped.Add($"line {no}: not a valid crontab line");
+                continue;
+            }
 
-            result.Add(new CronEntry(schedule, label));
+            var (reminder, run) = SplitLabel(label);
+            if (reminder.Length == 0)
+            {
+                skipped.Add(run is null
+                    ? $"line {no}: no reminder text"
+                    : $"line {no}: a command needs reminder text before it");
+                continue;
+            }
+
+            entries.Add(new CronEntry(schedule, reminder, run));
         }
-        return result;
+        return new ScheduleFile(entries, skipped);
+    }
+
+    /// <summary>
+    /// 只要条目的那个便捷入口。**实现只有 <see cref="Read"/> 一处**，这里不重复逻辑
+    /// ——「一个文件两条读取路径」是这个项目栽过两次的形状（v3 的 §15.4）。
+    /// </summary>
+    public static IReadOnlyList<CronEntry> Parse(string text) => Read(text).Entries;
+
+    /// <summary>
+    /// 把第 6 字段切成「提醒文字」和「命令名」：**最后一个词以 <c>!</c> 开头就是命令**。
+    /// </summary>
+    private static (string Text, string? Run) SplitLabel(string label)
+    {
+        var cut = label.LastIndexOfAny([' ', '\t']);
+        var last = cut < 0 ? label : label[(cut + 1)..];
+        if (last.Length < 2 || last[0] != '!') return (label, null);
+
+        // `!` 之前的全是文字；只有命令没有文字时这里是空串，调用方据此判不合法
+        return (cut < 0 ? "" : label[..cut].TrimEnd(), last[1..]);
     }
 
     /// <summary>

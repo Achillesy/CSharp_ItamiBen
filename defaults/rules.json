@@ -1,9 +1,0 @@
-{
-  "Groups": {
-    "Pomodoro": {
-      "Rules": [
-        { "App": "^(ItamiBen|ItamiBen\\.exe)$" }
-      ]
-    }
-  }
-}

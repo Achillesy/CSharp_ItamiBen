@@ -102,38 +102,38 @@ dimming those just makes them unreadable.
 
 Read once, at startup.
 
-## Configuring it: ask an agent
+## Configuring it: hand a file to an AI
 
-**There are no configuration files.** Goals, matching rules, the command list and the
-schedule are rows in one SQLite database, and they are meant to be written by an AI agent,
-not by hand:
+Configuration lives in four Markdown files. Each one explains itself — a short note for you,
+detailed instructions for an AI, and the actual settings in a marked block at the bottom.
 
 ```
-macOS    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
-Windows  %LOCALAPPDATA%\ItamiBen\ItamiBen.sqlite3
+macOS    ~/Library/Application Support/ItamiBen/
+Windows  %LOCALAPPDATA%\ItamiBen\
 ```
 
-Next to that database sits **`AGENT.md`**, written for the agent rather than for you. Point
-any capable coding agent at that folder and say what you want:
+| file | decides |
+|---|---|
+| `rules.md` | what counts as work |
+| `commands.md` | everything this machine may be made to run, and what the alarm runs |
+| `schedule.md` | recurring reminders, in standard crontab format |
+| `layout.md` | how wide and how see-through the window is |
 
-> Read AGENT.md and set ItamiBen up so only VS Code and Chrome-on-GitHub count as work.
+**Give one whole file to any AI** — a coding agent with access to the folder, or a web chat
+you paste it into — and say what you want:
 
-> Read AGENT.md and have ItamiBen remind me to stand up every hour between 9 and 6 on
-> weekdays.
+> Only count VS Code and Chrome when the title mentions GitHub.
 
-The agent will need write access to that folder once. Everything else it can work out from
-`AGENT.md` and the database itself — the database already knows every application you have
-actually been seen using, so the agent can check its own rules against reality instead of
-guessing.
+> Remind me to stand up every hour between 9 and 6 on weekdays.
 
-**No agent that can touch your files?** Settings → the red **Configure online** button
-does the same job through a web chat: it shows you your current configuration (editable —
-delete anything you would rather not send), you write what you want, one button copies
-`AGENT.md` + your configuration + your request to the clipboard, and you paste the SQL that
-comes back. It takes a copy of the database before it applies anything.
+Replace the file with what comes back. There is nothing else to install, nothing to
+configure, and no second document the AI needs: **the file carries its own instructions.**
 
-You can of course open the database yourself with any SQLite tool. `AGENT.md` is readable
-by humans too; it just assumes you want the details.
+Next to each one sits a `*.sample.md` — the pristine version, rewritten every time ItamiBen
+starts. If an AI mangles your file, that is what you compare against.
+
+Changes take effect within a minute. The one exception is `layout.md`, which is read once at
+startup; the file says so.
 
 ## Your files
 
@@ -142,15 +142,15 @@ All under `~/Library/Application Support/ItamiBen/` (macOS) or `%LOCALAPPDATA%\I
 
 | file | what it is |
 |---|---|
-| `ItamiBen.sqlite3` | everything: configuration, observations, rounds, events, settings, and the hours ledger |
-| `AGENT.md` | refreshed at every launch; the instructions the agent reads |
-| `itamiben.log` | every configuration change ever applied — what was asked for, what ran — plus anything that could not reach the database |
+| `rules.md` `commands.md` `schedule.md` `layout.md` | your configuration — yours to edit, never overwritten |
+| `*.sample.md` | the shipped reference copies, refreshed at every launch |
+| `ItamiBen.sqlite3` | what the program itself records: observations, rounds, settings, and the hours ledger |
 
 ## Recurring reminders
 
-Rows in the `schedule` table, with **standard crontab** timing — Vixie semantics, including
-the day-of-month / day-of-week OR rule. A row carries reminder text, a command to run, or
-both. Ask the agent; `AGENT.md` has the details.
+Lines in `schedule.md`, with **standard crontab** timing — Vixie semantics, including the
+day-of-month / day-of-week OR rule. A line carries reminder text and, optionally, the name of
+a command from `commands.md`. The file explains the rest.
 
 When one comes due you get two things at once, on purpose:
 

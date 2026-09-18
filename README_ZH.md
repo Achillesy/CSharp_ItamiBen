@@ -87,33 +87,37 @@ UPDATE setting SET value = '60'        WHERE key = 'opacityPercent';
 
 **只在启动时读一次。**
 
-## 怎么配置：让智能体去改
+## 怎么配置：把一个文件扔给 AI
 
-**这个程序没有配置文件。** 目标、匹配规则、命令清单、计划表，全是一个 SQLite 库里的行，
-而且**本来就是给智能体写的，不是给人手写的**：
+配置住在四份 Markdown 文件里。**每一份都自带说明**——开头一段给你看的话，中间是给 AI 的
+详细规矩，最后是标记好的配置块。
 
 ```
-macOS    ~/Library/Application Support/ItamiBen/ItamiBen.sqlite3
-Windows  %LOCALAPPDATA%\ItamiBen\ItamiBen.sqlite3
+macOS    ~/Library/Application Support/ItamiBen/
+Windows  %LOCALAPPDATA%\ItamiBen\
 ```
 
-那个库旁边放着一份 **`AGENT.md`**——写给智能体看的，不是写给你看的。
-把任何一个像样的编码智能体指到那个文件夹，然后说你想要什么：
+| 文件 | 管什么 |
+|---|---|
+| `rules.md` | 什么算工作 |
+| `commands.md` | 这台机器可以被自动跑的全部命令，以及闹钟跑哪一条 |
+| `schedule.md` | 周期提醒，标准 crontab 格式 |
+| `layout.md` | 窗口多宽、多透 |
 
-> 读一下 AGENT.md，把 ItamiBen 配成只有 VS Code 和 Chrome 上的 GitHub 算工作。
+**把整个文件交给任意一个 AI** ——能操作文件的编码智能体，或者你粘贴进去的网页对话，
+都一样——然后说你想要什么：
 
-> 读一下 AGENT.md，让 ItamiBen 工作日 9 点到 18 点每小时提醒我起来动一动。
+> 只有 VS Code 和标题里带 GitHub 的 Chrome 算工作。
 
-智能体需要对那个文件夹有一次写权限。剩下的它自己就能从 `AGENT.md` 和库里弄明白——
-**库里本来就存着你实际用过的每一个程序名**，所以它可以拿现实来校对自己写的规则，
-而不是靠猜。
+> 工作日 9 点到 18 点，每小时提醒我起来动一动。
 
-**手边没有能改文件的智能体？** 设置里那个红色的 **Configure online** 按钮走的是同一条路，
-只是换成网页对话：它把你当前的配置显示出来（**可编辑**——不想外传的行自己删掉），
-你写一句想要什么，一个按钮把 `AGENT.md` + 配置 + 你的需求一起复制到剪贴板，
-粘给任意网页 AI，再把它给的 SQL 贴回来。执行之前它会先把整个库备份一份。
+把它给回来的内容覆盖原文件就行。不用装任何东西，不用配置什么，
+**也不需要第二份文档**——说明就在文件里。
 
-你当然也可以自己用任何 SQLite 工具打开它。`AGENT.md` 人也读得懂，只是它默认你想知道细节。
+每份旁边还有一个 `*.sample.md`，是完好的参考版，**每次启动都从程序里刷新一遍**。
+哪天 AI 把你的文件改坏了，就拿它对照。
+
+改完一分钟内生效。唯一的例外是 `layout.md`——它只在启动时读一次，文件里写着。
 
 ## 你的文件
 
@@ -121,14 +125,14 @@ Windows  %LOCALAPPDATA%\ItamiBen\ItamiBen.sqlite3
 
 | 文件 | 是什么 |
 |---|---|
-| `ItamiBen.sqlite3` | 全部：配置、观测、轮次、事件、设置、累计账本 |
-| `AGENT.md` | 每次启动刷新，智能体读的那份说明 |
-| `itamiben.log` | 每一次改配置：要的是什么、跑的是什么、成没成；外加够不着数据库时的求救 |
+| `rules.md` `commands.md` `schedule.md` `layout.md` | 你的配置，归你改，程序永不覆盖 |
+| `*.sample.md` | 随程序发的参考版，每次启动刷新 |
+| `ItamiBen.sqlite3` | 程序自己记的东西：观测、轮次、设置、累计账本 |
 
 ## 周期提醒
 
 `schedule` 表里的行，时刻用**标准 crontab**——Vixie 语义，含「日 / 周」那条 OR 规则。
-一行可以带提醒文字、带要跑的命令，或者两个都带。跟智能体说就行，细节在 `AGENT.md` 里。
+一行带提醒文字，行尾还可以跟一个 `commands.md` 里的命令名。细节文件里写着。
 
 到点时**同时**给你两样，这是故意的：
 

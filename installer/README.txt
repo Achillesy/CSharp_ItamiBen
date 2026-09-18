@@ -17,38 +17,43 @@ Where your files live
 
     %LOCALAPPDATA%\ItamiBen\
 
-    ItamiBen.sqlite3  Everything: your configuration (goals, rules, commands,
-                      schedule) and your history (observations, sessions, the
-                      hours ledger).
-    AGENT.md          Written for an AI, not for you. Refreshed every launch.
-    itamiben.log      Every configuration change ever applied -- what was asked
-                      for, what ran, whether it worked. Plain text.
+    rules.md      What counts as work.
+    commands.md   Everything this machine may be made to run, and what the
+                  alarm runs.
+    schedule.md   Recurring reminders, in standard crontab format.
+    layout.md     How wide and how see-through the window is.
+
+    *.sample.md   Pristine reference copies, rewritten every launch. If an AI
+                  mangles one of your files, compare against these.
+
+    ItamiBen.sqlite3   What the program itself records: observations, sessions,
+                       settings and the hours ledger. You never edit this.
 
 
-Configuring it: ask an AI
-=========================
+Configuring it: hand a file to an AI
+====================================
 
-There are no configuration files. Goals, matching rules, the command list and
-the schedule are rows in the database above, and they are meant to be written
-by an AI, not by hand.
+Each configuration file explains itself -- a short note for you, detailed
+instructions for an AI, and the actual settings in a marked block at the end.
 
-If you have a coding assistant with access to your files, point it at that
-folder and say what you want:
+Give one whole file to any AI and say what you want:
 
-    Read AGENT.md and set ItamiBen up so only VS Code counts as work.
+    Only count VS Code and Chrome when the title mentions GitHub.
 
-    Read AGENT.md and have ItamiBen remind me to stand up every hour between
-    9 and 6 on weekdays.
+    Remind me to stand up every hour between 9 and 6 on weekdays.
 
-If you do not have one, open Settings (the gear) and press the red
-"Configure online" button. It shows you your current configuration, lets you
-write what you want in plain words, and copies the whole lot to your clipboard.
-Paste that into any web AI, bring the answer back, and press Apply.
+It works either way: a coding assistant that can read the folder, or a web chat
+you paste the file into. Replace the file with what comes back.
 
-WARNING: that clipboard text contains your goal names, your reminder texts and
-the list of applications on this machine. Delete anything you would rather not
-share before you copy -- the box is editable. Window titles and per-second
-history are never included.
+There is nothing else to install and no second document the AI needs -- the
+file carries its own instructions.
+
+WARNING: a configuration file contains your goal names and your reminder texts.
+Delete anything you would rather not share before pasting it into a web chat.
+Window titles and per-second history are never in these files.
+
+Changes take effect within a minute. The exception is layout.md, which is read
+once at startup; the file says so.
 
 
 Rules, and the one trap worth knowing
@@ -58,8 +63,8 @@ A rule matches the foreground application name, the window title, or both, with
 regular expressions. They are CASE SENSITIVE, and the two platforms report
 different names: Windows sees "Code.exe" where macOS sees "Code". A rule written
 for the wrong one matches nothing at all and does not error -- the ring simply
-stays red. The AI is told this, and it can check against the application names
-ItamiBen has actually seen on this machine.
+stays red. rules.md tells the AI this, and shows it how to ask you for the
+real name instead of guessing.
 
 ItamiBen gets no special treatment: looking at its own dial counts as off-task,
 exactly like looking at anything else.

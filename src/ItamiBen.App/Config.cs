@@ -3,138 +3,156 @@ using ItamiBen.Core;
 namespace ItamiBen.App;
 
 /// <summary>
-/// 配置的装配、迁移和播种——**配置住在库里**（2026-09-16 用户定，DECISIONS I15）。
+/// 配置的装配。**配置住在文件里，由智能体写**（2026-09-18 起）。
 ///
-/// 原来是两个手写文件（`rules.json` / `alarms.cron`）。它们之所以能变成表，是因为
-/// **用户不手写它们，智能体写**：用户说「我想要什么」，智能体去改库。那么「程序永远
-/// 不写 rules.json」这条硬规矩（它存在的唯一理由是保护手写的注释）连同它带来的一堆
-/// 限制，就全部消失了。
+/// 一路走过来是：五个手写文件 → 一个数据库（I15）→ 四个文件 + 一个纯观测的库。
+/// 绕回来不是白绕——两次的分界线不一样：
 ///
-/// ⚠️ **库里那几行默认值同时是模板。** 给智能体看的 `AGENT.md` 是手写的散文，
-/// **散文一定会漂**——这个项目一天之内被这件事咬过三次（rules.json 里那句「ItamiBen
-/// 有豁免」在豁免删掉之后还挂了半天；v3 的 F1 比它引用的 A5 多活两个月；README 里
-/// 写着 macOS 上用 `dotnet run` 而那条路拿不到授权）。**库里一行真实的数据不会漂**，
-/// 它是代码建出来的，形状永远跟代码一致。
+/// <list type="bullet">
+///   <item>I15 按「配置 vs 账本」分，于是把**程序自己写**的设置和累计也一并塞进库，
+///   那一半是对的（`settings.json` 整份重写正是两个实例互相覆盖的根源，I1）；</item>
+///   <item>现在按「**谁写**」分：人和智能体写的进文件，程序自己写的留在库里。
+///   切口干净之后，智能体**连库的写权限都不需要**——一整类「AI 一句 SQL 抹掉
+///   十六小时累计」的事故在结构上消失了，不是靠护栏拦住的。</item>
+/// </list>
+///
+/// ⚠️ **文件优先，库是后备。** 过渡期两条路并存：运行时目录里有那份文件就用文件，
+/// 没有就退回库里的老配置——这样从 SQLite 那一版升上来的用户不会一下子失去配置。
+/// 库那条路在第二步（迁移 + 拆除）里删掉。
 /// </summary>
 internal static class Config
 {
     /// <summary>
-    /// 默认那条计划**是关着的**（`enabled = 0`）。
+    /// 读一份配置文件，**并把其中标记过的那个配置块抠出来**。
     ///
-    /// ⚠️ 它存在只为当模板：让智能体看得见计划表长什么样。开着的话就成了
-    /// **用户没要求过、却每小时打扰一次**的东西——样例不该有副作用。
-    /// </summary>
-    private const string GreetingCron = "0 * * * *";
-
-    /// <summary>库里一条配置都没有时，装点什么进去。</summary>
-    public static void EnsureSeeded(SampleStore store)
-    {
-        if (!store.ConfigIsEmpty) return;
-
-        // 老文件还在就搬它，否则播种
-        if (TryMigrate(store)) return;
-
-        var dir = AppData.Dir;
-        store.PutConfig(
-            goals:
-            [
-                // ⚠️ **必须有一条目标，否则全新安装是一台什么都不做的钟**：
-                //    目标列表空了 Start 就按不下去。默认这条认 ItamiBen 自己，
-                //    所以装完就能按 Start 看见绿色——它同时是「规则长什么样」的样例。
-                new SampleStore.GoalRow("Pomodoro", true,
-                    [new SampleStore.RuleRow("^ItamiBen(\\.exe)?$", null)]),
-            ],
-            commands:
-            [
-                // 打开数据库所在的文件夹。既是命令表的样例，本身也有用——
-                // 想拿 DB 工具看这个库，第一步就是把这个文件夹打开
-                new SampleStore.CommandRow("show-files",
-                    MacOS: $"open \"{dir}\"",
-                    Windows: $"explorer \"{dir}\""),
-            ],
-            schedule:
-            [
-                (new SampleStore.ScheduleRow(GreetingCron, "Nice work. Keep it up.", null),
-                 Enabled: false,
-                 Note: "Example: an hourly nudge. Off by default — set enabled = 1 to turn it on."),
-            ],
-            note: "seeded defaults");
-
-        Events.Info("config", "seeded defaults (1 goal, 1 command, 1 example schedule)");
-    }
-
-    /// <summary>
-    /// 把老的 `rules.json` / `alarms.cron` 搬进库，然后改名成 `.migrated`。
-    /// 一个都不在就返回 false（该播种了）。
+    /// 配置文件是三段式的 Markdown：给人的说明 → 给 AI 的规矩 → 标记好的配置块。
+    /// 这一层只负责把最后那一段交给对应的解析器；说明部分程序一个字都不看，
+    /// 它是写给**下一个打开这个文件的人或 AI** 的。
     ///
-    /// ⚠️ **先落库、确认没抛，再改名**：顺序反了中途出错就两头都没了。
+    /// 不存在返回 null（调用方退回库那条路）；**读不动、或者块找不到也返回 null，
+    /// 但要记一笔**——「文件在那儿却没生效」是最难查的一类，不能一声不吭。
     /// </summary>
-    private static bool TryMigrate(SampleStore store)
+    private static string? Read(string path)
     {
-        var rulesPath = Path.Combine(AppData.Dir, "rules.json");
-        var cronPath = Path.Combine(AppData.Dir, "alarms.cron");
-        if (!File.Exists(rulesPath) && !File.Exists(cronPath)) return false;
-
         try
         {
-            List<SampleStore.GoalRow> goals = [];
-            List<SampleStore.CommandRow> commands = [];
-            string? layout = null;
-            double? opacity = null;
-
-            if (File.Exists(rulesPath))
-            {
-                var rules = GoalRules.Parse(File.ReadAllText(rulesPath));
-                (goals, commands) = rules.ToRows();
-                layout = rules.LayoutName;
-                opacity = rules.OpacityPercent;
-            }
-
-            var schedule = new List<(SampleStore.ScheduleRow, bool, string?)>();
-            if (File.Exists(cronPath))
-                foreach (var e in AlarmsList.Parse(File.ReadAllText(cronPath)))
-                    schedule.Add((new SampleStore.ScheduleRow(e.Schedule.Expression, e.Text, null), true, null));
-
-            store.PutConfig(goals, commands, schedule, "migrated from rules.json / alarms.cron");
-
-            // 外观那两个键归设置表——它们是「怎么显示」，不是「判定什么」
-            var extra = new Dictionary<string, string>();
-            // ⚠️ **老文件有命令就要把闹钟指过去**：老的 executeCommand 是隐式的
-            //    「就跑第 0 条」，库里要显式指名字。漏了这一步的症状是
-            //    「以前闹钟能关机，升级完拨开开关却什么都不发生」——而且不报错。
-            if (commands.Count > 0) extra["alarmCommand"] = $"\"{commands[0].Name}\"";
-            if (layout is not null) extra["layout"] = $"\"{layout}\"";
-            if (opacity is { } p) extra["opacityPercent"] = p.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            if (extra.Count > 0) store.PutSettings(extra);
-
-            if (File.Exists(rulesPath)) File.Move(rulesPath, rulesPath + ".migrated", overwrite: true);
-            if (File.Exists(cronPath)) File.Move(cronPath, cronPath + ".migrated", overwrite: true);
-
-            Events.Info("config", $"migrated {goals.Count} goals, {commands.Count} commands, "
-                                + $"{schedule.Count} schedule entries into the database");
-            return true;
+            if (!File.Exists(path)) return null;
+            return MarkdownConfig.Extract(File.ReadAllText(path));
         }
         catch (Exception e)
         {
-            Events.Error("config", "Failed to migrate rules.json / alarms.cron", e);
-            return false;
+            Events.Error("config", $"Cannot read {Path.GetFileName(path)}", e);
+            return null;
         }
     }
 
-    /// <summary>装配规则。库没开就是空规则——**宁可什么都做不了，也不能放行一切**。</summary>
-    public static GoalRules LoadRules(SampleStore? store, Settings settings)
-        => store is null
-            ? GoalRules.Empty
-            : GoalRules.Of(store.Goals(), store.Commands(), settings.Layout, settings.OpacityPercent);
+    /// <summary>
+    /// 出错时那句话里的文件名**从路径推，不硬编码**。
+    /// 2026-09-18 实测抓到：文件改名成 `.md` 之后，日志里还在说 `rules.json`
+    /// ——又一次「同一个名字写了两份」。
+    /// </summary>
+    private static string Unusable(string path) => $"{Path.GetFileName(path)} is not usable";
 
-    /// <summary>装配计划表。cron 表达式解析不了的那条**安静跳过**（v3 的 J16）。</summary>
+    /// <summary>
+    /// 装配规则。
+    ///
+    /// ⚠️ **解析失败返回空规则，不是放行一切**（DECISIONS C 组）：一个目标都没有时
+    /// Start 按不下去，界面会直说「没有目标」。宁可什么都做不了。
+    /// </summary>
+    public static GoalRules LoadRules(SampleStore? store)
+    {
+        var path = AppData.RulesPath();
+        if (Read(path) is { } json)
+        {
+            try { return GoalRules.Parse(json); }
+            catch (Exception e)
+            {
+                Events.Error("config", Unusable(path), e);
+                return GoalRules.Empty;
+            }
+        }
+        return store is null ? GoalRules.Empty : GoalRules.Of(store.Goals(), store.Commands());
+    }
+
+    /// <summary>装配命令清单。</summary>
+    public static CommandTable LoadCommands(SampleStore? store, Settings settings)
+    {
+        var path = AppData.CommandsPath();
+        if (Read(path) is { } json)
+        {
+            try { return CommandTable.Parse(json); }
+            catch (Exception e)
+            {
+                Events.Error("config", Unusable(path), e);
+                return CommandTable.Empty;
+            }
+        }
+        return store is null
+            ? CommandTable.Empty
+            : CommandTable.Of(store.Commands(), settings.AlarmCommand);
+    }
+
+    /// <summary>
+    /// 装配外观。**只在启动时读一次**，运行中改了不生效——这是用户要的语义，
+    /// 也顺带免掉「运行中换档要重新夹回屏幕、提示条正显示着怎么办」那一整类边界情况。
+    /// </summary>
+    public static LayoutFile LoadLayout(Settings settings)
+    {
+        var path = AppData.LayoutPath();
+        if (Read(path) is { } json)
+        {
+            try { return LayoutFile.Parse(json); }
+            catch (Exception e)
+            {
+                Events.Error("config", Unusable(path), e);
+                return LayoutFile.Empty;
+            }
+        }
+        return new LayoutFile(settings.Layout, settings.OpacityPercent);
+    }
+
+    /// <summary>
+    /// 装配计划表。
+    ///
+    /// ⚠️ **读不懂的行要记一笔**（DECISIONS I29，对 v3 的 J16「安静跳过」的修订）：
+    /// 新格式里最容易犯的错是「写了 `!命令` 却忘了写提醒文字」，那行不合法被跳过，
+    /// 而症状是「这条提醒从此再也不响」——原本屏幕上和日志里零反馈。
+    /// </summary>
     public static IReadOnlyList<CronEntry> LoadSchedule(SampleStore? store)
     {
+        if (Read(AppData.SchedulePath()) is { } text)
+        {
+            var file = AlarmsList.Read(text);
+            foreach (var why in file.Skipped) Events.Warn("schedule", why);
+            return file.Entries;
+        }
+
         if (store is null) return [];
         var entries = new List<CronEntry>();
         foreach (var row in store.Schedule())
             if (AlarmsList.ParseExpression(row.Cron) is { } schedule)
                 entries.Add(new CronEntry(schedule, row.Text ?? "", row.Run));
         return entries;
+    }
+
+    /// <summary>
+    /// 配置的「版本」：**四个文件的写入时刻 + 库的版本号**，拼成一个串。
+    /// 变了就重装，每分钟比一次。
+    ///
+    /// ⚠️ 文件这条路**不需要智能体记得 bump 任何东西**——那是库那一版的头号坑
+    /// （改完忘了加版本号 = 用户以为你没改成）。文件的 mtime 就是版本号，
+    /// 操作系统替我们维护。
+    /// </summary>
+    public static string Stamp(SampleStore? store)
+    {
+        var parts = new List<string> { (store?.ConfigVersion ?? 0).ToString() };
+        foreach (var p in new[] { AppData.RulesPath(), AppData.CommandsPath(), AppData.SchedulePath() })
+        {
+            try { parts.Add(File.Exists(p) ? File.GetLastWriteTimeUtc(p).Ticks.ToString() : "-"); }
+            catch { parts.Add("?"); }
+        }
+        // ⚠️ layout.json **故意不在这里**：它只在启动时读一次，把它算进来只会让
+        //    程序每分钟「重装」一次却什么都不变，白白掩盖「改了要重启」这个事实
+        return string.Join('|', parts);
     }
 }
