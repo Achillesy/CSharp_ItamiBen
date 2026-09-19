@@ -88,7 +88,28 @@ internal static class ConfigMigration
         File.WriteAllText(path, MarkdownConfig.Replace(File.ReadAllText(template), body));
     }
 
-    private static string Q(string? s) => JsonSerializer.Serialize(s ?? "");
+    /// <summary>
+    /// 一个 JSON 字符串字面量。
+    ///
+    /// ⚠️ **必须换掉默认的 encoder**：<c>JsonSerializer</c> 默认把所有非 ASCII 转成
+    /// <c>\uXXXX</c>，于是目标名「学习经济学」搬出来会变成
+    /// <c>"\u5B66\u4E60\u7ECF\u6D4E\u5B66"</c>——**读得进去，但人看不懂**。
+    /// 而这四份 `.md` 存在的全部理由就是「整个文件扔给谁都能读」：用户要手改它，
+    /// AI 要照着抄名字。一串转义把这个理由整个抵消掉。
+    ///
+    /// ⚠️ 2026-09-19 在 Windows 上搬一份中文配置时发现的。`schedule.md` 没事，
+    /// 因为 cron 那半边是原样拼字符串、根本不过 JSON——**同一份配置里两种语言待遇不同**，
+    /// 正是这种不一致最容易被当成「本来就这样」。
+    ///
+    /// ⚠️ 不复用 <c>AppData.JsonOptions</c>：那个对象上写着「不许拿它去读写这四份 `.md`」。
+    /// 这里只借同一个 encoder，理由也是同一个（见它的注释）。
+    /// </summary>
+    private static readonly JsonSerializerOptions QuoteOptions = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private static string Q(string? s) => JsonSerializer.Serialize(s ?? "", QuoteOptions);
 
     internal static string? Rules(SampleStore db)
     {

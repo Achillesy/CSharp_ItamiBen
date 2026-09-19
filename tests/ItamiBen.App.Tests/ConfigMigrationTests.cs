@@ -74,6 +74,33 @@ public class ConfigMigrationTests : IDisposable
         Assert.False(rules.Matches("编程", "Google Chrome", "别的"));
     }
 
+    /// <summary>
+    /// 搬出来的文件里，中文必须是**中文本身**，不是 <c>\uXXXX</c>。
+    ///
+    /// ⚠️ **往返测试看不见这个 bug**：`JsonSerializer` 默认把非 ASCII 转义，而解析器
+    /// 又原样解回来——两边对称，`规则往返_…` 那条无论转义与否都是绿的。可这四份 `.md`
+    /// 的全部意义就是「整个文件扔给谁都能读」：用户要手改，AI 要照着抄名字。
+    /// 一个叫 `"\u5B66\u4E60\u7ECF\u6D4E\u5B66"` 的目标机器读得懂，人读不懂。
+    ///
+    /// ⚠️ 所以这一条**断言的是文本本身**，不是往返结果。2026-09-19 真出过：
+    /// 库里搬出来的 `rules.md` 里每个中文目标名都是转义串，而 `schedule.md` 好好的
+    /// ——因为 cron 那半边压根不过 JSON。同一份配置里两种语言待遇不同。
+    /// </summary>
+    [Fact]
+    public void 搬出来的文件是给人读的_中文不许变成转义串()
+    {
+        using var db = OldStore();
+
+        var rules = ConfigMigration.Rules(db)!;
+        Assert.Contains("\"编程\"", rules);
+        Assert.Contains("\"去年的\"", rules);
+        Assert.DoesNotContain(@"\u", rules);
+
+        var schedule = ConfigMigration.Schedule(db)!;
+        Assert.Contains("海贼王", schedule);
+        Assert.DoesNotContain(@"\u", schedule);
+    }
+
     [Fact]
     public void 命令往返_闹钟绑定两个系统都填上了()
     {
