@@ -22,7 +22,7 @@ Itami（痛み）是痛，Ben 是 Big Ben。**名字、核心视觉、惩罚机�
 **跟 ActivityWatch 一刀两断**，这是 ItamiTimer（v3）的重做而不是续集。原因见 DESIGN §1.2
 （一句话：AW 是**订阅通知**的，实测它整整 13 分钟把全屏 mame 认成 Terminal）。
 
-## 当前状态（2.5.5，2026-09-18）
+## 当前状态（2.7.1，2026-09-19）
 
 | | |
 |---|---|
@@ -154,6 +154,21 @@ D=~/Library/"Application Support"/ItamiBen
 cat "$D/event.log"    # 完整时间线：启动 / 退出 / 闹钟 / 提醒 / 命令 / 配置重装 / 出错
 cat "$D/error.log"    # 只有 warn 和 error，**正常情况下这个文件不存在**
 ```
+
+Windows 上同样两件事，路径和**调用方式**都不一样：
+
+```powershell
+cmd /c ""%LOCALAPPDATA%\Programs\ItamiBen\ItamiBen.exe" --query apps"
+type "%LOCALAPPDATA%\ItamiBen\event.log"
+```
+
+⚠️ **Windows 上必须走 `cmd /c`，那对重复的引号不是笔误。** `ItamiBen.exe` 是
+GUI 子系统二进制（不然每次启动都闪一个控制台），**PowerShell 不等它、也不接它的
+stdout**：直接跑什么都不打印，`> file` 写出 0 字节，没有报错也没有退出码——跟规则
+写错平台一样，是那种「看着像成功」的静默失败。`cmd.exe` 会把句柄交过去，所以透过
+`cmd /c` 输出完整、可捕获、可重定向。（Git Bash / WSL 也行，但裸 Windows 上没有。）
+外层那对引号是 `cmd` 自己的规矩，少一个就找不到那个 exe。
+2026-09-18 在 Windows 11 上实测。
 
 ⚠️ **`--query` 只留给二进制的库**（DECISIONS I24）：纯文本文件不配有出口，
 为它做一条等于把 `cat` 包装一遍。`minutes` 更是非它不可——它要重放判定引擎。
