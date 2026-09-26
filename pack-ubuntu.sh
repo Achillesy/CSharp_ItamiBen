@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 打出 dist/itamiben-<版本>_<arch>.deb。macOS 那边的对应物是 ./pack-macos.sh，
+# 打出 dist/ItamiBen_<版本>_Ubuntu_<arch>.deb（文件名风格跟 macOS 的 dmg 对齐）。
+# macOS 那边的对应物是 ./pack-macos.sh，
 # Windows 那边是 pack-windows.ps1。
 #
 # 跟那两个包一样，这个包也是**依赖框架**的：deb 的 Depends 里写了 dotnet-runtime-10.0，
@@ -110,7 +111,7 @@ chmod 644 "$PKG/DEBIAN/control" "$PKG/usr/share/applications/itamiben.desktop" \
           "$PKG/usr/share/icons/hicolor/256x256/apps/itamiben.png"
 
 mkdir -p dist
-DEB="dist/itamiben_${VERSION}_${ARCH}.deb"
+DEB="dist/ItamiBen_${VERSION}_Ubuntu_${ARCH}.deb"
 rm -f "$DEB"
 dpkg-deb --build "$PKG" "$DEB" >/dev/null
 
