@@ -8,7 +8,8 @@ namespace ItamiBen.App.Platform;
 /// 平台各不相同（macOS 是 pid，Windows 是 HWND）——**调用方不该关心它是什么**，
 /// 原样交回 <see cref="ForegroundWindow.ReadTitle"/> 就行。
 /// </summary>
-/// <param name="Name">macOS 的 <c>localizedName</c>／Windows 的进程名 + <c>.exe</c>。空 = 什么都没读到。</param>
+/// <param name="Name">macOS 的 <c>localizedName</c>／Windows 的进程名 + <c>.exe</c>／
+/// Linux 的 <c>WM_CLASS</c>。空 = 什么都没读到。</param>
 public readonly record struct ForegroundApp(string Name, nint Handle, string Note);
 
 /// <summary>
@@ -30,10 +31,11 @@ public readonly record struct ForegroundTitle(string Text, bool Readable, string
 /// 于是连它**已经从 NSWorkspace 拿到的** app 变化都吐不出来，整整哑了 402 秒。
 ///
 /// <list type="bullet">
-///   <item><b>app 身份</b>：macOS 走 NSWorkspace，Windows 走 GetForegroundWindow + 进程名。
+///   <item><b>app 身份</b>：macOS 走 NSWorkspace，Windows 走 GetForegroundWindow + 进程名，
+///         Linux 走 X11 的 <c>_NET_ACTIVE_WINDOW</c> + <c>WM_CLASS</c>。
 ///         **零权限、不阻塞、几乎不会失败。**</item>
 ///   <item><b>标题</b>：macOS 走 AX（<b>必须</b> SetMessagingTimeout），Windows 走
-///         SendMessageTimeout。**尽力而为，读不到就空着。**</item>
+///         SendMessageTimeout，Linux 走 <c>_NET_WM_NAME</c>。**尽力而为，读不到就空着。**</item>
 /// </list>
 /// </summary>
 public static class ForegroundWindow
@@ -49,6 +51,7 @@ public static class ForegroundWindow
     {
         if (OperatingSystem.IsMacOS()) return Mac.ReadApp();
         if (OperatingSystem.IsWindows()) return Win.ReadApp();
+        if (OperatingSystem.IsLinux()) return Linux.ReadApp();
         return new ForegroundApp("", 0, "unsupported platform");
     }
 
@@ -65,6 +68,7 @@ public static class ForegroundWindow
         if (handle == 0) return new ForegroundTitle("", false, "no window");
         if (OperatingSystem.IsMacOS()) return Mac.ReadTitle(handle);
         if (OperatingSystem.IsWindows()) return Win.ReadTitle(handle);
+        if (OperatingSystem.IsLinux()) return Linux.ReadTitle(handle);
         return new ForegroundTitle("", false, "unsupported platform");
     }
 
@@ -322,6 +326,28 @@ public static class ForegroundWindow
             var sb = new System.Text.StringBuilder(Math.Max(len + 1, 256));
             var ok = SendMessageTimeoutW(hWnd, WmGetText, sb.Capacity, sb, SmtoAbortIfHung, 250, out _) != IntPtr.Zero;
             return new ForegroundTitle(ok ? sb.ToString() : "", ok, ok ? "ok" : "WM_GETTEXT 超时（对方没响应）");
+        }
+    }
+
+    // ── Linux/X11 ───────────────────────────────────────────────────────────
+
+    [SupportedOSPlatform("linux")]
+    private static class Linux
+    {
+        /// <summary>
+        /// 句柄是 X11 Window id。X11 的调用全是本地 socket 一问一答，不会卡住，
+        /// 所以跟 Win 一样直接调——X11.cs 里面每一句都包了 try/catch，永不抛异常。
+        /// </summary>
+        public static ForegroundApp ReadApp()
+        {
+            var (app, window) = X11.ReadActiveApp();
+            return app == "" ? new ForegroundApp("", 0, "没有前台窗口") : new ForegroundApp(app, window, "ok");
+        }
+
+        public static ForegroundTitle ReadTitle(nint window)
+        {
+            var title = X11.ReadWindowTitle(window);
+            return new ForegroundTitle(title, title != "", title != "" ? "ok" : "读不到标题");
         }
     }
 }

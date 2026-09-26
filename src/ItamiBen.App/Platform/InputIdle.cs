@@ -6,11 +6,12 @@ namespace ItamiBen.App.Platform;
 /// <summary>
 /// **全系统的键鼠空闲时长**（不只是本进程）。从 v3 原样搬过来，跟 AW 无关。
 ///
-/// 两个平台各一条调用，都收口在这个文件里：
+/// 三个平台各一条调用，都收口在这个文件里：
 ///
 /// <code>
 /// Windows   user32 的 GetLastInputInfo
 /// macOS     ApplicationServices 的 CGEventSourceSecondsSinceLastEventType
+/// Linux     XScreenSaver 扩展的 XScreenSaverQueryInfo（X11.cs）
 /// </code>
 ///
 /// ⚠️ **macOS 这条不需要辅助功能授权**：它只问「距上次输入多久」，不装任何事件钩子，
@@ -57,6 +58,7 @@ public static class InputIdle
     {
         if (OperatingSystem.IsWindows()) return WindowsElapsed();
         if (OperatingSystem.IsMacOS()) return MacElapsed();
+        if (OperatingSystem.IsLinux()) return X11.IdleElapsed();
         return TimeSpan.Zero;
     }
 

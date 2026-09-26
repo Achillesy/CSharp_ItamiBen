@@ -23,23 +23,24 @@ Then replace this file with what it gives you back.
 the next person to open this file needs it. If the prose is already damaged, restore it from
 `rules.sample.md`, which sits next to this file and is refreshed every time ItamiBen starts.
 
-**One file, both operating systems.** There is no platform field: every `App` regex must match
-the name on macOS *and* on Windows, so the file can be copied between machines unchanged.
+**One file, all three operating systems.** There is no platform field: every `App` regex must match
+the name on macOS, Windows, *and* Linux, so the file can be copied between machines unchanged.
 
 ### `App` — the foreground application's name
 
-The two systems report different strings, and **you cannot derive one from the other**:
+The three systems report different strings, and **you cannot derive one from the other**
+(Linux reads the X11 `WM_CLASS`):
 
-| app           | macOS           | Windows                        |
-|---------------|-----------------|--------------------------------|
-| VS Code       | `Code`          | `Code.exe`                     |
-| Claude        | `Claude`        | `claude.exe`  ← different case |
-| Google Chrome | `Google Chrome` | `chrome.exe`  ← different name |
+| app           | macOS           | Windows                        | Linux            |
+|---------------|-----------------|--------------------------------|------------------|
+| VS Code       | `Code`          | `Code.exe`                     | `Code`           |
+| Claude        | `Claude`        | `claude.exe`  ← different case | `Claude`         |
+| Google Chrome | `Google Chrome` | `chrome.exe`  ← different name | `Google-chrome`  |
 
 Write both real names:
 
 ```json
-{ "App": "^(Google Chrome|chrome\\.exe)$" }
+{ "App": "^(Google Chrome|chrome\\.exe|Google-chrome)$" }
 ```
 
 `^Code(\.exe)?$` is a shorthand that is correct **only** when the two names differ by exactly
@@ -50,7 +51,7 @@ warning — the user just sees a session of red, which looks exactly like a day 
 
 ### `Title` — the window title
 
-A plain regex against the window title. Titles are usually the same text on both systems, so
+A plain regex against the window title. Titles are usually the same text on all three systems, so
 they need no special handling. A rule may set `App`, `Title`, or both; when both are present
 **both** must match.
 
