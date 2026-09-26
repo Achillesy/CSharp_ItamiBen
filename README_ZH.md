@@ -31,12 +31,12 @@
 **Windows 11** —— 从 [Releases](https://github.com/Achillesy/CSharp_ItamiBen/releases) 下载
 `ItamiBen-<版本>-win-x64.exe`，运行安装。
 
-**Ubuntu 24.04** —— 下载 `itamiben_<版本>_amd64.deb`（Intel/AMD）或
-`itamiben_<版本>_arm64.deb`（ARM——比如 M1 Mac 上的 Ubuntu 24.04 虚拟机），然后：
+**Ubuntu 24.04** —— 下载 `ItamiBen_<版本>_Ubuntu_amd64.deb`（Intel/AMD）或
+`ItamiBen_<版本>_Ubuntu_arm64.deb`（ARM——比如 M1 Mac 上的 Ubuntu 24.04 虚拟机），然后：
 
 ```bash
-sudo apt install ./itamiben_2.7.1_arm64.deb   # 或 _amd64，看你的机器是哪个架构
-itamiben
+sudo apt install ./ItamiBen_2.7.1_Ubuntu_arm64.deb   # 或 _amd64，看你的机器是哪个架构
+ItamiBen
 ```
 
 这个 deb 也是依赖框架的，跟另外两个包一样：`apt` 会自动从 Ubuntu 官方源装上
@@ -85,8 +85,8 @@ dotnet test  ItamiBen.slnx
 
 ```bash
 ./pack-macos.sh                # → dist/ItamiBen-<版本>-macOS-<架构>.dmg
-pwsh pack-windows.ps1          # → dist\ItamiBen-<版本>-win-x64.exe（需要 Inno Setup 6）
-./pack-ubuntu.sh [amd64|arm64] # → dist/itamiben-<版本>_<架构>.deb（不给参数就用本机架构）
+.\pack-windows.ps1             # → dist\ItamiBen-<版本>-win-x64.exe（需要 Inno Setup 6）
+./pack-ubuntu.sh [amd64|arm64] # → dist/ItamiBen-<版本>_Ubuntu_<架构>.deb（不给参数就用本机架构）
 ```
 
 三个包打的都是同样的依赖框架发布（`-r <rid> --self-contained false`，.pdb 由 csproj

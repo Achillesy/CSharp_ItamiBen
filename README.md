@@ -33,13 +33,13 @@ Applications.
 **Windows 11** — download `ItamiBen-<version>-win-x64.exe` from
 [Releases](https://github.com/Achillesy/CSharp_ItamiBen/releases) and run the installer.
 
-**Ubuntu 24.04** — download `itamiben_<version>_amd64.deb` (Intel/AMD) or
-`itamiben_<version>_arm64.deb` (ARM — e.g. an Ubuntu 24.04 VM on an Apple Silicon Mac),
+**Ubuntu 24.04** — download `ItamiBen_<version>_Ubuntu_amd64.deb` (Intel/AMD) or
+`ItamiBen_<version>_Ubuntu_arm64.deb` (ARM — e.g. an Ubuntu 24.04 VM on an Apple Silicon Mac),
 then:
 
 ```bash
-sudo apt install ./itamiben_2.7.1_arm64.deb   # or _amd64, whichever matches your machine
-itamiben
+sudo apt install ./ItamiBen_2.7.1_Ubuntu_arm64.deb   # or _amd64, whichever matches your machine
+ItamiBen
 ```
 
 The .deb is framework-dependent, like the other two builds: `apt` pulls in
@@ -95,8 +95,8 @@ installed).
 
 ```bash
 ./pack-macos.sh                # → dist/ItamiBen-<version>-macOS-<arch>.dmg
-pwsh pack-windows.ps1          # → dist\ItamiBen-<version>-win-x64.exe (needs Inno Setup 6)
-./pack-ubuntu.sh [amd64|arm64] # → dist/itamiben-<version>_<arch>.deb (defaults to host arch)
+.\pack-windows.ps1             # → dist\ItamiBen-<version>-win-x64.exe (needs Inno Setup 6)
+./pack-ubuntu.sh [amd64|arm64] # → dist/ItamiBen-<version>_Ubuntu_<arch>.deb (defaults to host arch)
 ```
 
 All three package the same framework-dependent publish (`-r <rid> --self-contained
