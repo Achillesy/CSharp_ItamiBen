@@ -111,6 +111,7 @@ dotnet test  ItamiBen.slnx
 ItamiBen 对非商业用途永久免费。如果你觉得它治住了你的拖延症，欢迎请作者喝杯咖啡：
 
 - ☕ [Ko-fi](https://ko-fi.com/achillesy)（海外，走 PayPal）
+- 💸 [PayPal 直接打赏](https://paypal.me/achillesnewman)
 
 赞助完全自愿，不影响任何功能。
 

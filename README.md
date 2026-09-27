@@ -121,6 +121,7 @@ Ubuntu package yourself, install it with the command above and report back how i
 ItamiBen is free for noncommercial use, and always will be. If it keeps you honest, consider buying me a coffee:
 
 - ☕ [Ko-fi](https://ko-fi.com/achillesy) (international, via PayPal)
+- 💸 [PayPal direct tip](https://paypal.me/achillesnewman)
 
 Sponsorship is entirely voluntary and doesn't affect any features.
 
