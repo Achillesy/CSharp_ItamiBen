@@ -117,7 +117,7 @@ ItamiBen 对非商业用途永久免费。如果你觉得它治住了你的拖�
 
 | 微信 | 支付宝 |
 | --- | --- |
-| <img src="sponsor/wechat.jpg?v=3" width="200"> | <img src="sponsor/alipay.jpg?v=3" width="200"> |
+| <img src="sponsor/wechat.jpg?v=3" width="200"> | <img src="sponsor/alipay.jpg?v=4" width="200"> |
 
 赞助完全自愿，不影响任何功能。
 
