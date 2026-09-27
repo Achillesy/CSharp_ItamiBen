@@ -106,6 +106,14 @@ dotnet test  ItamiBen.slnx
 
 **Itami**（痛み）是痛，**Ben** 是 Big Ben——准时、响亮、没法跟它讲条件。
 
+## 赞助
+
+ItamiBen 对非商业用途永久免费。如果你觉得它治住了你的拖延症，欢迎请作者喝杯咖啡：
+
+- ☕ [Ko-fi](https://ko-fi.com/achillesy)（海外，走 PayPal）
+
+赞助完全自愿，不影响任何功能。
+
 ## 许可证
 
 [PolyForm Noncommercial License 1.0.0](./LICENSE) —— 非商业用途免费。

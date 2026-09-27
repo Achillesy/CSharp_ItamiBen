@@ -116,6 +116,14 @@ Ubuntu package yourself, install it with the command above and report back how i
 
 **Itami** (痛み) is pain. **Ben** is Big Ben — punctual, loud, impossible to negotiate with.
 
+## Sponsor
+
+ItamiBen is free for noncommercial use, and always will be. If it keeps you honest, consider buying me a coffee:
+
+- ☕ [Ko-fi](https://ko-fi.com/achillesy) (international, via PayPal)
+
+Sponsorship is entirely voluntary and doesn't affect any features.
+
 ## License
 
 [PolyForm Noncommercial License 1.0.0](./LICENSE) — free for noncommercial use.
