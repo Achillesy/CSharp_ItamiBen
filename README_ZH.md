@@ -113,6 +113,12 @@ ItamiBen 对非商业用途永久免费。如果你觉得它治住了你的拖�
 - ☕ [Ko-fi](https://ko-fi.com/achillesy)（海外，走 PayPal）
 - 💸 [PayPal 直接打赏](https://paypal.me/achillesnewman)
 
+国内用户也可扫码赞助：
+
+| 微信 | 支付宝 |
+| --- | --- |
+| <img src="sponsor/wechat.jpg" width="200"> | <img src="sponsor/alipay.jpg" width="200"> |
+
 赞助完全自愿，不影响任何功能。
 
 ## 许可证

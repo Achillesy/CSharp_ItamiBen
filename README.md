@@ -123,6 +123,12 @@ ItamiBen is free for noncommercial use, and always will be. If it keeps you hone
 - ☕ [Ko-fi](https://ko-fi.com/achillesy) (international, via PayPal)
 - 💸 [PayPal direct tip](https://paypal.me/achillesnewman)
 
+Users in China can also scan to tip:
+
+| WeChat Pay | Alipay |
+| --- | --- |
+| <img src="sponsor/wechat.jpg" width="200"> | <img src="sponsor/alipay.jpg" width="200"> |
+
 Sponsorship is entirely voluntary and doesn't affect any features.
 
 ## License
