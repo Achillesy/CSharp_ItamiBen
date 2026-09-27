@@ -127,7 +127,7 @@ Users in China can also scan to tip:
 
 | WeChat Pay | Alipay |
 | --- | --- |
-| <img src="sponsor/wechat.jpg?v=3" width="200"> | <img src="sponsor/alipay.jpg?v=4" width="200"> |
+| <img src="sponsor/wechat.jpg?v=3" width="200"> | <img src="sponsor/alipay.jpg?v=5" width="200"> |
 
 Sponsorship is entirely voluntary and doesn't affect any features.
 
