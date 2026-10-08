@@ -106,6 +106,14 @@ dotnet test  ItamiBen.slnx
 
 **Itami**（痛み）是痛，**Ben** 是 Big Ben——准时、响亮、没法跟它讲条件。
 
+## 相关项目
+
+**[FocusQuota](https://github.com/Achillesy/JavaScript-FocusQuota)** —— 每日"普通上网时间"额度（Chrome/Edge 浏览器扩展）。额度用完只提醒，绝不阻止访问。
+- [Chrome 应用商店](https://chromewebstore.google.com/detail/focusquota/pjmaoknjkfbammiflaijahjefagjhakc)
+- [Edge 加载项商店](https://microsoftedge.microsoft.com/addons/detail/focusquota/gnjdndcdhdjaoencioaolnobmphgiiea)
+
+---
+
 ## 赞助
 
 ItamiBen 对非商业用途永久免费。如果你觉得它治住了你的拖延症，欢迎请作者喝杯咖啡：

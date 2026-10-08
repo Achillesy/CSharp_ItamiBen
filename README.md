@@ -116,6 +116,14 @@ Ubuntu package yourself, install it with the command above and report back how i
 
 **Itami** (痛み) is pain. **Ben** is Big Ben — punctual, loud, impossible to negotiate with.
 
+## Related
+
+**[FocusQuota](https://github.com/Achillesy/JavaScript-FocusQuota)** — a gentle daily quota for casual browsing (Chrome/Edge extension). It reminds you when your casual browsing time is up — it never blocks anything.
+- [Chrome Web Store](https://chromewebstore.google.com/detail/focusquota/pjmaoknjkfbammiflaijahjefagjhakc)
+- [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/focusquota/gnjdndcdhdjaoencioaolnobmphgiiea)
+
+---
+
 ## Sponsor
 
 ItamiBen is free for noncommercial use, and always will be. If it keeps you honest, consider buying me a coffee:
