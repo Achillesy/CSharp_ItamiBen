@@ -38,15 +38,15 @@ Applications.
 then:
 
 ```bash
-sudo apt install ./ItamiBen_2.7.1_Ubuntu_arm64.deb   # or _amd64, whichever matches your machine
+sudo apt install ./ItamiBen_3.0.0_Ubuntu_arm64.deb   # or _amd64, whichever matches your machine
 ItamiBen
 ```
 
 The .deb is framework-dependent, like the other two builds: `apt` pulls in
-`dotnet-runtime-10.0` from Ubuntu's own archive automatically — no SDK, no extra
+`dotnet-runtime-11.0` from Ubuntu's own archive automatically — no SDK, no extra
 package feed, no manual setup.
 
-All three builds are framework-dependent — they need the .NET 10 Runtime installed.
+All three builds are framework-dependent — they need the .NET 11 Runtime installed.
 Windows wants the Desktop Runtime; its installer detects a missing one and offers to
 install it for you. (On WSL, the app needs WSLg for the window to show.)
 
@@ -88,7 +88,7 @@ dotnet test  ItamiBen.slnx
 ./run-macos.sh              # build → .app → sign → launch
 ```
 
-The `dotnet` commands are the same on macOS, Windows, and Linux (with the .NET 10 SDK
+The `dotnet` commands are the same on macOS, Windows, and Linux (with the .NET 11 SDK
 installed).
 
 ## Releases
@@ -101,7 +101,7 @@ installed).
 
 All three package the same framework-dependent publish (`-r <rid> --self-contained
 false`, .pdb files stripped by the csproj) — the Ubuntu one just wraps it in a .deb
-whose `Depends` pulls `dotnet-runtime-10.0` from Ubuntu's archive. If you build the
+whose `Depends` pulls `dotnet-runtime-11.0` from Ubuntu's archive. If you build the
 Ubuntu package yourself, install it with the command above and report back how it went.
 
 ## Platform status

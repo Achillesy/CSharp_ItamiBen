@@ -1,0 +1,46 @@
+<Project>
+
+  <!--
+    macOS：构建 / 发布之后把输出目录里的 com.apple.quarantine 清掉。
+
+    ⚠️ **为什么需要这一步**（2026-11-16 在 macOS 27.2 上实测）：dyld 现在会拒绝加载带
+    com.apple.quarantine 的 dylib，报
+
+        code signature in '.../libe_sqlite3.dylib' not valid for use in process:
+        library load disallowed by system policy
+
+    错误信息里写着 "code signature"，但它跟签名无关——签名本身是有效的
+    （SQLitePCLRaw 那个 dylib 是 linker-signed 的 ad-hoc 签名，codesign 校验通过），
+    进程也没有开库验证（dotnet muxer 的 entitlements 里有
+    com.apple.security.cs.disable-library-validation）。真正的判据是那个扩展属性。
+
+    属性是**跟着文件走**的：浏览器下载的 .nupkg 带隔离位，NuGet 解出来的 native 库
+    也带，dotnet 再复制进 bin/ 和 publish/。所以症状是「包是好的、签名是好的、
+    进程也是好的，只有一个不可见的 xattr 让整个库加载不进来」。
+
+    为什么不在别处解决：
+    - 重新 ad-hoc 签名救不了：codesign 不签 xattr，重签之后隔离位仍在；
+    - runtimeconfig 里没有对应开关（.NET 11 运行时里根本没有
+      EnableLibraryValidation 这个配置项），签名策略在托管配置读入之前就判完了。
+
+    ⚠️ 只删 com.apple.quarantine，别的 xattr 不碰（xattr -d 在属性不存在时返回非 0，
+    而 xattr -c 会连 com.apple.provenance 一起清）。用 find 逐个删，找不到就跳过。
+
+    ⚠️ 构建 / 发布两条路都要清：`dotnet test` 走的是 Build，`pack-macos.sh` 走的是
+    Publish；漏掉 Publish 的话打出来的 .app 里仍然是带隔离位的 dylib。
+  -->
+  <Target Name="StripQuarantineFromBuildOutput"
+          AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and Exists('$(OutDir)')">
+    <Exec Command="find &quot;$(OutDir)&quot; -xattrname com.apple.quarantine -exec xattr -d com.apple.quarantine {} +"
+          StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="StripQuarantineFromPublishOutput"
+          AfterTargets="Publish"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(PublishDir)' != '' and Exists('$(PublishDir)')">
+    <Exec Command="find &quot;$(PublishDir)&quot; -xattrname com.apple.quarantine -exec xattr -d com.apple.quarantine {} +"
+          StandardOutputImportance="low" />
+  </Target>
+
+</Project>

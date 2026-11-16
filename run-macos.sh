@@ -30,7 +30,7 @@ dotnet build src/ItamiBen.App -c Release -v q --nologo
 
 echo "==> 装配 bundle ($VERSION)"
 # ⚠️ 装配规矩**只写在 bundle-macos.sh 里一份**，这里和 pack-macos.sh 都调它
-./bundle-macos.sh src/ItamiBen.App/bin/Release/net10.0 "$OUT" "$VERSION"
+./bundle-macos.sh src/ItamiBen.App/bin/Release/net11.0 "$OUT" "$VERSION"
 
 echo "==> 启动"
 # ⚠️ 必须先杀掉在跑的那个：`open` 对已运行的 app **只是切到前台**，不会用新二进制重启，

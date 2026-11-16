@@ -35,14 +35,14 @@
 `ItamiBen_<版本>_Ubuntu_arm64.deb`（ARM——比如 M1 Mac 上的 Ubuntu 24.04 虚拟机），然后：
 
 ```bash
-sudo apt install ./ItamiBen_2.7.1_Ubuntu_arm64.deb   # 或 _amd64，看你的机器是哪个架构
+sudo apt install ./ItamiBen_3.0.0_Ubuntu_arm64.deb   # 或 _amd64，看你的机器是哪个架构
 ItamiBen
 ```
 
 这个 deb 也是依赖框架的，跟另外两个包一样：`apt` 会自动从 Ubuntu 官方源装上
-`dotnet-runtime-10.0`——不用 SDK，不用加第三方源，不用手动折腾。
+`dotnet-runtime-11.0`——不用 SDK，不用加第三方源，不用手动折腾。
 
-三个包都是依赖框架的，都需要装 .NET 10 Runtime。Windows 要的是 Desktop Runtime，
+三个包都是依赖框架的，都需要装 .NET 11 Runtime。Windows 要的是 Desktop Runtime，
 它的安装包会检测缺没缺、缺了就帮你装。（WSL 下需要 WSLg 才能显示窗口。）
 
 ## 一轮是怎么走的
@@ -79,7 +79,7 @@ dotnet test  ItamiBen.slnx
 ./run-macos.sh              # 编译 → 打成 .app → 签名 → 启动
 ```
 
-`dotnet` 那两行在 macOS、Windows、Linux 上是一样的（装好 .NET 10 SDK 就行）。
+`dotnet` 那两行在 macOS、Windows、Linux 上是一样的（装好 .NET 11 SDK 就行）。
 
 ## 发布
 
@@ -91,7 +91,7 @@ dotnet test  ItamiBen.slnx
 
 三个包打的都是同样的依赖框架发布（`-r <rid> --self-contained false`，.pdb 由 csproj
 删掉）——Ubuntu 那个只是外面套了个 deb，`Depends` 让 apt 从 Ubuntu 官方源装
-`dotnet-runtime-10.0`。Ubuntu 的包你也可以自己打，装上之后怎么跑、有什么问题，
+`dotnet-runtime-11.0`。Ubuntu 的包你也可以自己打，装上之后怎么跑、有什么问题，
 欢迎反馈。
 
 ## 平台状态

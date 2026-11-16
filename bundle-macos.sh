@@ -48,7 +48,7 @@ else
 fi
 LS_ENV=""
 if [ "$DOTNET_DIR" != "/usr/local/share/dotnet" ] && [ -d "$DOTNET_DIR" ]; then
-  echo "    .NET 不在默认位置（$DOTNET_DIR），写进 LSEnvironment"
+  echo "    .NET 不在默认位置（${DOTNET_DIR}），写进 LSEnvironment"
   LS_ENV="  <key>LSEnvironment</key>
   <dict>
     <key>DOTNET_ROOT</key><string>$DOTNET_DIR</string>
@@ -79,16 +79,30 @@ $LS_ENV
 </plist>
 PLIST
 
+# ⚠️ **签名之前必须先把 com.apple.quarantine 清掉**（2026-11-16 在 macOS 27.2 上实测）。
+#    现在的 dyld 拒绝加载带这个扩展属性的 dylib，报
+#    `code signature ... not valid for use in process: library load disallowed by system policy`
+#    ——报的是签名，实际是隔离位。**codesign 不签 xattr，重签救不了**，
+#    所以要在这里清、而且要在签名之前清，签完整棵 bundle 不再动。
+#    上游来源：浏览器下载的 .nupkg 带隔离位 → NuGet 解出的 native 库也带 →
+#    publish/bin 一路复制进 Contents/MacOS。Directory.Build.targets 已经在
+#    build/publish 之后清过一遍，这里是第二道：bundle 也可能由别的产物装配。
+find "$APP" -xattrname com.apple.quarantine -exec xattr -d com.apple.quarantine {} +
+
 # ⚠️ **必须用这张自签名证书签，不能用 ad-hoc**（2026-09-15 定，DESIGN §2.2）。
 #    ad-hoc 的 Designated Requirement 只有一行 `cdhash H"..."`——连 bundle id 都没有，
 #    于是**每次重编 cdhash 一变，辅助功能授权当场失配**，而系统设置里那条记录看着还在。
 #    用证书签之后 DR 变成 `identifier + certificate leaf`，重编多少次都稳定，
 #    **而且装到 /Applications 换了路径也照样认**——发布版和开发版共用同一份授权。
 SIGN_ID="ItamiBen Development"
+# ⚠️ 下面两条 echo 写成 ${SIGN_ID} 不是风格问题：macOS 自带的 bash 3.2 会把紧跟变量名的
+#    中文标点（「」）的 UTF-8 字节当成变量名的一部分，`set -u` 下当场 unbound variable。
+#    这个脚本一直用 #!/usr/bin/env bash，而机器上只有系统 bash 3.2——不加大括号，
+#    装 bundle 会在签名前一步直接退出。pack-macos.sh / run-macos.sh 同理，别省这个大括号。
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
-  echo "    用「$SIGN_ID」签名"
+  echo "    用「${SIGN_ID}」签名"
   codesign --force --deep --sign "$SIGN_ID" --identifier com.achillesy.itamiben "$APP"
 else
-  echo "    ✗ 找不到证书「$SIGN_ID」，退回 ad-hoc（⚠️ 每次重编都要重新授权）"
+  echo "    ✗ 找不到证书「${SIGN_ID}」，退回 ad-hoc（⚠️ 每次重编都要重新授权）"
   codesign --force --deep --sign - --identifier com.achillesy.itamiben "$APP" 2>/dev/null || true
 fi

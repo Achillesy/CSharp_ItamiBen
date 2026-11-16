@@ -27,7 +27,7 @@ RID="osx-$ARCH"
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
-echo "==> publish ($RID，依赖框架)"
+echo "==> publish (${RID}，依赖框架)"
 dotnet publish src/ItamiBen.App -c Release -r "$RID" --self-contained false \
     -o "$STAGE/publish" --nologo -v quiet
 echo "    $(du -sh "$STAGE/publish" | cut -f1)（.pdb 已由 csproj 的 StripPdbFromPublish 删掉）"
@@ -56,10 +56,10 @@ Install
 Drag ItamiBen.app onto the Applications folder in this window.
 
 
-Requires the .NET 10 Runtime (not the SDK)
+Requires the .NET 11 Runtime (not the SDK)
 ==========================================
 
-    https://dotnet.microsoft.com/download/dotnet/10.0
+    https://dotnet.microsoft.com/download/dotnet/11.0
 
 
 First launch: Gatekeeper

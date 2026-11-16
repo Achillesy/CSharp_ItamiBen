@@ -17,7 +17,7 @@ namespace ItamiBen.App.Platform;
 /// **无条件执行，不受任何开关控制**——`schedule.md` 的那个开关只管响不响铃（v3 的 J6）。
 ///
 /// 两个平台都靠**起一个短命的子进程**做到，不加任何包依赖、不碰 TFM
-/// （CLAUDE.md：App 保持 `net10.0`，`-windows` 别加回去）——真正的 WinRT/UWP toast
+/// （CLAUDE.md：App 保持 `net11.0`，`-windows` 别加回去）——真正的 WinRT/UWP toast
 /// 绑定需要 `-windows` 系带 TFM 或者签名打包的应用身份，这个项目两样都没有。
 ///
 /// ✅ **Windows 那半 2026-09-18 在真机上验过了**（Windows 11）：把下面这段脚本原样

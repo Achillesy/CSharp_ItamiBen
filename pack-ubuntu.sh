@@ -3,7 +3,7 @@
 # macOS 那边的对应物是 ./pack-macos.sh，
 # Windows 那边是 pack-windows.ps1。
 #
-# 跟那两个包一样，这个包也是**依赖框架**的：deb 的 Depends 里写了 dotnet-runtime-10.0，
+# 跟那两个包一样，这个包也是**依赖框架**的：deb 的 Depends 里写了 dotnet-runtime-11.0，
 # apt 会从 Ubuntu 官方源自动装上——用户那边不用装 SDK、不用加第三方源。
 #
 # ⚠️ **RID 必须写死给出**。不给 -r 的话，Skia/HarfBuzz **每个平台**的 native 库和调试
@@ -86,7 +86,9 @@ StartupWMClass=ItamiBen
 EOF
 
 # ⚠️ framework-dependent：运行时不跟着走，靠下面这行 Depends 让 apt 从 Ubuntu
-#    官方源装 dotnet-runtime-10.0（24.04 的 noble-updates 里有，不用加微软源）。
+#    官方源装 dotnet-runtime-11.0。
+#    ⚠️ **11.0 这个包名在 Ubuntu 24.04 的源里到底有没有，没有验证过**——10.0 那会儿
+#    noble-updates 里有，11.0 是这次随 TFM 升级一起改的，还没在 Ubuntu 上装过。
 #    libxss1 是 XScreenSaver 空闲检测要的（InputIdle 的 Linux 分支）。
 cat > "$PKG/DEBIAN/control" <<'EOF'
 Package: itamiben
@@ -101,9 +103,9 @@ Description: A pomodoro clock with teeth
  opened the wrong app, wandered off for water -- is deducted from the
  same budget until you finish what you committed to.
  .
- Framework-dependent build: requires the .NET 10 runtime, installed
+ Framework-dependent build: requires the .NET 11 runtime, installed
  automatically as a dependency -- no SDK needed.
-Depends: dotnet-runtime-10.0, libx11-6, libice6, libsm6, libfontconfig1, libfreetype6, libxkbcommon0, libxss1
+Depends: dotnet-runtime-11.0, libx11-6, libice6, libsm6, libfontconfig1, libfreetype6, libxkbcommon0, libxss1
 Homepage: https://github.com/Achillesy/CSharp_ItamiBen
 EOF
 sed -i "s/__VERSION__/$VERSION/; s/__ARCH__/$ARCH/" "$PKG/DEBIAN/control"

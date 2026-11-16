@@ -8,10 +8,11 @@
 ;    HKCU 的卸载项，全都对。**全程没有弹过 UAC**——PrivilegesRequired=lowest 成立，
 ;    {autopf} 解析到 %LOCALAPPDATA%\Programs。
 ;
-; ⚠️ 下面那段 .NET 运行时检测**只走到了「已装」这一支**：测试机上装着
+; ⚠️ 下面那段 .NET 运行时检测**只走到「已装」这一支**：当时测试机上装着
 ;    Microsoft.WindowsDesktop.App 10.0.10，所以 IsDotNetDesktopRuntimeInstalled 返回
-;    True、直接跳过。**下载 + ShellExec('runas') 那一支仍然没在真机上走过**
-;    ——要验它得找一台没装 .NET 10 桌面运行时的机器。
+;    True、直接跳过。升到 .NET 11 之后**连「已装」这一支都还没重验过**；
+;    **下载 + ShellExec('runas') 那一支从来没在真机上走过**——要验它得找一台
+;    没装 .NET 11 桌面运行时的机器。
 ;
 ; 跟 macOS 的 .dmg（只在 Read Me 里叫用户自己去装 .NET 运行时）不同，这个安装包会
 ; **主动检测** .NET Desktop Runtime 在不在，不在就提出替用户下载并运行官方安装器
@@ -36,9 +37,9 @@
 #define MyAppPublisher "Achilles.Newman"
 #define MyAppURL "https://github.com/Achillesy/ItamiBen"
 #define MyAppExeName "ItamiBen.exe"
-; net10.0 -> Microsoft.WindowsDesktop.App's major version; keep this in sync if the TFM changes.
-#define DotNetMajor "10"
-#define DotNetRuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
+; net11.0 -> Microsoft.WindowsDesktop.App's major version; keep this in sync if the TFM changes.
+#define DotNetMajor "11"
+#define DotNetRuntimeUrl "https://aka.ms/dotnet/11.0/windowsdesktop-runtime-win-x64.exe"
 
 [Setup]
 AppId={{DA35900E-96B8-4523-9BB2-49090D3D4058}
@@ -85,9 +86,9 @@ var
   DownloadPage: TDownloadWizardPage;
   RuntimeInstallerReady: Boolean;
 
-// net10.0 needs Microsoft.WindowsDesktop.App 10.x: scan
+// net11.0 needs Microsoft.WindowsDesktop.App 11.x: scan
 // C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App for a subfolder
-// starting with "10.". 64-bit install path only -- this project only ships win-x64.
+// starting with "11.". 64-bit install path only -- this project only ships win-x64.
 // The runtime itself is always machine-wide regardless of whether ItamiBen is
 // installed per-user or per-machine, so this check doesn't change either way.
 function IsDotNetDesktopRuntimeInstalled(const MajorVersion: string): Boolean;

@@ -9,11 +9,11 @@
     （2026-09-16 起它**不再**是自身豁免的依据——那个特例已经删了，见 DECISIONS C9。）
 
     这一层是**唯一**允许出现平台调用的地方（读前台窗口和标题、读键鼠空闲、置顶、
-    播声音）。Core 保持 net10.0、零 P/Invoke。
+    播声音）。Core 保持 net11.0、零 P/Invoke。
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>ItamiBen</AssemblyName>
